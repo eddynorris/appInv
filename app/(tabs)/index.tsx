@@ -1,74 +1,275 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Stack, router } from 'expo-router';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { DashboardChart } from '@/components/DashboardChart';
+import { clienteApi, productoApi, gastoApi, ventaApi } from '@/services/api';
+import { Cliente, Producto, Gasto, Venta } from '@/models';
 
-export default function HomeScreen() {
+export default function DashboardScreen() {
+  const [resumen, setResumen] = useState({
+    clientes: 0,
+    productos: 0,
+    totalVentas: 0,
+    totalGastos: 0,
+    ventasPorMes: [],
+    gastosPorCategoria: [],
+  });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+      try {
+        // Cargar datos de clientes
+        const clientesResponse = await clienteApi.getClientes();
+        
+        // Cargar datos de productos
+        const productosResponse = await productoApi.getProductos();
+        
+        // Cargar datos de ventas
+        const ventasResponse = await ventaApi.getVentas();
+        
+        // Cargar datos de gastos
+        const gastosResponse = await gastoApi.getGastos();
+        
+        // Procesar datos para el dashboard
+        let totalVentas = 0;
+        let totalGastos = 0;
+        let ventasPorMes = [];
+        let gastosPorCategoria = [];
+        
+        // Procesar ventas
+        if (ventasResponse && ventasResponse.data) {
+          totalVentas = ventasResponse.data.reduce(
+            (sum, venta) => sum + parseFloat(venta.total), 0
+          );
+          
+          // Agrupar ventas por mes para el gráfico
+          const ventasPorMesMap = new Map();
+          
+          ventasResponse.data.forEach(venta => {
+            const fechaVenta = new Date(venta.fecha);
+            const mes = fechaVenta.toLocaleString('default', { month: 'short' });
+            
+            if (!ventasPorMesMap.has(mes)) {
+              ventasPorMesMap.set(mes, 0);
+            }
+            
+            ventasPorMesMap.set(mes, ventasPorMesMap.get(mes) + parseFloat(venta.total));
+          });
+          
+          ventasPorMes = Array.from(ventasPorMesMap.entries()).map(([month, amount]) => ({
+            month,
+            amount,
+          }));
+        }
+        
+        // Procesar gastos
+        if (gastosResponse && gastosResponse.data) {
+          totalGastos = gastosResponse.data.reduce(
+            (sum, gasto) => sum + parseFloat(gasto.monto), 0
+          );
+          
+          // Agrupar gastos por categoría para el gráfico
+          const gastosPorCategoriaMap = new Map();
+          
+          gastosResponse.data.forEach(gasto => {
+            if (!gastosPorCategoriaMap.has(gasto.categoria)) {
+              gastosPorCategoriaMap.set(gasto.categoria, 0);
+            }
+            
+            gastosPorCategoriaMap.set(
+              gasto.categoria, 
+              gastosPorCategoriaMap.get(gasto.categoria) + parseFloat(gasto.monto)
+            );
+          });
+          
+          gastosPorCategoria = Array.from(gastosPorCategoriaMap.entries()).map(([category, amount]) => ({
+            category,
+            amount,
+          }));
+        }
+        
+        // Actualizar el estado con todos los datos procesados
+        setResumen({
+          clientes: clientesResponse?.data?.length || 0,
+          productos: productosResponse?.data?.length || 0,
+          totalVentas,
+          totalGastos,
+          ventasPorMes,
+          gastosPorCategoria,
+        });
+      } catch (error) {
+        console.error('Error al cargar datos del dashboard:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <>
+      <Stack.Screen options={{ 
+        title: 'Dashboard',
+        headerShown: true 
+      }} />
+      
+      <ScrollView>
+        <ThemedView style={styles.container}>
+          <ThemedText type="title" style={styles.heading}>Sistema Manngo</ThemedText>
+          
+          <ThemedView style={styles.cards}>
+            <TouchableOpacity 
+              style={[styles.card, styles.clientesCard]}
+              onPress={() => router.push('/clientes')}
+            >
+              <ThemedText style={styles.cardTitle}>Clientes</ThemedText>
+              <ThemedText style={styles.cardValue}>
+                {isLoading ? 'Cargando...' : resumen.clientes}
+              </ThemedText>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.card, styles.productosCard]}
+              onPress={() => router.push('/productos')}
+            >
+              <ThemedText style={styles.cardTitle}>Productos</ThemedText>
+              <ThemedText style={styles.cardValue}>
+                {isLoading ? 'Cargando...' : resumen.productos}
+              </ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+          
+          <ThemedView style={styles.cards}>
+            <TouchableOpacity 
+              style={[styles.card, styles.ventasCard]}
+              onPress={() => router.push('/ventas')}
+            >
+              <ThemedText style={styles.cardTitle}>Ventas Totales</ThemedText>
+              <ThemedText style={styles.cardValue}>
+                {isLoading ? 'Cargando...' : `$${resumen.totalVentas.toFixed(2)}`}
+              </ThemedText>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.card, styles.gastosCard]}
+              onPress={() => router.push('/gastos')}
+            >
+              <ThemedText style={styles.cardTitle}>Gastos Totales</ThemedText>
+              <ThemedText style={styles.cardValue}>
+                {isLoading ? 'Cargando...' : `$${resumen.totalGastos.toFixed(2)}`}
+              </ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+          
+          {!isLoading && (
+            <DashboardChart 
+              salesData={resumen.ventasPorMes}
+              expensesData={resumen.gastosPorCategoria}
+            />
+          )}
+          
+          <ThemedView style={styles.quickActions}>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Acciones Rápidas</ThemedText>
+            
+            <ThemedView style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => router.push('/ventas/create')}
+              >
+                <ThemedText style={styles.actionButtonText}>Nueva Venta</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => router.push('/gastos/create')}
+              >
+                <ThemedText style={styles.actionButtonText}>Registrar Gasto</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => router.push('/clientes/create')}
+              >
+                <ThemedText style={styles.actionButtonText}>Nuevo Cliente</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          </ThemedView>
+        </ThemedView>
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    padding: 16,
   },
-  stepContainer: {
-    gap: 8,
+  heading: {
+    marginBottom: 24,
+  },
+  cards: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 24,
+  },
+  card: {
+    flex: 1,
+    minWidth: 150,
+    padding: 16,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  clientesCard: {
+    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+  },
+  productosCard: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+  },
+  ventasCard: {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+  },
+  gastosCard: {
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '500',
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  cardValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  quickActions: {
+    marginTop: 24,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  actionButtons: {
+    gap: 12,
+  },
+  actionButton: {
+    backgroundColor: '#0a7ea4',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
