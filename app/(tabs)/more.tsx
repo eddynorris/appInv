@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { LogoutButton } from '@/components/LogoutButton';
 
 interface MenuItemProps {
   title: string;
@@ -69,6 +70,21 @@ export default function MoreScreen() {
             icon="paperplane.fill" 
             route="/gastos" 
           />
+        </ThemedView>
+        <ThemedView style={styles.section}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>Cuenta</ThemedText>
+          
+          {/* Use the text variant for a clean menu look */}
+          <TouchableOpacity style={styles.menuItem}>
+            <IconSymbol name="gear.fill" size={24} color="#757575" />
+            <ThemedText style={styles.menuText}>Configuración</ThemedText>
+          </TouchableOpacity>
+          
+          {/* Add LogoutButton */}
+          <TouchableOpacity style={styles.menuItem}>
+            <IconSymbol name="paperplane.fill" size={24} color="#E53935" />
+            <LogoutButton variant="text" />
+          </TouchableOpacity>
         </ThemedView>
       </ThemedView>
     </>

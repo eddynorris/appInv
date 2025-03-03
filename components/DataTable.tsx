@@ -1,3 +1,5 @@
+// Add this to your components/DataTable.tsx file
+
 import React from 'react';
 import { StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, View } from 'react-native';
 import { Link } from 'expo-router';
@@ -7,6 +9,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { PaginationControls } from '@/components/PaginationControls';
 
 // Definimos interfaces para las columnas y los datos
 export interface Column {
@@ -27,6 +30,7 @@ interface DataTableProps<T> {
   onLoadMore?: () => void;
   currentPage?: number;
   totalPages?: number;
+  onPageChange?: (page: number) => void;
   sortColumn?: string;
   sortOrder?: 'asc' | 'desc';
   onSort?: (column: string) => void;
@@ -44,6 +48,7 @@ export function DataTable<T>({
   onLoadMore,
   currentPage = 1,
   totalPages = 1,
+  onPageChange,
   sortColumn,
   sortOrder = 'asc',
   onSort,
@@ -87,7 +92,7 @@ export function DataTable<T>({
                 column.render(item)
               ) : (
                 <ThemedText numberOfLines={1}>
-                  {item[column.id as keyof T]?.toString() || ''}
+                  {(item[column.id as keyof T] as any)?.toString() || ''}
                 </ThemedText>
               )}
             </ThemedView>
@@ -106,7 +111,7 @@ export function DataTable<T>({
       );
     }
 
-    if (onLoadMore && currentPage < totalPages) {
+    if (onLoadMore && currentPage < totalPages && !onPageChange) {
       return (
         <TouchableOpacity onPress={onLoadMore} style={styles.loadMoreButton}>
           <ThemedText type="link">Cargar más</ThemedText>
@@ -118,7 +123,7 @@ export function DataTable<T>({
   };
 
   const renderEmpty = () => {
-    if (isLoading) {
+    if (isLoading && data.length === 0) {
       return (
         <ThemedView style={styles.emptyContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
@@ -156,18 +161,19 @@ export function DataTable<T>({
         renderItem={renderItem}
         keyExtractor={(item) => keyExtractor(item)}
         onRefresh={onRefresh}
-        refreshing={isLoading && data.length === 0}
+        refreshing={isLoading && data.length === 0 && !error}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={data.length === 0 ? { flex: 1 } : undefined}
       />
 
-      {totalPages > 1 && (
-        <ThemedView style={styles.pagination}>
-          <ThemedText>
-            Página {currentPage} de {totalPages}
-          </ThemedText>
-        </ThemedView>
+      {/* Add pagination controls */}
+      {onPageChange && (
+        <PaginationControls
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+        />
       )}
     </ThemedView>
   );
@@ -205,12 +211,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
-  pagination: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  loadMoreButton: {
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E1E3E5',
+    alignItems: 'center',
   },
   emptyContainer: {
     flex: 1,
@@ -230,9 +233,5 @@ const styles = StyleSheet.create({
   retryButton: {
     marginTop: 12,
     paddingVertical: 8,
-  },
-  loadMoreButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
   },
 });

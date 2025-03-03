@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import jwtDecode from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 
 // Auth Interfaces
 export interface User {
@@ -138,21 +138,33 @@ const isTokenExpired = (token: string): boolean => {
 
 // Get user info from token
 const getUserFromToken = (token: string): User | null => {
-  try {
-    const decoded = jwtDecode<JwtPayload>(token);
-    return {
-      id: decoded.sub,
-      username: decoded.username,
-    };
-  } catch (error) {
-    console.error('Error decoding token:', error);
-    return null;
-  }
-};
+    try {
+      const decoded = jwtDecode<JwtPayload>(token);
+      
+      // Log details about the decoded token for debugging
+      console.log('Decoded token:', {
+        subject: decoded.sub,
+        username: decoded.username,
+        exp: decoded.exp,
+        type: typeof decoded.sub
+      });
+      
+      // Make sure the 'sub' is treated as a string - JWT requirement
+      return {
+        id: parseInt(decoded.sub as string, 10), // Convert string ID back to number for app use
+        username: decoded.username,
+      };
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return null;
+    }
+  };
 
-// Login (authenticate with API)
+// Login function with improved error handling
 const login = async (username: string, password: string): Promise<User> => {
   try {
+    console.log(`Attempting login for user: ${username}`);
+    
     const response = await fetch(`${API_CONFIG.baseUrl}/auth`, {
       method: 'POST',
       headers: API_CONFIG.headers,
@@ -160,11 +172,24 @@ const login = async (username: string, password: string): Promise<User> => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Login failed');
+      // Get more detailed error messages from server
+      const errorText = await response.text();
+      console.error('Login response error:', response.status, errorText);
+      
+      let errorMessage = 'Login failed';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorMessage;
+      } catch (e) {
+        // If JSON parsing fails, use the raw text
+        errorMessage = errorText || errorMessage;
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data: AuthToken = await response.json();
+    console.log('Login successful, token received');
     
     // Save token
     await saveToken(data.access_token);
@@ -175,6 +200,7 @@ const login = async (username: string, password: string): Promise<User> => {
       throw new Error('Invalid token received');
     }
     
+    console.log('User extracted from token:', user);
     await saveUser(user);
     return user;
   } catch (error) {
@@ -222,18 +248,32 @@ const checkAuth = async (): Promise<User | null> => {
   }
 };
 
-// Get authorization header for API requests
+// Improved token validation
 const getAuthHeader = async (): Promise<Record<string, string> | null> => {
-  const token = await getToken();
-  if (!token) {
-    return null;
-  }
-  
-  return {
-    'Authorization': `Bearer ${token}`
+    try {
+      const token = await getToken();
+      
+      if (!token) {
+        console.log('No token found');
+        return null;
+      }
+      
+      // Check if token is expired
+      if (isTokenExpired(token)) {
+        console.log('Token is expired, removing it');
+        await removeToken();
+        return null;
+      }
+      
+      console.log('Valid token found, adding to Authorization header');
+      return {
+        'Authorization': `Bearer ${token}`
+      };
+    } catch (error) {
+      console.error('Error in getAuthHeader:', error);
+      return null;
+    }
   };
-};
-
 export const authService = {
   login,
   register,
