@@ -1,5 +1,6 @@
+// app/ventas/index.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -17,6 +18,8 @@ export default function VentasScreen() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState('fecha');
@@ -75,17 +78,19 @@ export default function VentasScreen() {
     },
   ];
 
-  const loadVentas = useCallback(async () => {
+  const loadVentas = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      const response = await ventaApi.getVentas();
+      const response = await ventaApi.getVentas(page, perPage);
       
       if (response && response.data) {
         setVentas(response.data);
-        setTotalPages(response.total_paginas || 1);
-        setCurrentPage(response.pagina || 1);
+        setTotalPages(response.pagination.pages);
+        setCurrentPage(response.pagination.page);
+        setTotalItems(response.pagination.total);
+        setItemsPerPage(response.pagination.per_page);
       } else {
         console.error('Formato de respuesta inesperado:', response);
         setError('Error al cargar las ventas');
@@ -96,7 +101,7 @@ export default function VentasScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, itemsPerPage]);
 
   // Initial load
   useEffect(() => {
@@ -105,7 +110,17 @@ export default function VentasScreen() {
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
-    loadVentas();
+    loadVentas(1, itemsPerPage); // Reset to first page on refresh
+  }, [loadVentas, itemsPerPage]);
+
+  // Handle page change
+  const handlePageChange = useCallback((page: number) => {
+    loadVentas(page, itemsPerPage);
+  }, [loadVentas, itemsPerPage]);
+
+  // Handle items per page change
+  const handleItemsPerPageChange = useCallback((perPage: number) => {
+    loadVentas(1, perPage); // Reset to first page when changing items per page
   }, [loadVentas]);
 
   // Handle sort
@@ -123,6 +138,30 @@ export default function VentasScreen() {
   
   const handleAddVenta = () => {
     router.push('/ventas/create');
+  };
+
+  const handleEdit = (id: string) => {
+    router.push(`/ventas/edit/${id}`);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setIsLoading(true);
+      await ventaApi.deleteVenta(parseInt(id));
+      
+      // Recargar los datos después de eliminar
+      loadVentas(
+        // Si es el último item de la página y hay más de una página, ir a la página anterior
+        ventas.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
+        itemsPerPage
+      );
+      
+      Alert.alert('Éxito', 'Venta eliminada correctamente');
+    } catch (error) {
+      console.error('Error al eliminar venta:', error);
+      Alert.alert('Error', 'No se pudo eliminar la venta');
+      setIsLoading(false);
+    }
   };
 
   // Calcular resumen de ventas
@@ -143,7 +182,14 @@ export default function VentasScreen() {
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total Ventas:</ThemedText>
+            <ThemedText style={styles.summaryLabel}>Total de Ventas:</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              {isLoading ? 'Cargando...' : totalItems}
+            </ThemedText>
+          </ThemedView>
+          
+          <ThemedView style={styles.summaryRow}>
+            <ThemedText style={styles.summaryLabel}>Monto Total:</ThemedText>
             <ThemedText style={styles.summaryValue}>${ventasResumen.total.toFixed(2)}</ThemedText>
           </ThemedView>
           
@@ -172,14 +218,26 @@ export default function VentasScreen() {
           onRefresh={handleRefresh}
           currentPage={currentPage}
           totalPages={totalPages}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          totalItems={totalItems}
           sortColumn={sortColumn}
           sortOrder={sortOrder}
           onSort={handleSort}
           emptyMessage="No hay ventas registradas"
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          deletePrompt={{
+            title: 'Eliminar Venta',
+            message: '¿Está seguro que desea eliminar esta venta?',
+            confirmText: 'Eliminar',
+            cancelText: 'Cancelar'
+          }}
         />
         
         <FloatingActionButton 
-          icon="cart.fill" 
+          icon="plus.circle.fill" 
           onPress={handleAddVenta} 
         />
       </ThemedView>

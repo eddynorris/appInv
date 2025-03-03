@@ -1,8 +1,7 @@
-// Add this to your components/DataTable.tsx file
-
+// components/DataTable.tsx
 import React from 'react';
-import { StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, View } from 'react-native';
-import { Link } from 'expo-router';
+import { StyleSheet, TouchableOpacity, ActivityIndicator, FlatList, View, Alert } from 'react-native';
+import { Link, router } from 'expo-router';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -11,7 +10,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { PaginationControls } from '@/components/PaginationControls';
 
-// Definimos interfaces para las columnas y los datos
+// Define interfaces for columns and data
 export interface Column {
   id: string;
   label: string;
@@ -27,14 +26,24 @@ interface DataTableProps<T> {
   isLoading: boolean;
   error: string | null;
   onRefresh: () => void;
-  onLoadMore?: () => void;
-  currentPage?: number;
-  totalPages?: number;
-  onPageChange?: (page: number) => void;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  itemsPerPage?: number;
+  onItemsPerPageChange?: (itemsPerPage: number) => void;
+  totalItems?: number;
   sortColumn?: string;
   sortOrder?: 'asc' | 'desc';
   onSort?: (column: string) => void;
   emptyMessage?: string;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  deletePrompt?: {
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+  };
 }
 
 export function DataTable<T>({
@@ -45,16 +54,56 @@ export function DataTable<T>({
   isLoading,
   error,
   onRefresh,
-  onLoadMore,
-  currentPage = 1,
-  totalPages = 1,
+  currentPage,
+  totalPages,
   onPageChange,
+  itemsPerPage,
+  onItemsPerPageChange,
+  totalItems,
   sortColumn,
   sortOrder = 'asc',
   onSort,
   emptyMessage = 'No hay datos disponibles',
+  onEdit,
+  onDelete,
+  deletePrompt = {
+    title: 'Confirmar Eliminación',
+    message: '¿Está seguro que desea eliminar este elemento?',
+    confirmText: 'Eliminar',
+    cancelText: 'Cancelar'
+  }
 }: DataTableProps<T>) {
   const colorScheme = useColorScheme() ?? 'light';
+
+  const handleEdit = (id: string) => {
+    if (onEdit) {
+      onEdit(id);
+    } else {
+      router.push(`${baseRoute}/edit/${id}`);
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    Alert.alert(
+      deletePrompt.title,
+      deletePrompt.message,
+      [
+        {
+          text: deletePrompt.cancelText,
+          style: 'cancel'
+        },
+        {
+          text: deletePrompt.confirmText,
+          style: 'destructive',
+          onPress: () => {
+            if (onDelete) {
+              onDelete(id);
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const renderHeader = () => (
     <ThemedView style={styles.header}>
@@ -76,51 +125,59 @@ export function DataTable<T>({
           )}
         </TouchableOpacity>
       ))}
+
+      {/* Acciones header */}
+      {(onEdit || onDelete) && (
+        <ThemedView style={styles.actionsHeader}>
+          <ThemedText type="defaultSemiBold">Acciones</ThemedText>
+        </ThemedView>
+      )}
     </ThemedView>
   );
 
   const renderItem = ({ item }: { item: T }) => (
-    <Link href={`${baseRoute}/${keyExtractor(item)}`} asChild>
-      <TouchableOpacity>
-        <ThemedView style={styles.row}>
-          {columns.map((column) => (
-            <ThemedView 
-              key={column.id} 
-              style={[styles.cell, column.width ? { flex: column.width } : {}]}
-            >
-              {column.render ? (
-                column.render(item)
-              ) : (
-                <ThemedText numberOfLines={1}>
-                  {(item[column.id as keyof T] as any)?.toString() || ''}
-                </ThemedText>
-              )}
-            </ThemedView>
-          ))}
-        </ThemedView>
-      </TouchableOpacity>
-    </Link>
-  );
-
-  const renderFooter = () => {
-    if (isLoading && data.length > 0) {
-      return (
-        <ThemedView style={styles.footer}>
-          <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
-        </ThemedView>
-      );
-    }
-
-    if (onLoadMore && currentPage < totalPages && !onPageChange) {
-      return (
-        <TouchableOpacity onPress={onLoadMore} style={styles.loadMoreButton}>
-          <ThemedText type="link">Cargar más</ThemedText>
+    <ThemedView style={styles.row}>
+      {/* Columnas de datos */}
+      {columns.map((column) => (
+        <TouchableOpacity 
+          key={column.id} 
+          style={[styles.cell, column.width ? { flex: column.width } : {}]}
+          onPress={() => router.push(`${baseRoute}/${keyExtractor(item)}`)}
+        >
+          {column.render ? (
+            column.render(item)
+          ) : (
+            <ThemedText numberOfLines={1}>
+              {(item[column.id as keyof T] as any)?.toString() || ''}
+            </ThemedText>
+          )}
         </TouchableOpacity>
-      );
-    }
+      ))}
 
-    return null;
-  };
+      {/* Botones de acción */}
+      {(onEdit || onDelete) && (
+        <ThemedView style={styles.actionsCell}>
+          {onEdit && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() => handleEdit(keyExtractor(item))}
+            >
+              <IconSymbol name="pencil.fill" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {onDelete && (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => handleDelete(keyExtractor(item))}
+            >
+              <IconSymbol name="trash.fill" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </ThemedView>
+      )}
+    </ThemedView>
+  );
 
   const renderEmpty = () => {
     if (isLoading && data.length === 0) {
@@ -154,27 +211,29 @@ export function DataTable<T>({
 
   return (
     <ThemedView style={styles.container}>
+      {/* Table header */}
       {renderHeader()}
 
+      {/* Table body */}
       <FlatList
         data={data}
         renderItem={renderItem}
         keyExtractor={(item) => keyExtractor(item)}
         onRefresh={onRefresh}
         refreshing={isLoading && data.length === 0 && !error}
-        ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={data.length === 0 ? { flex: 1 } : undefined}
       />
 
-      {/* Add pagination controls */}
-      {onPageChange && (
-        <PaginationControls
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={onPageChange}
-        />
-      )}
+      {/* Pagination controls */}
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        itemsPerPage={itemsPerPage}
+        onItemsPerPageChange={onItemsPerPageChange}
+        totalItems={totalItems}
+      />
     </ThemedView>
   );
 }
@@ -189,12 +248,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E1E3E5',
+    backgroundColor: 'rgba(229, 231, 235, 0.3)',
   },
   headerCell: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  actionsHeader: {
+    width: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -207,13 +272,25 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  footer: {
-    paddingVertical: 12,
+  actionsCell: {
+    width: 100,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
-  loadMoreButton: {
-    paddingVertical: 12,
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButton: {
+    backgroundColor: '#2196F3',
+  },
+  deleteButton: {
+    backgroundColor: '#F44336',
   },
   emptyContainer: {
     flex: 1,

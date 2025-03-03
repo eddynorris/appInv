@@ -1,5 +1,6 @@
+// app/gastos/index.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -17,6 +18,8 @@ export default function GastosScreen() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState('id');
@@ -53,17 +56,19 @@ export default function GastosScreen() {
     },
   ];
 
-  const loadGastos = useCallback(async () => {
+  const loadGastos = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      const response = await gastoApi.getGastos();
+      const response = await gastoApi.getGastos(page, perPage);
       
       if (response && response.data) {
         setGastos(response.data);
-        setTotalPages(response.total_paginas || 1);
-        setCurrentPage(response.pagina || 1);
+        setTotalPages(response.pagination.pages);
+        setCurrentPage(response.pagination.page);
+        setTotalItems(response.pagination.total);
+        setItemsPerPage(response.pagination.per_page);
       } else {
         console.error('Formato de respuesta inesperado:', response);
         setError('Error al cargar los gastos');
@@ -74,7 +79,7 @@ export default function GastosScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, itemsPerPage]);
 
   // Initial load
   useEffect(() => {
@@ -83,7 +88,17 @@ export default function GastosScreen() {
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
-    loadGastos();
+    loadGastos(1, itemsPerPage); // Reset to first page on refresh
+  }, [loadGastos, itemsPerPage]);
+
+  // Handle page change
+  const handlePageChange = useCallback((page: number) => {
+    loadGastos(page, itemsPerPage);
+  }, [loadGastos, itemsPerPage]);
+
+  // Handle items per page change
+  const handleItemsPerPageChange = useCallback((perPage: number) => {
+    loadGastos(1, perPage); // Reset to first page when changing items per page
   }, [loadGastos]);
 
   // Handle sort
@@ -103,6 +118,30 @@ export default function GastosScreen() {
     router.push('/gastos/create');
   };
 
+  const handleEdit = (id: string) => {
+    router.push(`/gastos/edit/${id}`);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setIsLoading(true);
+      await gastoApi.deleteGasto(parseInt(id));
+      
+      // Recargar los datos después de eliminar
+      loadGastos(
+        // Si es el último item de la página y hay más de una página, ir a la página anterior
+        gastos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
+        itemsPerPage
+      );
+      
+      Alert.alert('Éxito', 'Gasto eliminado correctamente');
+    } catch (error) {
+      console.error('Error al eliminar gasto:', error);
+      Alert.alert('Error', 'No se pudo eliminar el gasto');
+      setIsLoading(false);
+    }
+  };
+
   // Calcular el total de gastos
   const totalGastos = gastos.reduce((acc, gasto) => acc + parseFloat(gasto.monto), 0);
 
@@ -115,8 +154,16 @@ export default function GastosScreen() {
       
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
-          <ThemedText style={styles.summaryLabel}>Total de Gastos:</ThemedText>
-          <ThemedText style={styles.summaryValue}>${totalGastos.toFixed(2)}</ThemedText>
+          <ThemedView style={styles.summaryRow}>
+            <ThemedText style={styles.summaryLabel}>Total Registros:</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              {isLoading ? 'Cargando...' : totalItems}
+            </ThemedText>
+          </ThemedView>
+          <ThemedView style={styles.summaryRow}>
+            <ThemedText style={styles.summaryLabel}>Total Gastos:</ThemedText>
+            <ThemedText style={styles.summaryValue}>${totalGastos.toFixed(2)}</ThemedText>
+          </ThemedView>
         </ThemedView>
         
         <DataTable<Gasto>
@@ -129,14 +176,26 @@ export default function GastosScreen() {
           onRefresh={handleRefresh}
           currentPage={currentPage}
           totalPages={totalPages}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          totalItems={totalItems}
           sortColumn={sortColumn}
           sortOrder={sortOrder}
           onSort={handleSort}
           emptyMessage="No hay gastos registrados"
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          deletePrompt={{
+            title: 'Eliminar Gasto',
+            message: '¿Está seguro que desea eliminar este gasto?',
+            confirmText: 'Eliminar',
+            cancelText: 'Cancelar'
+          }}
         />
         
         <FloatingActionButton 
-          icon="creditcard.fill" 
+          icon="plus.circle.fill" 
           onPress={handleAddGasto} 
         />
       </ThemedView>
@@ -149,14 +208,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
     borderRadius: 8,
     margin: 16,
     marginBottom: 0,
+    gap: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   summaryLabel: {
     fontSize: 16,

@@ -1,3 +1,4 @@
+// services/api.ts - Corregido para la estructura de respuesta específica
 import { Platform } from 'react-native';
 import { 
   Cliente, 
@@ -6,253 +7,126 @@ import {
   Almacen,
   Gasto,
   Movimiento,
-  Venta,
-  PaginatedResponse
+  Venta
 } from '@/models';
 import { authService } from './auth';
 
-// Cache mechanism for API responses
-const apiCache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes in milliseconds
+// Interfaces para la estructura de respuesta de la API
+export interface Pagination {
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
 
-// Base URL configuration - optimized
+export interface ApiResponse<T> {
+  data: T[];
+  pagination: Pagination;
+}
+
+// Base URL configuration
 const getBaseUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://localhost:5000';
-  } 
-  else if (Platform.OS === 'ios') {
-    return 'http://localhost:5000';
+  if (Platform.OS === 'android') {
+    return 'http://192.168.1.37:5000'; // Usar IP para Android
   }
-  else if (Platform.OS === 'android') {
-    return 'http://192.168.1.37:5000'; // Use your server IP
-  }
-  
-  return 'http://localhost:5000';
+  return 'http://localhost:5000'; // Para iOS y web
 };
 
-// API configuration
 const API_CONFIG = {
   baseUrl: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 15000 // 15 seconds - increased for slower connections
+  timeout: 15000 // 15 segundos timeout
 };
 
-// Error handling helper - improved with better error messages
+// Simplified error handling
 const handleApiError = (error: any): never => {
+  let message = 'Error en la solicitud';
+  
   if (error.response) {
-    // Server responded with an error status
-    if (error.response.status === 404) {
-      throw new Error(`Recurso no encontrado: ${error.response.data?.message || 'La URL solicitada no existe'}`);
-    } else if (error.response.status === 401) {
-      throw new Error('Su sesión ha expirado. Por favor inicie sesión nuevamente.');
-    } else if (error.response.status === 403) {
-      throw new Error('No tiene permisos para realizar esta acción.');
+    if (error.response.status === 401) {
+      message = 'Sesión expirada, por favor inicie sesión nuevamente';
+    } else {
+      message = `Error del servidor (${error.response.status}): ${error.response.data?.message || ''}`;
     }
-    throw new Error(`Error del servidor: ${JSON.stringify(error.response.data)}`);
   } else if (error.request) {
-    // Request was made but no response received
-    throw new Error('Error de red: No se recibió respuesta del servidor. Verifique su conexión.');
-  } else {
-    // Error in setting up the request
-    throw new Error(`Error en la solicitud: ${error.message}`);
+    message = 'Error de red: No se pudo conectar al servidor';
+  } else if (error.message) {
+    message = error.message;
   }
+  
+  throw new Error(message);
 };
 
-// Improved fetch function with caching, retries, and better error handling
-async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {},
-  useCache = true
-): Promise<T> {
-  const url = `${API_CONFIG.baseUrl}${endpoint}`;
-  const cacheKey = `${url}-${JSON.stringify(options)}`;
-  
-  // Check cache for GET requests
-  if (useCache && options.method === undefined || options.method === 'GET') {
-    const cachedResponse = apiCache.get(cacheKey);
-    if (cachedResponse && (Date.now() - cachedResponse.timestamp) < CACHE_EXPIRY) {
-      return cachedResponse.data as T;
-    }
-  }
-  
-  // Get auth headers
-  const authHeaders = await authService.getAuthHeader();
-  
-  const defaultOptions: RequestInit = {
-    headers: {
-      ...API_CONFIG.headers,
-      ...(authHeaders || {}),
-      ...options.headers,
-    },
-    ...options,
-  };
-
+// Función fetch simplificada
+async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   try {
-    // Use fetch with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+    const url = `${API_CONFIG.baseUrl}${endpoint}`;
+    const authHeaders = await authService.getAuthHeader();
     
     const response = await fetch(url, {
-      ...defaultOptions,
-      signal: controller.signal
+      headers: {
+        ...API_CONFIG.headers,
+        ...(authHeaders || {}),
+        ...options.headers,
+      },
+      ...options,
     });
     
-    clearTimeout(timeoutId);
-    
-    // Handle auth errors
-    if (response.status === 401) {
-      throw { response: { status: 401, data: { message: 'Su sesión ha expirado' } } };
-    }
-    
     if (!response.ok) {
-      const errorText = await response.text();
-      let errorData;
-      
-      try {
-        errorData = JSON.parse(errorText);
-      } catch (e) {
-        errorData = { message: errorText || `Error ${response.status}` };
-      }
-      
-      throw { 
-        response: { 
-          status: response.status, 
-          data: errorData 
-        }
-      };
+      const errorData = await response.json().catch(() => ({}));
+      throw { response: { status: response.status, data: errorData } };
     }
     
-    // Process response
-    const responseText = await response.text();
-    
-    // Handle empty response
-    if (!responseText.trim()) {
+    // Manejar respuestas vacías
+    const text = await response.text();
+    if (!text.trim()) {
       return {} as T;
     }
     
-    // Parse JSON
-    try {
-      const data = JSON.parse(responseText);
-      
-      // Cache GET responses
-      if (useCache && (options.method === undefined || options.method === 'GET')) {
-        apiCache.set(cacheKey, { data, timestamp: Date.now() });
-      }
-      
-      return data;
-    } catch (error) {
-      throw new Error('Invalid JSON response from server');
-    }
+    return JSON.parse(text) as T;
   } catch (error) {
-    // Handle network errors
-    if (error.name === 'AbortError') {
-      throw new Error('La solicitud ha excedido el tiempo de espera');
-    }
-    
     return handleApiError(error);
   }
 }
 
-// Clear the cache for a specific endpoint or all endpoints
-export const clearApiCache = (endpoint?: string) => {
-  if (endpoint) {
-    // Clear cache for a specific endpoint
-    const prefix = `${API_CONFIG.baseUrl}${endpoint}`;
-    for (const key of apiCache.keys()) {
-      if (key.startsWith(prefix)) {
-        apiCache.delete(key);
-      }
-    }
-  } else {
-    // Clear all cache
-    apiCache.clear();
-  }
-};
-
-// Retry logic for API calls
-async function fetchWithRetry<T>(
-  endpoint: string,
-  options: RequestInit = {},
-  retries = 3,
-  useCache = true
-): Promise<T> {
-  let lastError;
-  
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      return await fetchApi<T>(endpoint, options, useCache);
-    } catch (error) {
-      lastError = error;
-      
-      // Only retry on network errors, not server errors
-      if (error.message?.includes('Error de red') && attempt < retries - 1) {
-        // Wait before retrying (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
-        continue;
-      }
-      
-      break;
-    }
-  }
-  
-  throw lastError;
-}
-
-// Optimized API methods for Cliente
+// API methods for Cliente
 export const clienteApi = {
-  getClientes: async (page = 1, perPage = 10, useCache = true): Promise<PaginatedResponse<Cliente>> => {
-    return fetchWithRetry<PaginatedResponse<Cliente>>(
-      `/clientes?page=${page}&per_page=${perPage}`,
-      undefined,
-      3,
-      useCache
-    );
+  getClientes: async (page = 1, perPage = 10): Promise<ApiResponse<Cliente>> => {
+    return fetchApi<ApiResponse<Cliente>>(`/clientes?page=${page}&per_page=${perPage}`);
   },
 
   getCliente: async (id: number): Promise<Cliente> => {
-    return fetchWithRetry<Cliente>(`/clientes/${id}`);
+    return fetchApi<Cliente>(`/clientes/${id}`);
   },
 
   createCliente: async (cliente: Omit<Cliente, 'id' | 'created_at' | 'saldo_pendiente'>): Promise<Cliente> => {
-    // Clear cache for clients when creating a new one
-    clearApiCache('/clientes');
-    
-    const response = await fetchWithRetry<Cliente>('/clientes', {
+    return fetchApi<Cliente>('/clientes', {
       method: 'POST',
       body: JSON.stringify(cliente),
-    }, 3, false);
-    
-    return response;
+    });
   },
 
   updateCliente: async (id: number, cliente: Partial<Cliente>): Promise<Cliente> => {
-    // Clear cache for this client and the clients list
-    clearApiCache('/clientes');
-    clearApiCache(`/clientes/${id}`);
-    
-    return fetchWithRetry<Cliente>(`/clientes/${id}`, {
+    return fetchApi<Cliente>(`/clientes/${id}`, {
       method: 'PUT',
       body: JSON.stringify(cliente),
-    }, 3, false);
+    });
   },
 
   deleteCliente: async (id: number): Promise<any> => {
-    // Clear cache for clients when deleting
-    clearApiCache('/clientes');
-    
-    return fetchWithRetry<any>(`/clientes/${id}`, {
+    return fetchApi<any>(`/clientes/${id}`, {
       method: 'DELETE',
-    }, 3, false);
+    });
   },
 };
 
-// API methods for Producto
+// API methods for Producto (similar structure)
 export const productoApi = {
-  getProductos: async (): Promise<PaginatedResponse<Producto>> => {
-    return fetchApi<PaginatedResponse<Producto>>(`/productos`);
+  getProductos: async (page = 1, perPage = 10): Promise<ApiResponse<Producto>> => {
+    return fetchApi<ApiResponse<Producto>>(`/productos?page=${page}&per_page=${perPage}`);
   },
 
   getProducto: async (id: number): Promise<Producto> => {
@@ -280,12 +154,12 @@ export const productoApi = {
   },
 };
 
-// API methods for Proveedor
+// Similar methods for other entities
 export const proveedorApi = {
-  getProveedores: async (): Promise<PaginatedResponse<Proveedor>> => {
-    return fetchApi<PaginatedResponse<Proveedor>>(`/proveedores`);
+  getProveedores: async (page = 1, perPage = 10): Promise<ApiResponse<Proveedor>> => {
+    return fetchApi<ApiResponse<Proveedor>>(`/proveedores?page=${page}&per_page=${perPage}`);
   },
-
+  
   getProveedor: async (id: number): Promise<Proveedor> => {
     return fetchApi<Proveedor>(`/proveedores/${id}`);
   },
@@ -311,12 +185,11 @@ export const proveedorApi = {
   },
 };
 
-// API methods for Almacen
 export const almacenApi = {
-  getAlmacenes: async (): Promise<PaginatedResponse<Almacen>> => {
-    return fetchApi<PaginatedResponse<Almacen>>(`/almacenes`);
+  getAlmacenes: async (page = 1, perPage = 10): Promise<ApiResponse<Almacen>> => {
+    return fetchApi<ApiResponse<Almacen>>(`/almacenes?page=${page}&per_page=${perPage}`);
   },
-
+  
   getAlmacen: async (id: number): Promise<Almacen> => {
     return fetchApi<Almacen>(`/almacenes/${id}`);
   },
@@ -342,12 +215,11 @@ export const almacenApi = {
   },
 };
 
-// API methods for Gasto
 export const gastoApi = {
-  getGastos: async (): Promise<PaginatedResponse<Gasto>> => {
-    return fetchApi<PaginatedResponse<Gasto>>(`/gastos`);
+  getGastos: async (page = 1, perPage = 10): Promise<ApiResponse<Gasto>> => {
+    return fetchApi<ApiResponse<Gasto>>(`/gastos?page=${page}&per_page=${perPage}`);
   },
-
+  
   getGasto: async (id: number): Promise<Gasto> => {
     return fetchApi<Gasto>(`/gastos/${id}`);
   },
@@ -373,43 +245,11 @@ export const gastoApi = {
   },
 };
 
-// API methods for Movimiento
-export const movimientoApi = {
-  getMovimientos: async (): Promise<PaginatedResponse<Movimiento>> => {
-    return fetchApi<PaginatedResponse<Movimiento>>(`/movimientos`);
-  },
-
-  getMovimiento: async (id: number): Promise<Movimiento> => {
-    return fetchApi<Movimiento>(`/movimientos/${id}`);
-  },
-
-  createMovimiento: async (movimiento: Omit<Movimiento, 'id' | 'producto' | 'almacen' | 'venta' | 'proveedor'>): Promise<Movimiento> => {
-    return fetchApi<Movimiento>('/movimientos', {
-      method: 'POST',
-      body: JSON.stringify(movimiento),
-    });
-  },
-
-  updateMovimiento: async (id: number, movimiento: Partial<Omit<Movimiento, 'producto' | 'almacen' | 'venta' | 'proveedor'>>): Promise<Movimiento> => {
-    return fetchApi<Movimiento>(`/movimientos/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(movimiento),
-    });
-  },
-
-  deleteMovimiento: async (id: number): Promise<any> => {
-    return fetchApi<any>(`/movimientos/${id}`, {
-      method: 'DELETE',
-    });
-  },
-};
-
-// API methods for Venta
 export const ventaApi = {
-  getVentas: async (): Promise<PaginatedResponse<Venta>> => {
-    return fetchApi<PaginatedResponse<Venta>>(`/ventas`);
+  getVentas: async (page = 1, perPage = 10): Promise<ApiResponse<Venta>> => {
+    return fetchApi<ApiResponse<Venta>>(`/ventas?page=${page}&per_page=${perPage}`);
   },
-
+  
   getVenta: async (id: number): Promise<Venta> => {
     return fetchApi<Venta>(`/ventas/${id}`);
   },

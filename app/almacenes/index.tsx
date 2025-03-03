@@ -1,9 +1,10 @@
+// app/almacenes/index.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 
-import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { DataTable, Column } from '@/components/DataTable';
 import { almacenApi } from '@/services/api';
@@ -17,6 +18,8 @@ export default function AlmacenesScreen() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Sorting state
   const [sortColumn, setSortColumn] = useState('id');
@@ -48,17 +51,19 @@ export default function AlmacenesScreen() {
     },
   ];
 
-  const loadAlmacenes = useCallback(async () => {
+  const loadAlmacenes = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      const response = await almacenApi.getAlmacenes();
+      const response = await almacenApi.getAlmacenes(page, perPage);
       
       if (response && response.data) {
         setAlmacenes(response.data);
-        setTotalPages(response.total_paginas || 1);
-        setCurrentPage(response.pagina || 1);
+        setTotalPages(response.pagination.pages);
+        setCurrentPage(response.pagination.page);
+        setTotalItems(response.pagination.total);
+        setItemsPerPage(response.pagination.per_page);
       } else {
         console.error('Formato de respuesta inesperado:', response);
         setError('Error al cargar los almacenes');
@@ -69,7 +74,7 @@ export default function AlmacenesScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentPage, itemsPerPage]);
 
   // Initial load
   useEffect(() => {
@@ -78,7 +83,17 @@ export default function AlmacenesScreen() {
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
-    loadAlmacenes();
+    loadAlmacenes(1, itemsPerPage); // Reset to first page on refresh
+  }, [loadAlmacenes, itemsPerPage]);
+
+  // Handle page change
+  const handlePageChange = useCallback((page: number) => {
+    loadAlmacenes(page, itemsPerPage);
+  }, [loadAlmacenes, itemsPerPage]);
+
+  // Handle items per page change
+  const handleItemsPerPageChange = useCallback((perPage: number) => {
+    loadAlmacenes(1, perPage); // Reset to first page when changing items per page
   }, [loadAlmacenes]);
 
   // Handle sort
@@ -98,6 +113,30 @@ export default function AlmacenesScreen() {
     router.push('/almacenes/create');
   };
 
+  const handleEdit = (id: string) => {
+    router.push(`/almacenes/edit/${id}`);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setIsLoading(true);
+      await almacenApi.deleteAlmacen(parseInt(id));
+      
+      // Recargar los datos después de eliminar
+      loadAlmacenes(
+        // Si es el último item de la página y hay más de una página, ir a la página anterior
+        almacenes.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
+        itemsPerPage
+      );
+      
+      Alert.alert('Éxito', 'Almacén eliminado correctamente');
+    } catch (error) {
+      console.error('Error al eliminar almacén:', error);
+      Alert.alert('Error', 'No se pudo eliminar el almacén');
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <Stack.Screen options={{ 
@@ -106,6 +145,15 @@ export default function AlmacenesScreen() {
       }} />
       
       <ThemedView style={styles.container}>
+        <ThemedView style={styles.summary}>
+          <ThemedView style={styles.summaryRow}>
+            <ThemedText style={styles.summaryLabel}>Total Almacenes:</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              {isLoading ? 'Cargando...' : totalItems}
+            </ThemedText>
+          </ThemedView>
+        </ThemedView>
+        
         <DataTable<Almacen>
           data={almacenes}
           columns={columns}
@@ -116,14 +164,26 @@ export default function AlmacenesScreen() {
           onRefresh={handleRefresh}
           currentPage={currentPage}
           totalPages={totalPages}
+          onPageChange={handlePageChange}
+          itemsPerPage={itemsPerPage}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          totalItems={totalItems}
           sortColumn={sortColumn}
           sortOrder={sortOrder}
           onSort={handleSort}
           emptyMessage="No hay almacenes disponibles"
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          deletePrompt={{
+            title: 'Eliminar Almacén',
+            message: '¿Está seguro que desea eliminar este almacén?',
+            confirmText: 'Eliminar',
+            cancelText: 'Cancelar'
+          }}
         />
         
         <FloatingActionButton 
-          icon="folder.fill" 
+          icon="plus.circle.fill" 
           onPress={handleAddAlmacen} 
         />
       </ThemedView>
@@ -134,5 +194,26 @@ export default function AlmacenesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  summary: {
+    padding: 16,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    borderRadius: 8,
+    margin: 16,
+    marginBottom: 0,
+    gap: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
