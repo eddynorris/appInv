@@ -1,13 +1,14 @@
-// Define el modelo Almacen basado en el esquema de la API
+// models/almacen.ts
 export interface Almacen {
-    id: number;
-    nombre: string;
-    direccion?: string;
-    ciudad?: string;
-  }
-  
-  // Versión simplificada para relaciones anidadas
-  export interface AlmacenSimple {
-    id: number;
-    nombre: string;
-  }
+  id: number;
+  nombre: string;
+  direccion?: string;
+  ciudad?: string;
+  inventario?: any[];
+  ventas?: any[];
+}
+
+export interface AlmacenSimple {
+  id: number;
+  nombre: string;
+}

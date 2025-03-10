@@ -1,4 +1,4 @@
-// services/api.ts - Corregido para la estructura de respuesta específica
+// services/api.ts
 import { Platform } from 'react-native';
 import { 
   Cliente, 
@@ -7,7 +7,8 @@ import {
   Almacen,
   Gasto,
   Movimiento,
-  Venta
+  Venta,
+  VentaDetalle
 } from '@/models';
 import { authService } from './auth';
 
@@ -102,7 +103,7 @@ export const clienteApi = {
     return fetchApi<Cliente>(`/clientes/${id}`);
   },
 
-  createCliente: async (cliente: Omit<Cliente, 'id' | 'created_at' | 'saldo_pendiente'>): Promise<Cliente> => {
+  createCliente: async (cliente: Partial<Cliente>): Promise<Cliente> => {
     return fetchApi<Cliente>('/clientes', {
       method: 'POST',
       body: JSON.stringify(cliente),
@@ -123,7 +124,7 @@ export const clienteApi = {
   },
 };
 
-// API methods for Producto (similar structure)
+// API methods for Producto
 export const productoApi = {
   getProductos: async (page = 1, perPage = 10): Promise<ApiResponse<Producto>> => {
     return fetchApi<ApiResponse<Producto>>(`/productos?page=${page}&per_page=${perPage}`);
@@ -133,7 +134,7 @@ export const productoApi = {
     return fetchApi<Producto>(`/productos/${id}`);
   },
 
-  createProducto: async (producto: Omit<Producto, 'id' | 'created_at'>): Promise<Producto> => {
+  createProducto: async (producto: Partial<Producto>): Promise<Producto> => {
     return fetchApi<Producto>('/productos', {
       method: 'POST',
       body: JSON.stringify(producto),
@@ -154,7 +155,7 @@ export const productoApi = {
   },
 };
 
-// Similar methods for other entities
+// API methods for Proveedor
 export const proveedorApi = {
   getProveedores: async (page = 1, perPage = 10): Promise<ApiResponse<Proveedor>> => {
     return fetchApi<ApiResponse<Proveedor>>(`/proveedores?page=${page}&per_page=${perPage}`);
@@ -164,7 +165,7 @@ export const proveedorApi = {
     return fetchApi<Proveedor>(`/proveedores/${id}`);
   },
 
-  createProveedor: async (proveedor: Omit<Proveedor, 'id' | 'created_at'>): Promise<Proveedor> => {
+  createProveedor: async (proveedor: Partial<Proveedor>): Promise<Proveedor> => {
     return fetchApi<Proveedor>('/proveedores', {
       method: 'POST',
       body: JSON.stringify(proveedor),
@@ -185,6 +186,7 @@ export const proveedorApi = {
   },
 };
 
+// API methods for Almacen
 export const almacenApi = {
   getAlmacenes: async (page = 1, perPage = 10): Promise<ApiResponse<Almacen>> => {
     return fetchApi<ApiResponse<Almacen>>(`/almacenes?page=${page}&per_page=${perPage}`);
@@ -194,7 +196,7 @@ export const almacenApi = {
     return fetchApi<Almacen>(`/almacenes/${id}`);
   },
 
-  createAlmacen: async (almacen: Omit<Almacen, 'id'>): Promise<Almacen> => {
+  createAlmacen: async (almacen: Partial<Almacen>): Promise<Almacen> => {
     return fetchApi<Almacen>('/almacenes', {
       method: 'POST',
       body: JSON.stringify(almacen),
@@ -215,6 +217,7 @@ export const almacenApi = {
   },
 };
 
+// API methods for Gasto
 export const gastoApi = {
   getGastos: async (page = 1, perPage = 10): Promise<ApiResponse<Gasto>> => {
     return fetchApi<ApiResponse<Gasto>>(`/gastos?page=${page}&per_page=${perPage}`);
@@ -224,7 +227,7 @@ export const gastoApi = {
     return fetchApi<Gasto>(`/gastos/${id}`);
   },
 
-  createGasto: async (gasto: Omit<Gasto, 'id'>): Promise<Gasto> => {
+  createGasto: async (gasto: Partial<Gasto>): Promise<Gasto> => {
     return fetchApi<Gasto>('/gastos', {
       method: 'POST',
       body: JSON.stringify(gasto),
@@ -245,6 +248,7 @@ export const gastoApi = {
   },
 };
 
+// API methods for Venta
 export const ventaApi = {
   getVentas: async (page = 1, perPage = 10): Promise<ApiResponse<Venta>> => {
     return fetchApi<ApiResponse<Venta>>(`/ventas?page=${page}&per_page=${perPage}`);
@@ -254,14 +258,24 @@ export const ventaApi = {
     return fetchApi<Venta>(`/ventas/${id}`);
   },
 
-  createVenta: async (venta: Omit<Venta, 'id' | 'cliente' | 'almacen' | 'detalles' | 'credito'>): Promise<Venta> => {
+  createVenta: async (venta: {
+    cliente_id: number;
+    almacen_id: number;
+    fecha?: string;
+    tipo_pago: string;
+    consumo_diario_kg?: string;
+    detalles: {
+      presentacion_id: number;
+      cantidad: number;
+    }[];
+  }): Promise<Venta> => {
     return fetchApi<Venta>('/ventas', {
       method: 'POST',
       body: JSON.stringify(venta),
     });
   },
 
-  updateVenta: async (id: number, venta: Partial<Omit<Venta, 'cliente' | 'almacen' | 'detalles' | 'credito'>>): Promise<Venta> => {
+  updateVenta: async (id: number, venta: Partial<Venta>): Promise<Venta> => {
     return fetchApi<Venta>(`/ventas/${id}`, {
       method: 'PUT',
       body: JSON.stringify(venta),
@@ -270,6 +284,111 @@ export const ventaApi = {
 
   deleteVenta: async (id: number): Promise<any> => {
     return fetchApi<any>(`/ventas/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// API methods for Inventario
+export const inventarioApi = {
+  getInventarios: async (page = 1, perPage = 10, almacenId?: number): Promise<ApiResponse<any>> => {
+    let endpoint = `/inventarios?page=${page}&per_page=${perPage}`;
+    if (almacenId) {
+      endpoint += `&almacen_id=${almacenId}`;
+    }
+    return fetchApi<ApiResponse<any>>(endpoint);
+  },
+  
+  getInventario: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/inventarios/${id}`);
+  },
+
+  createInventario: async (inventario: any): Promise<any> => {
+    return fetchApi<any>('/inventarios', {
+      method: 'POST',
+      body: JSON.stringify(inventario),
+    });
+  },
+
+  updateInventario: async (id: number, inventario: any): Promise<any> => {
+    return fetchApi<any>(`/inventarios/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(inventario),
+    });
+  },
+
+  deleteInventario: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/inventarios/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// API methods for Presentaciones
+export const presentacionApi = {
+  getPresentaciones: async (page = 1, perPage = 10, productoId?: number): Promise<ApiResponse<any>> => {
+    let endpoint = `/presentaciones?page=${page}&per_page=${perPage}`;
+    if (productoId) {
+      endpoint += `&producto_id=${productoId}`;
+    }
+    return fetchApi<ApiResponse<any>>(endpoint);
+  },
+  
+  getPresentacion: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/presentaciones/${id}`);
+  },
+
+  createPresentacion: async (presentacion: any): Promise<any> => {
+    return fetchApi<any>('/presentaciones', {
+      method: 'POST',
+      body: JSON.stringify(presentacion),
+    });
+  },
+
+  updatePresentacion: async (id: number, presentacion: any): Promise<any> => {
+    return fetchApi<any>(`/presentaciones/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(presentacion),
+    });
+  },
+
+  deletePresentacion: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/presentaciones/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// API methods for Pagos
+export const pagoApi = {
+  getPagos: async (page = 1, perPage = 10, ventaId?: number): Promise<ApiResponse<any>> => {
+    let endpoint = `/pagos?page=${page}&per_page=${perPage}`;
+    if (ventaId) {
+      endpoint += `&venta_id=${ventaId}`;
+    }
+    return fetchApi<ApiResponse<any>>(endpoint);
+  },
+  
+  getPago: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/pagos/${id}`);
+  },
+
+  createPago: async (pago: any): Promise<any> => {
+    return fetchApi<any>('/pagos', {
+      method: 'POST',
+      body: JSON.stringify(pago),
+    });
+  },
+
+  updatePago: async (id: number, pago: any): Promise<any> => {
+    return fetchApi<any>(`/pagos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(pago),
+    });
+  },
+
+  deletePago: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/pagos/${id}`, {
       method: 'DELETE',
     });
   },

@@ -15,3 +15,18 @@ export interface PaginatedResponse<T> {
     message?: string;
     success?: boolean;
   }
+
+/* ver si esto funciona 
+models/apiResponses.ts
+export interface Pagination {
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface ApiResponse<T> {
+  data: T[];
+  pagination: Pagination;
+}
+*/

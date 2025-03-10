@@ -1,8 +1,13 @@
-// Define el modelo Gasto basado en el esquema de la API
+// models/gasto.ts
+import { AlmacenSimple } from './almacen';
+
 export interface Gasto {
-    id: number;
-    descripcion: string;
-    monto: string; // Decimal como string
-    fecha: string; // Fecha como string
-    categoria: string;
-  }
+  id: number;
+  descripcion: string;
+  monto: string;
+  fecha: string;
+  categoria: 'logistica' | 'personal' | 'otros';
+  almacen_id?: number;
+  usuario_id?: number;
+  almacen?: AlmacenSimple;
+}

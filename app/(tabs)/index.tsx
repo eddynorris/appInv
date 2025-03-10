@@ -95,9 +95,9 @@ export default function DashboardScreen() {
         
         // Actualizar el estado con todos los datos procesados
         setResumen({
-          // Use total field instead of data.length to get the actual count
-          clientes: clientesResponse?.total || 0,
-          productos: productosResponse?.total || 0,
+
+          clientes: clientesResponse?.pagination?.total || 0, 
+          productos: productosResponse?.pagination?.total || 0, 
           totalVentas,
           totalGastos,
           ventasPorMes,

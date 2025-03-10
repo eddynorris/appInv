@@ -1,4 +1,4 @@
-// Add this to app/ventas/create.tsx if it doesn't exist already
+// Para reemplazar completamente el contenido del archivo app/ventas/create.tsx
 
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View } from 'react-native';
@@ -7,10 +7,15 @@ import { Picker } from '@react-native-picker/picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { ventaApi, clienteApi, productoApi, almacenApi } from '@/services/api';
+import { ventaApi, clienteApi, presentacionApi, almacenApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Cliente, Producto, Almacen } from '@/models';
+import { Cliente, Almacen, Presentacion } from '@/models';
+
+// Configuración para la API
+const API_CONFIG = {
+  baseUrl: 'http://192.168.1.37:5000' // Ajusta a tu configuración
+};
 
 export default function CreateVentaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -19,7 +24,7 @@ export default function CreateVentaScreen() {
   
   // Data for dropdowns
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
+  const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
@@ -27,34 +32,65 @@ export default function CreateVentaScreen() {
   const [formData, setFormData] = useState({
     cliente_id: '',
     almacen_id: '',
-    fecha: new Date().toISOString(), // Format YYYY-MM-DD
+    fecha: new Date().toISOString().split('T')[0], // Format YYYY-MM-DD
     tipo_pago: 'contado',
-    estado_pago: 'pagado',
-    total: '',
+    consumo_diario_kg: ''
   });
 
-  // Detalles de venta
+  // Detalles de venta (ahora usando presentacion_id en lugar de producto_id)
   const [detalles, setDetalles] = useState([
-    { producto_id: '', cantidad: '1' }
+    { presentacion_id: '', cantidad: '1' }
   ]);
 
   // Error state
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Función para depurar el error en creación de ventas
+  const debugVentaCreation = async (ventaData: any) => {
+    try {
+      // 1. Verificar que los IDs de clientes y almacenes existen
+      console.log(`Verificando cliente_id: ${ventaData.cliente_id}`);
+      const clienteResponse = await fetch(`${API_CONFIG.baseUrl}/clientes/${ventaData.cliente_id}`);
+      if (!clienteResponse.ok) {
+        console.error(`Cliente con ID ${ventaData.cliente_id} no encontrado`);
+      }
+      
+      console.log(`Verificando almacen_id: ${ventaData.almacen_id}`);
+      const almacenResponse = await fetch(`${API_CONFIG.baseUrl}/almacenes/${ventaData.almacen_id}`);
+      if (!almacenResponse.ok) {
+        console.error(`Almacén con ID ${ventaData.almacen_id} no encontrado`);
+      }
+      
+      // 2. Verificar que todas las presentaciones existen
+      for (const detalle of ventaData.detalles) {
+        console.log(`Verificando presentacion_id: ${detalle.presentacion_id}`);
+        const presentacionResponse = await fetch(`${API_CONFIG.baseUrl}/presentaciones/${detalle.presentacion_id}`);
+        if (!presentacionResponse.ok) {
+          console.error(`Presentación con ID ${detalle.presentacion_id} no encontrada`);
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error en la depuración:', error);
+      return false;
+    }
+  };
 
   // Load data for dropdowns
   useEffect(() => {
     const fetchData = async () => {
       setIsLoadingData(true);
       try {
-        // Load clientes, productos, almacenes in parallel
-        const [clientesRes, productosRes, almacenesRes] = await Promise.all([
+        // Load clientes, presentaciones, almacenes in parallel
+        const [clientesRes, presentacionesRes, almacenesRes] = await Promise.all([
           clienteApi.getClientes(),
-          productoApi.getProductos(),
+          presentacionApi.getPresentaciones(),
           almacenApi.getAlmacenes()
         ]);
         
         setClientes(clientesRes.data || []);
-        setProductos(productosRes.data || []);
+        setPresentaciones(presentacionesRes.data || []);
         setAlmacenes(almacenesRes.data || []);
         
         // Set initial form values if data is available
@@ -62,8 +98,8 @@ export default function CreateVentaScreen() {
           setFormData(prev => ({ ...prev, cliente_id: clientesRes.data[0].id.toString() }));
         }
         
-        if (productosRes.data?.length > 0) {
-          setDetalles([{ producto_id: productosRes.data[0].id.toString(), cantidad: '1' }]);
+        if (presentacionesRes.data?.length > 0) {
+          setDetalles([{ presentacion_id: presentacionesRes.data[0].id.toString(), cantidad: '1' }]);
         }
         
         if (almacenesRes.data?.length > 0) {
@@ -103,10 +139,10 @@ export default function CreateVentaScreen() {
   };
 
   const addDetalle = () => {
-    if (productos.length > 0) {
-      setDetalles([...detalles, { producto_id: productos[0].id.toString(), cantidad: '1' }]);
+    if (presentaciones.length > 0) {
+      setDetalles([...detalles, { presentacion_id: presentaciones[0].id.toString(), cantidad: '1' }]);
     } else {
-      Alert.alert('Error', 'No hay productos disponibles para agregar');
+      Alert.alert('Error', 'No hay presentaciones disponibles para agregar');
     }
   };
 
@@ -124,27 +160,14 @@ export default function CreateVentaScreen() {
     let total = 0;
     
     detalles.forEach(detalle => {
-      const producto = productos.find(p => p.id.toString() === detalle.producto_id);
-      if (producto) {
-        total += parseFloat(producto.precio_compra) * parseInt(detalle.cantidad);
+      const presentacion = presentaciones.find(p => p.id.toString() === detalle.presentacion_id);
+      if (presentacion) {
+        total += parseFloat(presentacion.precio_venta) * parseInt(detalle.cantidad);
       }
     });
     
-    // Update form data with the calculated total
-    setFormData(prev => ({
-      ...prev,
-      total: total.toFixed(2)
-    }));
-    
     return total.toFixed(2);
   };
-
-  // Recalculate total when detalles change
-  useEffect(() => {
-    if (productos.length > 0) {
-      calculateTotal();
-    }
-  }, [detalles, productos]);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -157,10 +180,6 @@ export default function CreateVentaScreen() {
       newErrors.almacen_id = 'El almacén es requerido';
     }
     
-    if (!formData.total || parseFloat(formData.total) <= 0) {
-      newErrors.total = 'El total debe ser mayor a 0';
-    }
-    
     // Validate at least one detalle
     if (detalles.length === 0) {
       newErrors.detalles = 'Debe agregar al menos un producto';
@@ -168,8 +187,8 @@ export default function CreateVentaScreen() {
     
     // Validate each detalle
     detalles.forEach((detalle, index) => {
-      if (!detalle.producto_id) {
-        newErrors[`detalle_${index}_producto`] = 'El producto es requerido';
+      if (!detalle.presentacion_id) {
+        newErrors[`detalle_${index}_presentacion`] = 'La presentación es requerida';
       }
       
       if (!detalle.cantidad || parseInt(detalle.cantidad) <= 0) {
@@ -189,21 +208,30 @@ export default function CreateVentaScreen() {
     try {
       setIsSubmitting(true);
       
-      // Prepare data for API
+      // Prepare data for API - versión simplificada para el backend
       const ventaData = {
         cliente_id: parseInt(formData.cliente_id),
         almacen_id: parseInt(formData.almacen_id),
-        fecha: formData.fecha,
         tipo_pago: formData.tipo_pago,
-        estado_pago: formData.estado_pago,
-        total: formData.total,
         detalles: detalles.map(d => ({
-          producto_id: parseInt(d.producto_id),
+          presentacion_id: parseInt(d.presentacion_id),
           cantidad: parseInt(d.cantidad)
         }))
       };
       
+      // Solo añadir campos opcionales si tienen valor
+      if (formData.fecha && formData.fecha !== new Date().toISOString().split('T')[0]) {
+        ventaData.fecha = formData.fecha;
+      }
+      
+      if (formData.consumo_diario_kg && parseFloat(formData.consumo_diario_kg) > 0) {
+        ventaData.consumo_diario_kg = formData.consumo_diario_kg;
+      }
+      
       console.log('Submitting venta data:', ventaData);
+      
+      // Depurar los datos antes de enviar (opcional)
+      await debugVentaCreation(ventaData);
       
       const response = await ventaApi.createVenta(ventaData);
       
@@ -244,6 +272,8 @@ export default function CreateVentaScreen() {
       </>
     );
   }
+
+  const total = calculateTotal();
 
   return (
     <>
@@ -335,28 +365,6 @@ export default function CreateVentaScreen() {
             </View>
           </ThemedView>
 
-          {/* Estado de Pago */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Estado de Pago</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-            ]}>
-              <Picker
-                selectedValue={formData.estado_pago}
-                onValueChange={(value) => handleChange('estado_pago', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
-              >
-                <Picker.Item label="Pagado" value="pagado" />
-                <Picker.Item label="Pendiente" value="pendiente" />
-                <Picker.Item label="Pago Parcial" value="parcial" />
-              </Picker>
-            </View>
-          </ThemedView>
-
           {/* Fecha */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Fecha</ThemedText>
@@ -372,6 +380,22 @@ export default function CreateVentaScreen() {
             />
           </ThemedView>
 
+          {/* Consumo diario (opcional) */}
+          <ThemedView style={styles.formGroup}>
+            <ThemedText style={styles.label}>Consumo Diario (kg) (Opcional)</ThemedText>
+            <TextInput
+              style={[
+                styles.input,
+                { color: Colors[colorScheme].text }
+              ]}
+              value={formData.consumo_diario_kg}
+              onChangeText={(value) => handleChange('consumo_diario_kg', value)}
+              placeholder="0.00"
+              placeholderTextColor="#9BA1A6"
+              keyboardType="numeric"
+            />
+          </ThemedView>
+
           {/* Detalles de la Venta */}
           <ThemedView style={styles.detallesSection}>
             <ThemedText type="subtitle" style={styles.subheading}>Detalles de la Venta</ThemedText>
@@ -382,30 +406,30 @@ export default function CreateVentaScreen() {
                 
                 <ThemedView style={styles.detalleRow}>
                   <ThemedView style={styles.detalleField}>
-                    <ThemedText style={styles.label}>Producto</ThemedText>
+                    <ThemedText style={styles.label}>Presentación</ThemedText>
                     <View style={[
                       styles.pickerContainer,
                       { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
                     ]}>
                       <Picker
-                        selectedValue={detalle.producto_id}
-                        onValueChange={(value) => handleDetalleChange(index, 'producto_id', value)}
+                        selectedValue={detalle.presentacion_id}
+                        onValueChange={(value) => handleDetalleChange(index, 'presentacion_id', value)}
                         style={[
                           styles.picker,
                           { color: Colors[colorScheme].text }
                         ]}
                       >
-                        {productos.map(producto => (
+                        {presentaciones.map(presentacion => (
                           <Picker.Item 
-                            key={producto.id} 
-                            label={producto.nombre} 
-                            value={producto.id.toString()} 
+                            key={presentacion.id} 
+                            label={`${presentacion.nombre} (${presentacion.producto?.nombre || 'Sin producto'}) - $${parseFloat(presentacion.precio_venta).toFixed(2)}`} 
+                            value={presentacion.id.toString()} 
                           />
                         ))}
                       </Picker>
                     </View>
-                    {errors[`detalle_${index}_producto`] && (
-                      <ThemedText style={styles.errorText}>{errors[`detalle_${index}_producto`]}</ThemedText>
+                    {errors[`detalle_${index}_presentacion`] && (
+                      <ThemedText style={styles.errorText}>{errors[`detalle_${index}_presentacion`]}</ThemedText>
                     )}
                   </ThemedView>
                   
@@ -450,7 +474,7 @@ export default function CreateVentaScreen() {
           {/* Total */}
           <ThemedView style={styles.totalSection}>
             <ThemedText style={styles.totalLabel}>Total:</ThemedText>
-            <ThemedText style={styles.totalValue}>${formData.total}</ThemedText>
+            <ThemedText style={styles.totalValue}>${total}</ThemedText>
           </ThemedView>
 
           <TouchableOpacity 
