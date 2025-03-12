@@ -1,5 +1,3 @@
-// Para reemplazar completamente el contenido del archivo app/ventas/create.tsx
-
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View } from 'react-native';
 import { Stack, router } from 'expo-router';
@@ -7,10 +5,12 @@ import { Picker } from '@react-native-picker/picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { ventaApi, clienteApi, presentacionApi, almacenApi } from '@/services/api';
+import { ventaApi, clienteApi, presentacionApi, almacenApi, inventarioApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Cliente, Almacen, Presentacion } from '@/models';
+import { authService } from '@/services/auth';
+import { useAuth } from '@/context/AuthContext';  // Importar contexto de autenticación
 
 // Configuración para la API
 const API_CONFIG = {
@@ -21,12 +21,15 @@ export default function CreateVentaScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth(); // Obtenemos el usuario actual
   
   // Data for dropdowns
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
+  const [presentacionesFiltradas, setPresentacionesFiltradas] = useState<Presentacion[]>([]);
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -37,7 +40,7 @@ export default function CreateVentaScreen() {
     consumo_diario_kg: ''
   });
 
-  // Detalles de venta (ahora usando presentacion_id en lugar de producto_id)
+  // Detalles de venta
   const [detalles, setDetalles] = useState([
     { presentacion_id: '', cantidad: '1' }
   ]);
@@ -45,26 +48,60 @@ export default function CreateVentaScreen() {
   // Error state
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Establecer el rol y almacén del usuario al cargar el componente
+  useEffect(() => {
+    if (user) {
+      // Comprobar si el usuario es administrador
+      setIsAdmin(user.rol === 'admin');
+      
+      // Si no es admin y tiene un almacén asignado, establecerlo como predeterminado
+      if (user.rol !== 'admin' && user.almacen_id) {
+        setFormData(prev => ({
+          ...prev,
+          almacen_id: user.almacen_id.toString()
+        }));
+      }
+    }
+  }, [user]);
+
   // Función para depurar el error en creación de ventas
   const debugVentaCreation = async (ventaData: any) => {
     try {
-      // 1. Verificar que los IDs de clientes y almacenes existen
+      // Obtener el token de autenticación
+      const authToken = await authService.getToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      };
+  
+      // 1. Verificar cliente_id
       console.log(`Verificando cliente_id: ${ventaData.cliente_id}`);
-      const clienteResponse = await fetch(`${API_CONFIG.baseUrl}/clientes/${ventaData.cliente_id}`);
+      const clienteResponse = await fetch(
+        `${API_CONFIG.baseUrl}/clientes/${ventaData.cliente_id}`,
+        { headers }
+      );
       if (!clienteResponse.ok) {
         console.error(`Cliente con ID ${ventaData.cliente_id} no encontrado`);
       }
       
+      // 2. Verificar almacen_id
       console.log(`Verificando almacen_id: ${ventaData.almacen_id}`);
-      const almacenResponse = await fetch(`${API_CONFIG.baseUrl}/almacenes/${ventaData.almacen_id}`);
+      const almacenResponse = await fetch(
+        `${API_CONFIG.baseUrl}/almacenes/${ventaData.almacen_id}`,
+        { headers }
+      );
       if (!almacenResponse.ok) {
         console.error(`Almacén con ID ${ventaData.almacen_id} no encontrado`);
       }
       
-      // 2. Verificar que todas las presentaciones existen
+      // 3. Verificar presentaciones
       for (const detalle of ventaData.detalles) {
         console.log(`Verificando presentacion_id: ${detalle.presentacion_id}`);
-        const presentacionResponse = await fetch(`${API_CONFIG.baseUrl}/presentaciones/${detalle.presentacion_id}`);
+        const presentacionResponse = await fetch(
+          `${API_CONFIG.baseUrl}/presentaciones/${detalle.presentacion_id}`,
+          { headers }
+        );
         if (!presentacionResponse.ok) {
           console.error(`Presentación con ID ${detalle.presentacion_id} no encontrada`);
         }
@@ -93,17 +130,27 @@ export default function CreateVentaScreen() {
         setPresentaciones(presentacionesRes.data || []);
         setAlmacenes(almacenesRes.data || []);
         
-        // Set initial form values if data is available
+        // Set initial cliente_id if available
         if (clientesRes.data?.length > 0) {
           setFormData(prev => ({ ...prev, cliente_id: clientesRes.data[0].id.toString() }));
         }
         
-        if (presentacionesRes.data?.length > 0) {
-          setDetalles([{ presentacion_id: presentacionesRes.data[0].id.toString(), cantidad: '1' }]);
+        // Si el usuario no es admin, usar su almacén asignado
+        let almacenIdToUse = '';
+        
+        if (user && user.rol !== 'admin' && user.almacen_id) {
+          almacenIdToUse = user.almacen_id.toString();
+        } else if (almacenesRes.data?.length > 0) {
+          // Si es admin o no tiene almacén asignado, usar el primer almacén
+          almacenIdToUse = almacenesRes.data[0].id.toString();
         }
         
-        if (almacenesRes.data?.length > 0) {
-          setFormData(prev => ({ ...prev, almacen_id: almacenesRes.data[0].id.toString() }));
+        if (almacenIdToUse) {
+          setFormData(prev => ({ ...prev, almacen_id: almacenIdToUse }));
+          
+          // Cargar inventarios para este almacén
+          const inventariosRes = await inventarioApi.getInventarios(1, 100, parseInt(almacenIdToUse));
+          filtrarPresentacionesPorAlmacen(almacenIdToUse, inventariosRes.data || []);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -112,9 +159,49 @@ export default function CreateVentaScreen() {
         setIsLoadingData(false);
       }
     };
-
+  
     fetchData();
-  }, []);
+  }, [user]);
+
+  const filtrarPresentacionesPorAlmacen = (almacenId: string, inventarios: any[] = []) => {
+    // Filtrar los inventarios por almacén
+    const inventariosDelAlmacen = inventarios.filter(
+      inv => inv.almacen_id.toString() === almacenId && inv.cantidad > 0
+    );
+    
+    // Obtener las presentaciones disponibles en este almacén
+    const presentacionesIdsDisponibles = inventariosDelAlmacen.map(inv => inv.presentacion_id);
+    
+    // Filtrar las presentaciones
+    const presentacionesDisponibles = presentaciones.filter(
+      p => presentacionesIdsDisponibles.includes(p.id)
+    );
+    
+    setPresentacionesFiltradas(presentacionesDisponibles);
+    
+    // Si hay presentaciones disponibles, actualiza el primer detalle
+    if (presentacionesDisponibles.length > 0) {
+      setDetalles([{ 
+        presentacion_id: presentacionesDisponibles[0].id.toString(), 
+        cantidad: '1' 
+      }]);
+    } else {
+      setDetalles([{ presentacion_id: '', cantidad: '1' }]);
+    }
+  };
+  
+  const handleAlmacenChange = async (almacenId: string) => {
+    setFormData(prev => ({ ...prev, almacen_id: almacenId }));
+    
+    try {
+      // Cargar inventarios para este almacén
+      const inventariosRes = await inventarioApi.getInventarios(1, 100, parseInt(almacenId));
+      filtrarPresentacionesPorAlmacen(almacenId, inventariosRes.data || []);
+    } catch (error) {
+      console.error('Error al cargar inventario del almacén:', error);
+      Alert.alert('Error', 'No se pudo cargar el inventario del almacén');
+    }
+  };
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -139,8 +226,8 @@ export default function CreateVentaScreen() {
   };
 
   const addDetalle = () => {
-    if (presentaciones.length > 0) {
-      setDetalles([...detalles, { presentacion_id: presentaciones[0].id.toString(), cantidad: '1' }]);
+    if (presentacionesFiltradas.length > 0) {
+      setDetalles([...detalles, { presentacion_id: presentacionesFiltradas[0].id.toString(), cantidad: '1' }]);
     } else {
       Alert.alert('Error', 'No hay presentaciones disponibles para agregar');
     }
@@ -160,9 +247,9 @@ export default function CreateVentaScreen() {
     let total = 0;
     
     detalles.forEach(detalle => {
-      const presentacion = presentaciones.find(p => p.id.toString() === detalle.presentacion_id);
+      const presentacion = presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id);
       if (presentacion) {
-        total += parseFloat(presentacion.precio_venta) * parseInt(detalle.cantidad);
+        total += parseFloat(presentacion.precio_venta) * parseInt(detalle.cantidad || '0');
       }
     });
     
@@ -204,11 +291,37 @@ export default function CreateVentaScreen() {
     if (!validate()) {
       return;
     }
-    
+     
+    // Verificar que haya presentaciones disponibles
+    if (presentacionesFiltradas.length === 0) {
+      Alert.alert(
+        'Error',
+        'No hay presentaciones disponibles en el almacén seleccionado',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Verificar que todas las presentaciones seleccionadas estén disponibles
+    for (const detalle of detalles) {
+      const presentacionExiste = presentacionesFiltradas.some(
+        p => p.id.toString() === detalle.presentacion_id
+      );
+      
+      if (!presentacionExiste) {
+        Alert.alert(
+          'Error',
+          'Alguna de las presentaciones seleccionadas no está disponible en este almacén',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
       
-      // Prepare data for API - versión simplificada para el backend
+      // Prepare data for API
       const ventaData = {
         cliente_id: parseInt(formData.cliente_id),
         almacen_id: parseInt(formData.almacen_id),
@@ -315,20 +428,22 @@ export default function CreateVentaScreen() {
             )}
           </ThemedView>
 
-          {/* Almacén Selector */}
+          {/* Almacén Selector - Bloqueado para no-admins */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Almacén *</ThemedText>
             <View style={[
               styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
+              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
+              !isAdmin && styles.disabledContainer
             ]}>
               <Picker
                 selectedValue={formData.almacen_id}
-                onValueChange={(value) => handleChange('almacen_id', value)}
+                onValueChange={(value) => handleAlmacenChange(value)}
                 style={[
                   styles.picker,
                   { color: Colors[colorScheme].text }
                 ]}
+                enabled={isAdmin} // Solo habilitado para admins
               >
                 {almacenes.map(almacen => (
                   <Picker.Item 
@@ -339,6 +454,11 @@ export default function CreateVentaScreen() {
                 ))}
               </Picker>
             </View>
+            {!isAdmin && (
+              <ThemedText style={styles.infoText}>
+                Asignado a tu usuario automáticamente
+              </ThemedText>
+            )}
             {errors.almacen_id && (
               <ThemedText style={styles.errorText}>{errors.almacen_id}</ThemedText>
             )}
@@ -419,7 +539,7 @@ export default function CreateVentaScreen() {
                           { color: Colors[colorScheme].text }
                         ]}
                       >
-                        {presentaciones.map(presentacion => (
+                        {presentacionesFiltradas.map(presentacion => (
                           <Picker.Item 
                             key={presentacion.id} 
                             label={`${presentacion.nombre} (${presentacion.producto?.nombre || 'Sin producto'}) - $${parseFloat(presentacion.precio_venta).toFixed(2)}`} 
@@ -533,6 +653,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
+  disabledContainer: {
+    opacity: 0.7,
+    backgroundColor: '#F0F0F0',
+  },
   picker: {
     height: 50,
     width: '100%',
@@ -541,6 +665,12 @@ const styles = StyleSheet.create({
     color: '#E53935',
     fontSize: 14,
     marginTop: 4,
+  },
+  infoText: {
+    color: '#0a7ea4',
+    fontSize: 12,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   detallesSection: {
     marginTop: 16,
