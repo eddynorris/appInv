@@ -33,7 +33,7 @@ const getBaseUrl = () => {
   return 'http://localhost:5000'; // Para iOS y web
 };
 
-const API_CONFIG = {
+export const API_CONFIG = {
   baseUrl: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json',

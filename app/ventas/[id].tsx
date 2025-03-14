@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -178,16 +178,42 @@ export default function VentaDetailScreen() {
               <ThemedText type="subtitle">Detalles de la Venta</ThemedText>
               
               {venta.detalles && venta.detalles.length > 0 ? (
-                <ThemedView style={styles.detallesContainer}>
-                  <ThemedView style={styles.detallesHeader}>
-                    <ThemedText style={[styles.detalleHeaderText, styles.productoColumn]}>Producto</ThemedText>
-                    <ThemedText style={[styles.detalleHeaderText, styles.cantidadColumn]}>Cant.</ThemedText>
-                  </ThemedView>
-                  
+                <ThemedView style={styles.productosGrid}>
                   {venta.detalles.map((detalle: VentaDetalle) => (
-                    <ThemedView key={detalle.id} style={styles.detalleRow}>
-                      <ThemedText style={styles.productoColumn}>{detalle.producto?.nombre}</ThemedText>
-                      <ThemedText style={styles.cantidadColumn}>{detalle.cantidad}</ThemedText>
+                    <ThemedView key={detalle.id} style={styles.productoCard}>
+                      {/* Imagen del producto */}
+                      <ThemedView style={styles.productoImageContainer}>
+                        {detalle.presentacion?.url_foto ? (
+                          <Image 
+                            source={{ uri: `${API_CONFIG.baseUrl}/uploads/${detalle.presentacion.url_foto}` }} 
+                            style={styles.productoImage} 
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <ThemedView style={styles.productoImagePlaceholder}>
+                            <IconSymbol name="photo" size={24} color="#9BA1A6" />
+                          </ThemedView>
+                        )}
+                      </ThemedView>
+                      
+                      {/* Información del producto */}
+                      <ThemedView style={styles.productoInfo}>
+                        <ThemedText style={styles.productoNombre}>
+                          {detalle.presentacion?.nombre || 'Producto'}
+                        </ThemedText>
+                        
+                        <ThemedView style={styles.productoDetalles}>
+                          <ThemedText style={styles.productoDetalle}>
+                            Cantidad: {detalle.cantidad}
+                          </ThemedText>
+                          <ThemedText style={styles.productoDetalle}>
+                            Precio: ${parseFloat(detalle.precio_unitario).toFixed(2)}
+                          </ThemedText>
+                          <ThemedText style={styles.productoSubtotal}>
+                            Subtotal: ${parseFloat(detalle.total_linea || '0').toFixed(2)}
+                          </ThemedText>
+                        </ThemedView>
+                      </ThemedView>
                     </ThemedView>
                   ))}
                 </ThemedView>
@@ -195,7 +221,6 @@ export default function VentaDetailScreen() {
                 <ThemedText>No hay detalles disponibles para esta venta.</ThemedText>
               )}
             </ThemedView>
-
             <ThemedView style={styles.actions}>
               <TouchableOpacity 
                 style={[styles.button, styles.editButton]} 
@@ -332,5 +357,61 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  productosGrid: {
+    gap: 12,
+    marginTop: 8,
+  },
+  productoCard: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: 'row',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  productoImageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
+    marginRight: 12,
+  },
+  productoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productoImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  productoInfo: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  productoNombre: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  productoDetalles: {
+    gap: 4,
+  },
+  productoDetalle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  productoSubtotal: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#0a7ea4',
+    marginTop: 4,
   },
 });

@@ -6,11 +6,11 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { presentacionApi, productoApi } from '@/services/api';
+import { presentacionApi, productoApi, API_CONFIG } from '@/services/api';
 import { Producto, Presentacion } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { API_CONFIG } from '@/services/api';
+
 
 // Tipos de presentación disponibles
 const TIPOS_PRESENTACION = [
@@ -130,7 +130,7 @@ export default function EditPresentacionScreen() {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaType.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,

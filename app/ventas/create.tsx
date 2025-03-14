@@ -1,12 +1,13 @@
 // app/ventas/create.tsx - Versión mejorada
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Modal, FlatList } from 'react-native';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Modal, FlatList, Image } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { ventaApi, clienteApi, presentacionApi, almacenApi, inventarioApi } from '@/services/api';
+import { ventaApi, clienteApi, presentacionApi, almacenApi, inventarioApi, API_CONFIG } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Cliente, Almacen, Presentacion } from '@/models';
@@ -641,50 +642,62 @@ export default function CreateVentaScreen() {
                 <ThemedView style={styles.productosGrid}>
                   {detalles.map((detalle, index) => (
                     <ThemedView key={index} style={styles.productoCard}>
-                      <TouchableOpacity
-                        style={styles.removeProductButton}
-                        onPress={() => removeDetalle(index)}
-                        disabled={detalles.length <= 1}
-                      >
-                        <ThemedText style={styles.removeProductButtonText}>×</ThemedText>
-                      </TouchableOpacity>
-                      
-                      {/* Info del Producto */}
-                      <ThemedView style={styles.productoInfo}>
-                        {/* Nombre del producto (estático en vez de selector) */}
-                        <ThemedText style={styles.productoNombre}>
-                          {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.nombre || 'Producto'}
-                        </ThemedText>
-                        
-                        {/* Descripción o nombre del producto base */}
-                        <ThemedText style={styles.productoDescripcion}>
-                          {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.producto?.nombre || ''}
-                        </ThemedText>
-                        
-                        {/* Precio centrado */}
-                        <ThemedText style={styles.productoPrecio}>
-                          ${parseFloat(presentacionesFiltradas.find(
-                            p => p.id.toString() === detalle.presentacion_id
-                          )?.precio_venta || '0').toFixed(2)}
-                        </ThemedText>
-                        
-                        {/* Input de Cantidad simplificado */}
-                        <TextInput
-                          style={styles.cantidadInput}
-                          value={detalle.cantidad}
-                          onChangeText={(value) => handleDetalleChange(index, 'cantidad', value)}
-                          keyboardType="numeric"
-                          placeholder="1"
-                        />
+                    <TouchableOpacity
+                      style={styles.removeProductButton}
+                      onPress={() => removeDetalle(index)}
+                      disabled={detalles.length <= 1}
+                    >
+                      <ThemedText style={styles.removeProductButtonText}>×</ThemedText>
+                    </TouchableOpacity>
+                    
+                    {/* Info del Producto con imagen */}
+                    <ThemedView style={styles.productoInfo}>
+                      {/* Imagen del producto */}
+                      <ThemedView style={styles.productoImageContainer}>
+                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.url_foto ? (
+                          <Image 
+                            source={{ 
+                              uri: `${API_CONFIG.baseUrl}/uploads/${presentacionesFiltradas.find(p => 
+                                p.id.toString() === detalle.presentacion_id
+                              )?.url_foto}` 
+                            }} 
+                            style={styles.productoImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <ThemedView style={styles.productoImagePlaceholder}>
+                            <IconSymbol name="photo" size={24} color="#9BA1A6" />
+                          </ThemedView>
+                        )}
                       </ThemedView>
                       
-                      {errors[`detalle_${index}_presentacion`] && (
-                        <ThemedText style={styles.errorText}>{errors[`detalle_${index}_presentacion`]}</ThemedText>
-                      )}
-                      {errors[`detalle_${index}_cantidad`] && (
-                        <ThemedText style={styles.errorText}>{errors[`detalle_${index}_cantidad`]}</ThemedText>
-                      )}
+                      {/* Nombre del producto */}
+                      <ThemedText style={styles.productoNombre}>
+                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.nombre || 'Producto'}
+                      </ThemedText>
+                      
+                      {/* Descripción o nombre del producto base */}
+                      <ThemedText style={styles.productoDescripcion}>
+                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.producto?.nombre || ''}
+                      </ThemedText>
+                      
+                      {/* Precio centrado */}
+                      <ThemedText style={styles.productoPrecio}>
+                        ${parseFloat(presentacionesFiltradas.find(
+                          p => p.id.toString() === detalle.presentacion_id
+                        )?.precio_venta || '0').toFixed(2)}
+                      </ThemedText>
+                      
+                      {/* Input de Cantidad simplificado */}
+                      <TextInput
+                        style={styles.cantidadInput}
+                        value={detalle.cantidad}
+                        onChangeText={(value) => handleDetalleChange(index, 'cantidad', value)}
+                        keyboardType="numeric"
+                        placeholder="1"
+                      />
                     </ThemedView>
+                  </ThemedView>
                   ))}
                   
                   {/* Botón para agregar producto - usando un card similar */}
@@ -746,41 +759,56 @@ export default function CreateVentaScreen() {
           
           <ThemedView style={styles.modalContent}>
             <FlatList
-              data={presentacionesFiltradas.filter(p => {
-                const presentacionId = p.id.toString();
-                return !detalles.some(d => d.presentacion_id === presentacionId);
-              })}
-              keyExtractor={(item) => item.id.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.productItem}
-                  onPress={() => {
-                    console.log(`Seleccionando producto ID: ${item.id}`);
-                    addProducto(item.id.toString());
-                  }}
-                >
-                  <ThemedView style={styles.productDetails}>
-                    <ThemedText style={styles.productName}>{item.nombre || `Producto ${item.id}`}</ThemedText>
-                    <ThemedText style={styles.productInfo}>
-                      {item.producto?.nombre || 'Producto'} - {parseFloat(item.capacidad_kg || 0).toFixed(2)} KG
-                    </ThemedText>
-                    <ThemedText style={styles.productPrice}>
-                      ${parseFloat(item.precio_venta || 0).toFixed(2)}
-                    </ThemedText>
-                  </ThemedView>
-                  <ThemedView style={styles.productAction}>
-                    <ThemedText style={styles.addButtonText}>+</ThemedText>
-                  </ThemedView>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <ThemedView style={styles.emptyListContainer}>
-                  <ThemedText style={styles.emptyListText}>
-                    No hay más productos disponibles para agregar
+            data={presentacionesFiltradas.filter(p => {
+              const presentacionId = p.id.toString();
+              return !detalles.some(d => d.presentacion_id === presentacionId);
+            })}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.productItem}
+                onPress={() => {
+                  console.log(`Seleccionando producto ID: ${item.id}`);
+                  addProducto(item.id.toString());
+                }}
+              >
+                {/* Imagen del producto */}
+                <ThemedView style={styles.productItemImageContainer}>
+                  {item.url_foto ? (
+                    <Image 
+                      source={{ uri: `${API_CONFIG.baseUrl}/uploads/${item.url_foto}` }} 
+                      style={styles.productItemImage} 
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <ThemedView style={styles.productItemImagePlaceholder}>
+                      <IconSymbol name="photo" size={28} color="#9BA1A6" />
+                    </ThemedView>
+                  )}
+                </ThemedView>
+                
+                <ThemedView style={styles.productDetails}>
+                  <ThemedText style={styles.productName}>{item.nombre || `Producto ${item.id}`}</ThemedText>
+                  <ThemedText style={styles.productInfo}>
+                    {item.producto?.nombre || 'Producto'} - {parseFloat(item.capacidad_kg || 0).toFixed(2)} KG
+                  </ThemedText>
+                  <ThemedText style={styles.productPrice}>
+                    ${parseFloat(item.precio_venta || 0).toFixed(2)}
                   </ThemedText>
                 </ThemedView>
-              }
-            />
+                <ThemedView style={styles.productAction}>
+                  <ThemedText style={styles.addButtonText}>+</ThemedText>
+                </ThemedView>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <ThemedView style={styles.emptyListContainer}>
+                <ThemedText style={styles.emptyListText}>
+                  No hay más productos disponibles para agregar
+                </ThemedText>
+              </ThemedView>
+            }
+          />
           </ThemedView>
         </ThemedView>
       </ThemedView>
@@ -1122,4 +1150,44 @@ const styles = StyleSheet.create({
     color: '#757575',
     textAlign: 'center',
   },
+  // Estilos para imágenes en tarjetas de producto
+productoImageContainer: {
+  width: '100%',
+  height: 60,
+  marginBottom: 4,
+  borderRadius: 4,
+  overflow: 'hidden',
+  backgroundColor: '#f5f5f5',
+},
+productoImage: {
+  width: '100%',
+  height: '100%',
+},
+productoImagePlaceholder: {
+  width: '100%',
+  height: '100%',
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#f5f5f5',
+},
+// Estilos para imágenes en modal de selección
+productItemImageContainer: {
+  width: 60,
+  height: 60,
+  borderRadius: 4,
+  overflow: 'hidden',
+  backgroundColor: '#f5f5f5',
+  marginRight: 12,
+},
+productItemImage: {
+  width: '100%',
+  height: '100%',
+},
+productItemImagePlaceholder: {
+  width: '100%',
+  height: '100%',
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: '#f5f5f5',
+},
 });
