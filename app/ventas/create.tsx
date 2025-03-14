@@ -1,6 +1,6 @@
 // app/ventas/create.tsx - Versión mejorada
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View } from 'react-native';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Modal, FlatList } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 
@@ -46,18 +46,34 @@ export default function CreateVentaScreen() {
   // Error state
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Estado para controlar la visibilidad del modal
+  const [showProductModal, setShowProductModal] = useState(false);
+
   // Establecer el rol y almacén del usuario al cargar el componente
   useEffect(() => {
     if (user) {
-      // Comprobar si el usuario es administrador
-      // Verificando con console.log para depuración
+      // Imprimir usuario completo para depuración
       console.log('Datos del usuario:', user);
-      console.log('Rol del usuario:', user.rol);
       
-      // Establecemos isAdmin, con comprobación más permisiva para evitar problemas de mayúsculas/minúsculas
-      const isUserAdmin = user.rol && user.rol.toLowerCase() === 'admin';
-      console.log('¿Es administrador?:', isUserAdmin);
-      setIsAdmin(isUserAdmin);
+      // Verificar directamente la propiedad rol ahora que debería estar presente
+      if (user.rol) {
+        console.log('Rol del usuario:', user.rol);
+        const isUserAdmin = user.rol.toLowerCase() === 'admin';
+        console.log('¿Es administrador?:', isUserAdmin);
+        setIsAdmin(isUserAdmin);
+      } else {
+        console.log('No se encontró rol en el usuario, estableciendo como no-admin');
+        setIsAdmin(false);
+      }
+      
+      // Si el usuario tiene almacén asignado, usarlo automáticamente
+      if (user.almacen_id && formData.almacen_id !== user.almacen_id.toString()) {
+        console.log('Estableciendo almacén del usuario:', user.almacen_id);
+        handleAlmacenChange(user.almacen_id.toString());
+      }
+    } else {
+      // Si no hay usuario, definitivamente no es admin
+      setIsAdmin(false);
     }
   }, [user]);
 
@@ -150,7 +166,9 @@ export default function CreateVentaScreen() {
       console.log(`Encontrados ${inventariosDelAlmacen.length} inventarios con stock para el almacén ${almacenId}`);
       
       // Obtener las presentaciones disponibles en este almacén
-      const presentacionesIdsDisponibles = inventariosDelAlmacen.map(inv => inv.presentacion_id);
+      const presentacionesIdsDisponibles = inventariosDelAlmacen.map(inv => 
+        inv.presentacion_id.toString()  // Asegurar que sean strings
+      );
       console.log('IDs de presentaciones disponibles:', presentacionesIdsDisponibles);
       
       // Si no tenemos presentaciones cargadas, intentar cargarlas
@@ -161,8 +179,8 @@ export default function CreateVentaScreen() {
           setPresentaciones(presentacionesRes.data);
           
           // Filtrar las presentaciones que están disponibles en el inventario
-          const presentacionesDisponibles = presentacionesRes.data.filter(
-            p => presentacionesIdsDisponibles.includes(p.id)
+          const presentacionesDisponibles = presentacionesRes.data.filter(p => 
+            presentacionesIdsDisponibles.includes(p.id.toString())  // Comparar strings con strings
           );
           
           console.log(`Encontradas ${presentacionesDisponibles.length} presentaciones disponibles`);
@@ -180,8 +198,8 @@ export default function CreateVentaScreen() {
         }
       } else {
         // Filtrar las presentaciones que están disponibles en el inventario
-        const presentacionesDisponibles = presentaciones.filter(
-          p => presentacionesIdsDisponibles.includes(p.id)
+        const presentacionesDisponibles = presentaciones.filter(p => 
+          presentacionesIdsDisponibles.includes(p.id.toString())  // Comparar strings con strings
         );
         
         console.log(`Encontradas ${presentacionesDisponibles.length} presentaciones disponibles de ${presentaciones.length} totales`);
@@ -254,15 +272,23 @@ export default function CreateVentaScreen() {
   };
 
   // Función para agregar un nuevo detalle (producto)
-  const addDetalle = () => {
+  
+  // Función para abrir el modal de selección de productos
+  const openProductSelectionModal = () => {
     if (presentacionesFiltradas.length === 0) {
       return Alert.alert('Error', 'No hay productos disponibles para agregar');
     }
     
     // Obtener las presentaciones que no están ya en los detalles
-    const presentacionesDisponibles = presentacionesFiltradas.filter(
-      p => !detalles.some(d => d.presentacion_id === p.id.toString())
-    );
+    // Aseguramos que la comparación sea consistente, convirtiendo ambos IDs a string
+    const presentacionesDisponibles = presentacionesFiltradas.filter(p => {
+      const presentacionId = p.id.toString();
+      return !detalles.some(d => d.presentacion_id === presentacionId);
+    });
+    
+    console.log('Presentaciones filtradas total:', presentacionesFiltradas.length);
+    console.log('Presentaciones disponibles para agregar:', presentacionesDisponibles.length);
+    console.log('IDs en detalles actuales:', detalles.map(d => d.presentacion_id));
     
     if (presentacionesDisponibles.length === 0) {
       return Alert.alert(
@@ -272,16 +298,22 @@ export default function CreateVentaScreen() {
       );
     }
     
-    // Agregar el primer producto disponible que no esté ya en la lista
+    // Mostrar el modal de selección
+    setShowProductModal(true);
+  };
+  // Función para agregar un producto seleccionado
+  const addProducto = (presentacionId: string) => {
     setDetalles([
-      ...detalles, 
-      { 
-        presentacion_id: presentacionesDisponibles[0].id.toString(), 
-        cantidad: '1' 
+      ...detalles,
+      {
+        presentacion_id: presentacionId,
+        cantidad: '1'
       }
     ]);
+    
+    // Cerrar el modal
+    setShowProductModal(false);
   };
-
   const removeDetalle = (index: number) => {
     if (detalles.length > 1) {
       const newDetalles = [...detalles];
@@ -340,7 +372,7 @@ export default function CreateVentaScreen() {
     if (!validate()) {
       return;
     }
-     
+       
     // Verificar que haya presentaciones disponibles
     if (presentacionesFiltradas.length === 0) {
       Alert.alert(
@@ -350,7 +382,7 @@ export default function CreateVentaScreen() {
       );
       return;
     }
-
+  
     // Verificar que todas las presentaciones seleccionadas estén disponibles
     for (const detalle of detalles) {
       const presentacionExiste = presentacionesFiltradas.some(
@@ -366,7 +398,7 @@ export default function CreateVentaScreen() {
         return;
       }
     }
-
+  
     try {
       setIsSubmitting(true);
       
@@ -395,13 +427,19 @@ export default function CreateVentaScreen() {
       const response = await ventaApi.createVenta(ventaData);
       
       if (response) {
+        console.log('Venta creada exitosamente:', response);
+        
         Alert.alert(
           'Venta Creada',
           'La venta ha sido registrada exitosamente',
           [
             { 
               text: 'OK', 
-              onPress: () => router.replace('/ventas') 
+              // Usar la navegación segura a la lista de ventas
+              onPress: () => {
+                // Navegamos explícitamente a la lista, no a un detalle específico
+                router.replace('/ventas');
+              }
             }
           ]
         );
@@ -449,7 +487,7 @@ export default function CreateVentaScreen() {
           <ThemedView style={styles.rowContainer}>
             {/* Almacén Selector */}
             <ThemedView style={[styles.formGroup, styles.halfWidth]}>
-              <ThemedText style={styles.label}>Almacén * {isAdmin ? '(Admin)' : ''}</ThemedText>
+              <ThemedText style={styles.label}>Almacén {isAdmin ? '(Admin)' : ''}</ThemedText>
               <View style={[
                 styles.pickerContainer,
                 { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
@@ -650,9 +688,10 @@ export default function CreateVentaScreen() {
                   ))}
                   
                   {/* Botón para agregar producto - usando un card similar */}
+                  {/* Botón para agregar producto */}
                   <TouchableOpacity 
                     style={styles.addProductCard}
-                    onPress={addDetalle}
+                    onPress={openProductSelectionModal}  // Cambiado de addDetalle a openProductSelectionModal
                   >
                     <ThemedText style={styles.addProductText}>+</ThemedText>
                     <ThemedText style={styles.addProductLabel}>Agregar Producto</ThemedText>
@@ -684,6 +723,68 @@ export default function CreateVentaScreen() {
           </TouchableOpacity>
         </ThemedView>
       </ScrollView>
+      {/* Modal para selección de productos */}
+  {/* Modal para selección de productos */}
+    {/* Modal para selección de productos */}
+    <Modal
+      visible={showProductModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowProductModal(false)}
+    >
+      <ThemedView style={styles.modalOverlay}>
+        <ThemedView style={styles.modalContainer}>
+          <ThemedView style={styles.modalHeader}>
+            <ThemedText style={{fontSize: 18, fontWeight: 'bold'}}>Seleccionar Producto</ThemedText>
+            <TouchableOpacity 
+              onPress={() => setShowProductModal(false)}
+              style={styles.closeButton}
+            >
+              <ThemedText style={styles.closeButtonText}>×</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+          
+          <ThemedView style={styles.modalContent}>
+            <FlatList
+              data={presentacionesFiltradas.filter(p => {
+                const presentacionId = p.id.toString();
+                return !detalles.some(d => d.presentacion_id === presentacionId);
+              })}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.productItem}
+                  onPress={() => {
+                    console.log(`Seleccionando producto ID: ${item.id}`);
+                    addProducto(item.id.toString());
+                  }}
+                >
+                  <ThemedView style={styles.productDetails}>
+                    <ThemedText style={styles.productName}>{item.nombre || `Producto ${item.id}`}</ThemedText>
+                    <ThemedText style={styles.productInfo}>
+                      {item.producto?.nombre || 'Producto'} - {parseFloat(item.capacidad_kg || 0).toFixed(2)} KG
+                    </ThemedText>
+                    <ThemedText style={styles.productPrice}>
+                      ${parseFloat(item.precio_venta || 0).toFixed(2)}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView style={styles.productAction}>
+                    <ThemedText style={styles.addButtonText}>+</ThemedText>
+                  </ThemedView>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <ThemedView style={styles.emptyListContainer}>
+                  <ThemedText style={styles.emptyListText}>
+                    No hay más productos disponibles para agregar
+                  </ThemedText>
+                </ThemedView>
+              }
+            />
+          </ThemedView>
+        </ThemedView>
+      </ThemedView>
+    </Modal>
     </>
   );
 }
@@ -925,5 +1026,100 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Estilos para el modal de selección de productos
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    width: '100%',
+    maxHeight: '80%', // Asegura que ocupe como máximo el 80% de la pantalla
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E3E5',
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    lineHeight: 22,
+  },
+  productList: {
+    flex: 1,
+    width: '100%',
+  },
+  productItem: {
+    flexDirection: 'row',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E3E5',
+    alignItems: 'center',
+  },
+  productDetails: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  productInfo: {
+    fontSize: 14,
+    color: '#757575',
+    marginBottom: 4,
+  },
+  productPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0a7ea4',
+  },
+  productAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4CAF50',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 16,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  emptyListContainer: {
+    padding: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    
+  },
+  emptyListText: {
+    fontSize: 16,
+    color: '#757575',
+    textAlign: 'center',
   },
 });

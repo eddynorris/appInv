@@ -1,23 +1,29 @@
-// services/auth.ts
+// services/auth.ts - Versión actualizada
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { jwtDecode } from 'jwt-decode';
 
-// Auth Interfaces
+// Auth Interfaces - Actualizadas para incluir rol y almacen_id
 export interface User {
   id: number;
   username: string;
+  rol?: string;           // Añadido
+  almacen_id?: number;    // Añadido
+  almacen_nombre?: string; // Añadido
 }
 
 interface AuthToken {
   access_token: string;
   token_type: string;
+  user?: User;            // Añadido para capturar el objeto user de la respuesta
 }
 
 interface JwtPayload {
   sub: number | string;
   username: string;
+  rol?: string;           // Añadido
+  almacen_id?: number;    // Añadido
   exp: number;
 }
 
@@ -121,6 +127,8 @@ const token = {
       return {
         id: typeof decoded.sub === 'string' ? parseInt(decoded.sub, 10) : decoded.sub,
         username: decoded.username,
+        rol: decoded.rol,                    // Extraer el rol del token
+        almacen_id: decoded.almacen_id       // Extraer el almacen_id del token
       };
     } catch (error) {
       console.error('Error decoding token:', error);
@@ -150,9 +158,19 @@ export const authService = {
       const data: AuthToken = await response.json();
       await storage.saveToken(data.access_token);
       
-      const user = token.extractUser(data.access_token);
-      if (!user) {
-        throw new Error('Token inválido');
+      // Preferir el objeto user si está presente en la respuesta
+      let user: User;
+      if (data.user) {
+        user = data.user;
+        console.log('Usuario obtenido de la respuesta API:', user);
+      } else {
+        // Fallback al método anterior de extraer del token
+        const extractedUser = token.extractUser(data.access_token);
+        if (!extractedUser) {
+          throw new Error('Token inválido');
+        }
+        user = extractedUser;
+        console.log('Usuario extraído del token JWT:', user);
       }
       
       await storage.saveUser(user);

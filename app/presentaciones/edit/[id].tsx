@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch } from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch, Image } from 'react-native';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -10,6 +10,7 @@ import { presentacionApi, productoApi } from '@/services/api';
 import { Producto, Presentacion } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { API_CONFIG } from '@/services/api';
 
 // Tipos de presentación disponibles
 const TIPOS_PRESENTACION = [
@@ -21,7 +22,9 @@ const TIPOS_PRESENTACION = [
 ];
 
 export default function EditPresentacionScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams();
+  const presentacionId = Number(params.id);
+  
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,12 +33,18 @@ export default function EditPresentacionScreen() {
   // Datos de productos para selector
   const [productos, setProductos] = useState<Producto[]>([]);
   
+  // Estado para la imagen seleccionada
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Estado para indicar si se está eliminando la imagen existente
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  
   // Form state
   const [formData, setFormData] = useState<Partial<Presentacion>>({
-    producto_id: '',
+    producto_id: 0,
     nombre: '',
     capacidad_kg: '',
-    tipo: TIPOS_PRESENTACION[0],
+    tipo: 'bruto',
     precio_venta: '',
     activo: true,
   });
@@ -43,44 +52,43 @@ export default function EditPresentacionScreen() {
   // Error state
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Cargar productos para selector y datos de presentación
+  // Cargar productos y datos de la presentación
   useEffect(() => {
     const fetchData = async () => {
-      if (!id) return;
-      
       try {
         setIsLoading(true);
         
-        // Cargar productos y presentación en paralelo
-        const [productosRes, presentacionRes] = await Promise.all([
-          productoApi.getProductos(1, 100),
-          presentacionApi.getPresentacion(parseInt(id))
-        ]);
+        // Cargar productos
+        const productosResponse = await productoApi.getProductos(1, 100);
         
-        // Guardar productos
-        if (productosRes && productosRes.data) {
-          setProductos(productosRes.data);
-        } else {
-          Alert.alert('Error', 'No se pudieron cargar los productos');
+        if (productosResponse && productosResponse.data) {
+          setProductos(productosResponse.data);
         }
         
-        // Guardar datos de la presentación
-        if (presentacionRes) {
+        // Cargar datos de la presentación
+        const presentacionResponse = await presentacionApi.getPresentacion(presentacionId);
+        
+        if (presentacionResponse) {
           setFormData({
-            producto_id: presentacionRes.producto_id.toString(),
-            nombre: presentacionRes.nombre,
-            capacidad_kg: presentacionRes.capacidad_kg,
-            tipo: presentacionRes.tipo,
-            precio_venta: presentacionRes.precio_venta,
-            activo: presentacionRes.activo,
+            producto_id: presentacionResponse.producto_id,
+            nombre: presentacionResponse.nombre,
+            capacidad_kg: presentacionResponse.capacidad_kg,
+            tipo: presentacionResponse.tipo,
+            precio_venta: presentacionResponse.precio_venta,
+            activo: presentacionResponse.activo,
           });
+          
+          // Si la presentación tiene una imagen, establecer la URL
+          if (presentacionResponse.url_foto) {
+            setSelectedImage(`${API_CONFIG.baseUrl}/uploads/${presentacionResponse.url_foto}`);
+          }
         } else {
-          Alert.alert('Error', 'No se pudo cargar la presentación');
+          Alert.alert('Error', 'No se pudo cargar la información de la presentación');
           router.back();
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos');
+        Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
         router.back();
       } finally {
         setIsLoading(false);
@@ -88,9 +96,21 @@ export default function EditPresentacionScreen() {
     };
 
     fetchData();
-  }, [id]);
+  }, [presentacionId]);
 
-  const handleChange = (field: keyof Presentacion, value: string | boolean) => {
+  // Solicitar permisos para acceder a la cámara y galería
+  useEffect(() => {
+    (async () => {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
+        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
+      }
+    })();
+  }, []);
+
+  const handleChange = (field: string, value: string | boolean | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -104,6 +124,51 @@ export default function EditPresentacionScreen() {
         return newErrors;
       });
     }
+  };
+
+  // Función para seleccionar una imagen desde la galería
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImage(result.assets[0].uri);
+        setRemoveExistingImage(false); // Si seleccionamos una nueva imagen, no estamos eliminando
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  // Función para tomar una foto con la cámara
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImage(result.assets[0].uri);
+        setRemoveExistingImage(false); // Si tomamos una nueva foto, no estamos eliminando
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  // Función para eliminar la imagen
+  const removeImage = () => {
+    setSelectedImage(null);
+    setRemoveExistingImage(true); // Marcamos que queremos eliminar la imagen existente
   };
 
   const validate = () => {
@@ -134,7 +199,7 @@ export default function EditPresentacionScreen() {
   };
 
   const handleSubmit = async () => {
-    if (!validate() || !id) {
+    if (!validate()) {
       return;
     }
     
@@ -143,12 +208,32 @@ export default function EditPresentacionScreen() {
       
       const presentacionData = {
         ...formData,
-        producto_id: parseInt(formData.producto_id?.toString() || '0'),
         capacidad_kg: formData.capacidad_kg?.replace(',', '.'),
         precio_venta: formData.precio_venta?.replace(',', '.')
       };
       
-      const response = await presentacionApi.updatePresentacion(parseInt(id), presentacionData);
+      // Si estamos eliminando la imagen existente, agregar el parámetro
+      if (removeExistingImage) {
+        presentacionData.eliminar_foto = true;
+      }
+      
+      // Usar diferentes métodos dependiendo de si hay una nueva imagen
+      let response;
+      
+      if (selectedImage && !selectedImage.startsWith(API_CONFIG.baseUrl)) {
+        // Es una nueva imagen local seleccionada
+        response = await presentacionApi.updatePresentacionWithImage(
+          presentacionId,
+          presentacionData,
+          selectedImage
+        );
+      } else {
+        // No hay nueva imagen o la imagen es la URL del servidor (no cambió)
+        response = await presentacionApi.updatePresentacion(
+          presentacionId,
+          presentacionData
+        );
+      }
       
       if (response) {
         Alert.alert(
@@ -172,6 +257,7 @@ export default function EditPresentacionScreen() {
       setIsSubmitting(false);
     }
   };
+
   if (isLoading) {
     return (
       <>
@@ -198,6 +284,42 @@ export default function EditPresentacionScreen() {
         <ThemedText type="title" style={styles.heading}>Editar Presentación</ThemedText>
 
         <ThemedView style={styles.form}>
+          {/* Imagen de la presentación */}
+          <ThemedView style={styles.formGroup}>
+            <ThemedText style={styles.label}>Foto de la presentación</ThemedText>
+            <ThemedView style={styles.imageContainer}>
+              {selectedImage ? (
+                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+              ) : (
+                <ThemedView style={styles.imagePlaceholder}>
+                  <ThemedText style={styles.placeholderText}>Sin imagen</ThemedText>
+                </ThemedView>
+              )}
+            </ThemedView>
+            <ThemedView style={styles.imageButtons}>
+              <TouchableOpacity 
+                style={[styles.imageButton, { backgroundColor: '#0a7ea4' }]}
+                onPress={pickImage}
+              >
+                <ThemedText style={styles.buttonText}>Galería</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.imageButton, { backgroundColor: '#4CAF50' }]}
+                onPress={takePhoto}
+              >
+                <ThemedText style={styles.buttonText}>Cámara</ThemedText>
+              </TouchableOpacity>
+              {selectedImage && (
+                <TouchableOpacity 
+                  style={[styles.imageButton, { backgroundColor: '#F44336' }]}
+                  onPress={removeImage}
+                >
+                  <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
+                </TouchableOpacity>
+              )}
+            </ThemedView>
+          </ThemedView>
+
           {/* Producto Selector */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Producto *</ThemedText>
@@ -206,8 +328,8 @@ export default function EditPresentacionScreen() {
               { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
             ]}>
               <Picker
-                selectedValue={formData.producto_id}
-                onValueChange={(value) => handleChange('producto_id', value)}
+                selectedValue={formData.producto_id?.toString()}
+                onValueChange={(value) => handleChange('producto_id', parseInt(value))}
                 style={[
                   styles.picker,
                   { color: Colors[colorScheme].text }
@@ -326,29 +448,20 @@ export default function EditPresentacionScreen() {
             </View>
           </ThemedView>
 
-          <ThemedView style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => router.back()}
-            >
-              <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[
-                styles.submitButton,
-                isSubmitting && styles.submitButtonDisabled
-              ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
-              )}
-            </TouchableOpacity>
-          </ThemedView>
+          <TouchableOpacity 
+            style={[
+              styles.submitButton,
+              isSubmitting && styles.submitButtonDisabled
+            ]}
+            onPress={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <ThemedText style={styles.submitButtonText}>Actualizar Presentación</ThemedText>
+            )}
+          </TouchableOpacity>
         </ThemedView>
       </ScrollView>
     </>
@@ -409,32 +522,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0E0E0',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#424242',
-  },
   submitButton: {
-    flex: 2,
     backgroundColor: '#0a7ea4',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 16,
   },
   submitButtonDisabled: {
     backgroundColor: '#88c8d8',
@@ -443,5 +537,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Nuevos estilos para la sección de imagen
+  imageContainer: {
+    width: '100%',
+    height: 200,
+    marginVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E1E3E5',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  placeholderText: {
+    color: '#9BA1A6',
+    fontSize: 16,
+  },
+  imageButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  imageButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });

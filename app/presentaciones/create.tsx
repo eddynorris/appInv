@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch } from 'react-native';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch, Image } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -27,6 +28,9 @@ export default function CreatePresentacionScreen() {
   
   // Datos de productos para selector
   const [productos, setProductos] = useState<Producto[]>([]);
+  
+  // Estado para la imagen seleccionada
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -68,6 +72,18 @@ export default function CreatePresentacionScreen() {
     fetchProductos();
   }, []);
 
+  // Solicitar permisos para acceder a la cámara y galería
+  useEffect(() => {
+    (async () => {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
+        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
+      }
+    })();
+  }, []);
+
   const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
@@ -81,6 +97,43 @@ export default function CreatePresentacionScreen() {
         delete newErrors[field];
         return newErrors;
       });
+    }
+  };
+
+  // Función para seleccionar una imagen desde la galería
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  // Función para tomar una foto con la cámara
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
 
@@ -126,7 +179,11 @@ export default function CreatePresentacionScreen() {
         precio_venta: formData.precio_venta.replace(',', '.')
       };
       
-      const response = await presentacionApi.createPresentacion(presentacionData);
+      // Usar el nuevo método para crear con imagen
+      const response = await presentacionApi.createPresentacionWithImage(
+        presentacionData, 
+        selectedImage
+      );
       
       if (response) {
         Alert.alert(
@@ -177,6 +234,42 @@ export default function CreatePresentacionScreen() {
         <ThemedText type="title" style={styles.heading}>Crear Presentación</ThemedText>
 
         <ThemedView style={styles.form}>
+          {/* Imagen de la presentación */}
+          <ThemedView style={styles.formGroup}>
+            <ThemedText style={styles.label}>Foto de la presentación</ThemedText>
+            <ThemedView style={styles.imageContainer}>
+              {selectedImage ? (
+                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+              ) : (
+                <ThemedView style={styles.imagePlaceholder}>
+                  <ThemedText style={styles.placeholderText}>Sin imagen</ThemedText>
+                </ThemedView>
+              )}
+            </ThemedView>
+            <ThemedView style={styles.imageButtons}>
+              <TouchableOpacity 
+                style={[styles.imageButton, { backgroundColor: '#0a7ea4' }]}
+                onPress={pickImage}
+              >
+                <ThemedText style={styles.buttonText}>Galería</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.imageButton, { backgroundColor: '#4CAF50' }]}
+                onPress={takePhoto}
+              >
+                <ThemedText style={styles.buttonText}>Cámara</ThemedText>
+              </TouchableOpacity>
+              {selectedImage && (
+                <TouchableOpacity 
+                  style={[styles.imageButton, { backgroundColor: '#F44336' }]}
+                  onPress={() => setSelectedImage(null)}
+                >
+                  <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
+                </TouchableOpacity>
+              )}
+            </ThemedView>
+          </ThemedView>
+
           {/* Producto Selector */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Producto *</ThemedText>
@@ -394,5 +487,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Nuevos estilos para la sección de imagen
+  imageContainer: {
+    width: '100%',
+    height: 200,
+    marginVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E1E3E5',
+    overflow: 'hidden',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+  },
+  placeholderText: {
+    color: '#9BA1A6',
+    fontSize: 16,
+  },
+  imageButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  imageButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 4,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: '500',
   },
 });

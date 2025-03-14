@@ -9,6 +9,7 @@ export interface Presentacion {
     tipo: 'bruto' | 'procesado' | 'merma' | 'briqueta' | 'detalle';
     precio_venta: string;
     activo: boolean;
+    url_foto?: string; 
     producto?: ProductoSimple;
   }
 
@@ -16,4 +17,5 @@ export interface Presentacion {
     id: number;
     nombre: string;
     precio_venta: string;
+    url_foto?: string; 
   }

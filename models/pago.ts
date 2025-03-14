@@ -8,6 +8,7 @@ export interface Pago {
     fecha: string;
     metodo_pago: 'efectivo' | 'transferencia' | 'tarjeta';
     referencia?: string;
+    url_comprobante?: string;
     usuario_id?: number;
     venta?: VentaSimple;
   }

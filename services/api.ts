@@ -67,13 +67,19 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
     const url = `${API_CONFIG.baseUrl}${endpoint}`;
     const authHeaders = await authService.getAuthHeader();
     
+    // Verificar si se está enviando FormData
+    const isFormData = options.body instanceof FormData;
+    
+    // No incluir Content-Type para FormData, deja que el navegador lo establezca
+    const headers = {
+      ...(!isFormData ? API_CONFIG.headers : { 'Accept': 'application/json' }),
+      ...(authHeaders || {}),
+      ...(options.headers || {}),
+    };
+    
     const response = await fetch(url, {
-      headers: {
-        ...API_CONFIG.headers,
-        ...(authHeaders || {}),
-        ...options.headers,
-      },
       ...options,
+      headers,
     });
     
     if (!response.ok) {
@@ -326,6 +332,7 @@ export const inventarioApi = {
 
 // API methods for Presentaciones
 export const presentacionApi = {
+  
   getPresentaciones: async (page = 1, perPage = 10, productoId?: number): Promise<ApiResponse<any>> => {
     let endpoint = `/presentaciones?page=${page}&per_page=${perPage}`;
     if (productoId) {
@@ -357,6 +364,76 @@ export const presentacionApi = {
       method: 'DELETE',
     });
   },
+  createPresentacionWithImage: async (presentacion: any, imageUri: string | null): Promise<any> => {
+    // Si no hay imagen, usar el método regular
+    if (!imageUri) {
+      return presentacionApi.createPresentacion(presentacion);
+    }
+  
+    // Crear un FormData para enviar archivos
+    const formData = new FormData();
+    
+    // Agregar todos los campos de la presentación
+    Object.keys(presentacion).forEach(key => {
+      formData.append(key, presentacion[key]);
+    });
+    
+    // Agregar el archivo de imagen
+    const uriParts = imageUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    // @ts-ignore - FormData espera un tipo específico que TypeScript no reconoce bien en React Native
+    formData.append('foto', {
+      uri: imageUri,
+      name: `photo.${fileType}`,
+      type: `image/${fileType}`
+    });
+    
+    return fetchApi<any>('/presentaciones', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        // Eliminar contentType existente para que el navegador establezca el boundary correcto
+        'Accept': 'application/json'
+      },
+      body: formData as any,
+    });
+  },
+
+  updatePresentacionWithImage: async (id: number, presentacion: any, imageUri: string | null): Promise<any> => {
+    // Si no hay imagen, usar el método regular
+    if (!imageUri) {
+      return presentacionApi.updatePresentacion(id, presentacion);
+    }
+  
+    // Crear un FormData para enviar archivos
+    const formData = new FormData();
+    
+    // Agregar todos los campos de la presentación
+    Object.keys(presentacion).forEach(key => {
+      formData.append(key, presentacion[key]);
+    });
+    
+    // Agregar el archivo de imagen
+    const uriParts = imageUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    // @ts-ignore
+    formData.append('foto', {
+      uri: imageUri,
+      name: `photo.${fileType}`,
+      type: `image/${fileType}`
+    });
+    
+    return fetchApi<any>(`/presentaciones/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      },
+      body: formData as any,
+    });
+  }
 };
 
 // API methods for Pagos
@@ -392,4 +469,73 @@ export const pagoApi = {
       method: 'DELETE',
     });
   },
+  createPagoWithComprobante: async (pago: any, comprobanteUri: string | null): Promise<any> => {
+    // Si no hay comprobante, usar el método regular
+    if (!comprobanteUri) {
+      return pagoApi.createPago(pago);
+    }
+  
+    // Crear un FormData para enviar archivos
+    const formData = new FormData();
+    
+    // Agregar todos los campos del pago
+    Object.keys(pago).forEach(key => {
+      formData.append(key, pago[key]);
+    });
+    
+    // Agregar el archivo de comprobante
+    const uriParts = comprobanteUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    // @ts-ignore
+    formData.append('comprobante', {
+      uri: comprobanteUri,
+      name: `comprobante.${fileType}`,
+      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
+    });
+    
+    return fetchApi<any>('/pagos', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      },
+      body: formData as any,
+    });
+  },
+  
+  updatePagoWithComprobante: async (id: number, pago: any, comprobanteUri: string | null): Promise<any> => {
+    // Si no hay comprobante, usar el método regular
+    if (!comprobanteUri) {
+      return pagoApi.updatePago(id, pago);
+    }
+  
+    // Crear un FormData para enviar archivos
+    const formData = new FormData();
+    
+    // Agregar todos los campos del pago
+    Object.keys(pago).forEach(key => {
+      formData.append(key, pago[key]);
+    });
+    
+    // Agregar el archivo de comprobante
+    const uriParts = comprobanteUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    // @ts-ignore
+    formData.append('comprobante', {
+      uri: comprobanteUri,
+      name: `comprobante.${fileType}`,
+      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
+    });
+    
+    return fetchApi<any>(`/pagos/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'Accept': 'application/json'
+      },
+      body: formData as any,
+    });
+  }
 };
