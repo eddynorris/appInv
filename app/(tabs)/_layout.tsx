@@ -50,6 +50,14 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="pedidos"
+        options={{
+          title: 'Proyecciones',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
+          href: '/pedidos',
+        }}
+      />
+      <Tabs.Screen
         name="proveedores"
         options={{
           title: 'Proveedores',

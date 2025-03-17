@@ -8,7 +8,9 @@ import {
   Gasto,
   Movimiento,
   Venta,
-  VentaDetalle
+  VentaDetalle,
+  Pedido,
+  PedidoDetalle
 } from '@/models';
 import { authService } from './auth';
 
@@ -538,4 +540,117 @@ export const pagoApi = {
       body: formData as any,
     });
   }
+};
+
+
+// Servicio API de pedidos actualizado
+export const pedidoApi = {
+  getPedidos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Pedido>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    return fetchApi<ApiResponse<Pedido>>(`/pedidos?${queryParams.toString()}`);
+  },
+  
+  getPedido: async (id: number): Promise<Pedido> => {
+    return fetchApi<Pedido>(`/pedidos/${id}`);
+  },
+
+  createPedido: async (pedido: {
+    cliente_id: number;
+    almacen_id: number;
+    fecha_entrega: string;
+    estado?: string;
+    notas?: string;
+    detalles: {
+      presentacion_id: number;
+      cantidad: number;
+      precio_estimado?: string;
+    }[];
+  }): Promise<Pedido> => {
+    try {
+      // Validar y formatear los datos
+      const formattedPedido = {
+        cliente_id: parseInt(String(pedido.cliente_id)),
+        almacen_id: parseInt(String(pedido.almacen_id)),
+        fecha_entrega: pedido.fecha_entrega,
+        estado: pedido.estado || 'programado',
+        notas: pedido.notas || '',
+        detalles: pedido.detalles.map(d => ({
+          presentacion_id: parseInt(String(d.presentacion_id)),
+          cantidad: parseInt(String(d.cantidad)),
+          precio_estimado: d.precio_estimado ? d.precio_estimado : "0.00"
+        }))
+      };
+      
+      console.log('Enviando datos formateados de pedido:', JSON.stringify(formattedPedido));
+      
+      // Enviar la solicitud
+      return fetchApi<Pedido>('/pedidos', {
+        method: 'POST',
+        body: JSON.stringify(formattedPedido),
+      });
+    } catch (error) {
+      console.error('Error en createPedido:', error);
+      throw error;
+    }
+  },
+
+  updatePedido: async (id: number, pedido: Partial<Pedido>): Promise<Pedido> => {
+    try {
+      console.log('Actualizando pedido ID:', id, 'Datos:', JSON.stringify(pedido));
+      
+      // Filtrar solo los campos que pueden actualizarse
+      const updatableFields = ['cliente_id', 'almacen_id', 'fecha_entrega', 'estado', 'notas'];
+      const filteredData = Object.keys(pedido)
+        .filter(key => updatableFields.includes(key))
+        .reduce((obj, key) => {
+          obj[key] = pedido[key];
+          return obj;
+        }, {});
+      
+      return fetchApi<Pedido>(`/pedidos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(filteredData),
+      });
+    } catch (error) {
+      console.error('Error en updatePedido:', error);
+      throw error;
+    }
+  },
+
+  deletePedido: async (id: number): Promise<any> => {
+    try {
+      return fetchApi<any>(`/pedidos/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error en deletePedido:', error);
+      throw error;
+    }
+  },
+  
+  // Método para convertir un pedido en venta
+  convertirAVenta: async (id: number): Promise<any> => {
+    try {
+      console.log('Solicitando conversión del pedido ID:', id);
+      
+      return fetchApi<any>(`/pedidos/${id}/convertir`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Error en convertirAVenta:', error);
+      throw error;
+    }
+  },
 };

@@ -5,8 +5,8 @@ import { Stack, router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { DashboardChart } from '@/components/DashboardChart';
-import { clienteApi, productoApi, gastoApi, ventaApi } from '@/services/api';
-import { Cliente, Producto, Gasto, Venta } from '@/models';
+import { clienteApi, productoApi, gastoApi, ventaApi, pedidoApi } from '@/services/api';
+import { Cliente, Producto, Gasto, Venta, Pedido } from '@/models';
 
 export default function DashboardScreen() {
   const [resumen, setResumen] = useState({
@@ -14,6 +14,7 @@ export default function DashboardScreen() {
     productos: 0,
     totalVentas: 0,
     totalGastos: 0,
+    totalProyecciones: 0,
     ventasPorMes: [],
     gastosPorCategoria: [],
   });
@@ -23,17 +24,15 @@ export default function DashboardScreen() {
     const fetchDashboardData = async () => {
       setIsLoading(true);
       try {
-        // Cargar datos de clientes
-        const clientesResponse = await clienteApi.getClientes();
-        
-        // Cargar datos de productos
-        const productosResponse = await productoApi.getProductos();
-        
-        // Cargar datos de ventas
-        const ventasResponse = await ventaApi.getVentas();
-        
-        // Cargar datos de gastos
-        const gastosResponse = await gastoApi.getGastos();
+        // Cargar datos de clientes, productos, ventas, gastos y pedidos
+        const [clientesResponse, productosResponse, ventasResponse, gastosResponse, pedidosResponse] = 
+          await Promise.all([
+            clienteApi.getClientes(),
+            productoApi.getProductos(),
+            ventaApi.getVentas(),
+            gastoApi.getGastos(),
+            pedidoApi.getPedidos(),
+          ]);
         
         // Procesar datos para el dashboard
         let totalVentas = 0;
@@ -93,13 +92,18 @@ export default function DashboardScreen() {
           }));
         }
         
+        // Calcular total de proyecciones activas
+        const totalProyecciones = pedidosResponse?.data 
+          ? pedidosResponse.data.filter(p => p.estado === 'programado' || p.estado === 'confirmado').length
+          : 0;
+        
         // Actualizar el estado con todos los datos procesados
         setResumen({
-
           clientes: clientesResponse?.pagination?.total || 0, 
           productos: productosResponse?.pagination?.total || 0, 
           totalVentas,
           totalGastos,
+          totalProyecciones,
           ventasPorMes,
           gastosPorCategoria,
         });
@@ -168,6 +172,17 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </ThemedView>
           
+          {/* Nueva tarjeta para proyecciones */}
+          <TouchableOpacity 
+            style={[styles.card, styles.proyeccionesCard]}
+            onPress={() => router.push('/pedidos')}
+          >
+            <ThemedText style={styles.cardTitle}>Proyecciones Activas</ThemedText>
+            <ThemedText style={styles.cardValue}>
+              {isLoading ? 'Cargando...' : resumen.totalProyecciones}
+            </ThemedText>
+          </TouchableOpacity>
+          
           {!isLoading && (
             <DashboardChart 
               salesData={resumen.ventasPorMes}
@@ -188,9 +203,9 @@ export default function DashboardScreen() {
               
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => router.push('/gastos/create')}
+                onPress={() => router.push('/pedidos/create')}
               >
-                <ThemedText style={styles.actionButtonText}>Registrar Gasto</ThemedText>
+                <ThemedText style={styles.actionButtonText}>Nueva Proyección</ThemedText>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -243,6 +258,10 @@ const styles = StyleSheet.create({
   },
   gastosCard: {
     backgroundColor: 'rgba(244, 67, 54, 0.1)',
+  },
+  proyeccionesCard: {
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+    marginBottom: 24,
   },
   cardTitle: {
     fontSize: 16,

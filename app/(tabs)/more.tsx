@@ -41,7 +41,23 @@ export default function MoreScreen() {
       
       <ThemedView style={styles.container}>
         <ThemedView style={styles.section}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Inventario</ThemedText>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Ventas</ThemedText>
+          
+          <MenuItem 
+            title="Ventas" 
+            icon="bag.fill" 
+            route="/ventas" 
+          />
+          
+          <MenuItem 
+            title="Proyecciones" 
+            icon="calendar" 
+            route="/pedidos" 
+          />
+        </ThemedView>
+        
+        <ThemedView style={styles.section}>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>Inventario</ThemedText>
           
           <MenuItem 
             title="Almacenes" 
@@ -51,7 +67,7 @@ export default function MoreScreen() {
           
           <MenuItem 
             title="Movimientos" 
-            icon="paperplane.fill" 
+            icon="arrow.left.arrow.right" 
             route="/movimientos" 
           />
         </ThemedView>
@@ -60,17 +76,18 @@ export default function MoreScreen() {
           <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
           
           <MenuItem 
-            title="Ventas" 
-            icon="paperplane.fill" 
-            route="/ventas" 
+            title="Gastos" 
+            icon="banknote" 
+            route="/gastos" 
           />
           
           <MenuItem 
-            title="Gastos" 
-            icon="paperplane.fill" 
-            route="/gastos" 
+            title="Pagos" 
+            icon="creditcard" 
+            route="/pagos" 
           />
         </ThemedView>
+        
         <ThemedView style={styles.section}>
           <ThemedText type="subtitle" style={styles.sectionTitle}>Cuenta</ThemedText>
           
@@ -82,7 +99,7 @@ export default function MoreScreen() {
           
           {/* Add LogoutButton */}
           <TouchableOpacity style={styles.menuItem}>
-            <IconSymbol name="paperplane.fill" size={24} color="#E53935" />
+            <IconSymbol name="rectangle.portrait.and.arrow.right" size={24} color="#E53935" />
             <LogoutButton variant="text" />
           </TouchableOpacity>
         </ThemedView>

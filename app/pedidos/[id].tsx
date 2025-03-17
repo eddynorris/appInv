@@ -1,4 +1,4 @@
-// app/ventas/[id].tsx (actualizado con el nuevo componente)
+// app/pedidos/[id].tsx (actualizado)
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
@@ -6,56 +6,57 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import PedidoConversion from '@/components/PedidoConversion';
 import ProductDetailsList from '@/components/ProductDetailsList';
-import { ventaApi } from '@/services/api';
-import { Venta } from '@/models';
+import { pedidoApi } from '@/services/api';
+import { Pedido } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 
-export default function VentaDetailScreen() {
+export default function PedidoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [venta, setVenta] = useState<Venta | null>(null);
+  const [pedido, setPedido] = useState<Pedido | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
 
   useEffect(() => {
-    const fetchVenta = async () => {
+    const fetchPedido = async () => {
       if (!id) return;
       
       try {
         setIsLoading(true);
         setError(null);
         
-        const response = await ventaApi.getVenta(parseInt(id));
+        const response = await pedidoApi.getPedido(parseInt(id));
         
         if (response) {
-          setVenta(response);
+          setPedido(response);
         } else {
-          setError('Error al cargar los datos de la venta');
+          setError('Error al cargar los datos del pedido');
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos de la venta');
+        setError(err instanceof Error ? err.message : 'Error al cargar los datos del pedido');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchVenta();
+    fetchPedido();
   }, [id]);
 
   const handleEdit = () => {
     // Navegar a la pantalla de edición
-    router.push(`/ventas/edit/${id}`);
+    router.push(`/pedidos/edit/${id}`);
   };
 
   const handleDelete = async () => {
     if (!id) return;
     
     Alert.alert(
-      "Eliminar Venta",
-      "¿Está seguro que desea eliminar esta venta?",
+      "Eliminar Proyección",
+      "¿Está seguro que desea eliminar esta proyección?",
       [
         {
           text: "Cancelar",
@@ -67,10 +68,10 @@ export default function VentaDetailScreen() {
           onPress: async () => {
             try {
               setIsLoading(true);
-              await ventaApi.deleteVenta(parseInt(id));
-              router.replace('/ventas');
+              await pedidoApi.deletePedido(parseInt(id));
+              router.replace('/pedidos');
             } catch (error) {
-              setError('Error al eliminar la venta');
+              setError('Error al eliminar el pedido');
               setIsLoading(false);
             }
           }
@@ -79,15 +80,17 @@ export default function VentaDetailScreen() {
     );
   };
 
-  // Estado de pago y colores
-  const getEstadoPagoInfo = (estado: string) => {
+  // Estado del pedido y colores
+  const getEstadoInfo = (estado: string) => {
     switch (estado) {
-      case 'pagado':
-        return { color: '#4CAF50', text: 'Pagado' };
-      case 'pendiente':
-        return { color: '#FFC107', text: 'Pendiente' };
-      case 'parcial':
-        return { color: '#FF9800', text: 'Pago Parcial' };
+      case 'programado':
+        return { color: '#FFC107', text: 'Programado' };
+      case 'confirmado':
+        return { color: '#2196F3', text: 'Confirmado' };
+      case 'entregado':
+        return { color: '#4CAF50', text: 'Entregado' };
+      case 'cancelado':
+        return { color: '#F44336', text: 'Cancelado' };
       default:
         return { color: '#757575', text: estado };
     }
@@ -97,18 +100,18 @@ export default function VentaDetailScreen() {
     return (
       <>
         <Stack.Screen options={{ 
-          title: 'Detalles de Venta',
+          title: 'Detalles de Proyección',
           headerShown: true 
         }} />
         <ThemedView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos de la venta...</ThemedText>
+          <ThemedText style={styles.loadingText}>Cargando datos del pedido...</ThemedText>
         </ThemedView>
       </>
     );
   }
 
-  if (error || !venta) {
+  if (error || !pedido) {
     return (
       <>
         <Stack.Screen options={{ 
@@ -118,19 +121,19 @@ export default function VentaDetailScreen() {
         <ThemedView style={styles.errorContainer}>
           <IconSymbol name="exclamationmark.triangle" size={48} color={Colors[colorScheme].icon} />
           <ThemedText style={styles.errorText}>
-            {error || 'Venta no encontrada'}
+            {error || 'Pedido no encontrado'}
           </ThemedText>
         </ThemedView>
       </>
     );
   }
 
-  const estadoPago = getEstadoPagoInfo(venta.estado_pago);
+  const estadoInfo = getEstadoInfo(pedido.estado);
 
   return (
     <>
       <Stack.Screen options={{ 
-        title: `Venta #${venta.id}`,
+        title: `Proyección #${pedido.id}`,
         headerShown: true 
       }} />
       
@@ -138,17 +141,17 @@ export default function VentaDetailScreen() {
         <ThemedView style={styles.container}>
           <ThemedView style={styles.card}>
             <ThemedText type="title" style={styles.totalText}>
-              ${parseFloat(venta.total).toFixed(2)}
+              ${parseFloat(pedido.total_estimado || '0').toFixed(2)}
             </ThemedText>
             
             <ThemedView 
               style={[
                 styles.estadoBadge, 
-                { backgroundColor: `${estadoPago.color}20` }
+                { backgroundColor: `${estadoInfo.color}20` }
               ]}
             >
-              <ThemedText style={[styles.estadoText, { color: estadoPago.color }]}>
-                {estadoPago.text}
+              <ThemedText style={[styles.estadoText, { color: estadoInfo.color }]}>
+                {estadoInfo.text}
               </ThemedText>
             </ThemedView>
             
@@ -156,70 +159,63 @@ export default function VentaDetailScreen() {
               <ThemedText type="subtitle">Información General</ThemedText>
               
               <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Fecha:</ThemedText>
-                <ThemedText>{new Date(venta.fecha).toLocaleString()}</ThemedText>
+                <ThemedText type="defaultSemiBold">Fecha de Creación:</ThemedText>
+                <ThemedText>{new Date(pedido.fecha_creacion).toLocaleString()}</ThemedText>
+              </ThemedView>
+              
+              <ThemedView style={styles.infoRow}>
+                <ThemedText type="defaultSemiBold">Fecha de Entrega:</ThemedText>
+                <ThemedText>{new Date(pedido.fecha_entrega).toLocaleString()}</ThemedText>
               </ThemedView>
               
               <ThemedView style={styles.infoRow}>
                 <ThemedText type="defaultSemiBold">Cliente:</ThemedText>
-                <ThemedText>{venta.cliente?.nombre || 'No especificado'}</ThemedText>
+                <ThemedText>{pedido.cliente?.nombre || 'No especificado'}</ThemedText>
               </ThemedView>
               
               <ThemedView style={styles.infoRow}>
                 <ThemedText type="defaultSemiBold">Almacén:</ThemedText>
-                <ThemedText>{venta.almacen?.nombre || 'No especificado'}</ThemedText>
+                <ThemedText>{pedido.almacen?.nombre || 'No especificado'}</ThemedText>
               </ThemedView>
               
               <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Tipo de Pago:</ThemedText>
-                <ThemedText style={{ textTransform: 'capitalize' }}>{venta.tipo_pago}</ThemedText>
+                <ThemedText type="defaultSemiBold">Vendedor:</ThemedText>
+                <ThemedText>{pedido.vendedor?.username || 'No especificado'}</ThemedText>
               </ThemedView>
               
-              {venta.saldo_pendiente && parseFloat(venta.saldo_pendiente) > 0 && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText type="defaultSemiBold">Saldo Pendiente:</ThemedText>
-                  <ThemedText style={{ color: '#FF5722', fontWeight: 'bold' }}>
-                    ${parseFloat(venta.saldo_pendiente).toFixed(2)}
-                  </ThemedText>
+              {pedido.notas && (
+                <ThemedView style={styles.notasContainer}>
+                  <ThemedText type="defaultSemiBold">Notas:</ThemedText>
+                  <ThemedText style={styles.notasText}>{pedido.notas}</ThemedText>
                 </ThemedView>
               )}
             </ThemedView>
 
-            {venta.credito && (
-              <ThemedView style={styles.section}>
-                <ThemedText type="subtitle">Información de Crédito</ThemedText>
-                
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText type="defaultSemiBold">Fecha de Vencimiento:</ThemedText>
-                  <ThemedText>{new Date(venta.credito.fecha_vencimiento).toLocaleDateString()}</ThemedText>
-                </ThemedView>
-                
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText type="defaultSemiBold">Monto Pagado:</ThemedText>
-                  <ThemedText>${parseFloat(venta.credito.monto_pagado).toFixed(2)}</ThemedText>
-                </ThemedView>
-              </ThemedView>
-            )}
-
-            {/* Usar nuestro nuevo componente para la visualización de productos */}
+            {/* Usar nuestro nuevo componente para mostrar los detalles del pedido */}
             <ThemedView style={styles.section}>
-              {venta.detalles && venta.detalles.length > 0 ? (
+              {pedido.detalles && pedido.detalles.length > 0 ? (
                 <ProductDetailsList
-                  details={venta.detalles}
-                  title="Detalles de la Venta"
-                  isPedido={false}
+                  details={pedido.detalles}
+                  title="Productos en la Proyección"
+                  isPedido={true}
                 />
               ) : (
                 <ThemedView style={styles.noDetalles}>
                   <IconSymbol name="exclamationmark.circle" size={30} color="#FFC107" />
                   <ThemedText style={styles.noDetallesText}>
-                    No hay detalles disponibles para esta venta
+                    No hay productos en esta proyección
                   </ThemedText>
                 </ThemedView>
               )}
             </ThemedView>
             
             <ThemedView style={styles.actions}>
+              {/* No mostrar botón de convertir si ya está entregado o cancelado */}
+              <PedidoConversion 
+                pedidoId={parseInt(id)}
+                isDisabled={pedido.estado === 'entregado' || pedido.estado === 'cancelado'}
+              />
+              
               <TouchableOpacity 
                 style={[styles.button, styles.editButton]} 
                 onPress={handleEdit}
@@ -304,6 +300,16 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'space-between',
   },
+  notasContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    borderRadius: 8,
+  },
+  notasText: {
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
   noDetalles: {
     padding: 20,
     alignItems: 'center',
@@ -320,13 +326,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 24,
-    gap: 16,
+    gap: 8,
   },
   button: {
     flex: 1,
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+  },
+  convertButton: {
+    backgroundColor: '#4CAF50',
   },
   editButton: {
     backgroundColor: '#2196F3',
@@ -337,5 +346,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: 'bold',
+    fontSize: 13,
   },
 });

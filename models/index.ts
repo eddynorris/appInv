@@ -13,3 +13,6 @@ export * from './lote';
 export * from './merma';
 export * from './inventario';
 export * from './apiResponses';
+export * from './user';
+export * from './pedido';
+export * from './pedidoDetalle';

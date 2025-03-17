@@ -191,10 +191,11 @@ export default function CreateVentaScreen() {
           if (presentacionesDisponibles.length > 0) {
             setDetalles([{ 
               presentacion_id: presentacionesDisponibles[0].id.toString(), 
-              cantidad: '1' 
+              cantidad: '1',
+              precio_unitario: presentacionesDisponibles[0].precio_venta
             }]);
           } else {
-            setDetalles([{ presentacion_id: '', cantidad: '1' }]);
+            setDetalles([{ presentacion_id: '', cantidad: '1', precio_unitario: '' }]);
           }
         }
       } else {
@@ -206,14 +207,14 @@ export default function CreateVentaScreen() {
         console.log(`Encontradas ${presentacionesDisponibles.length} presentaciones disponibles de ${presentaciones.length} totales`);
         setPresentacionesFiltradas(presentacionesDisponibles);
         
-        // Si hay presentaciones disponibles, actualiza el primer detalle
         if (presentacionesDisponibles.length > 0) {
           setDetalles([{ 
             presentacion_id: presentacionesDisponibles[0].id.toString(), 
-            cantidad: '1' 
+            cantidad: '1',
+            precio_unitario: presentacionesDisponibles[0].precio_venta
           }]);
         } else {
-          setDetalles([{ presentacion_id: '', cantidad: '1' }]);
+          setDetalles([{ presentacion_id: '', cantidad: '1', precio_unitario: '' }]);
         }
       }
     } catch (error) {
@@ -265,13 +266,43 @@ export default function CreateVentaScreen() {
         );
         return; // No permitir el cambio
       }
+      
+      // Al cambiar la presentación, también actualizar el precio_unitario
+      const presentacion = presentacionesFiltradas.find(p => p.id.toString() === value);
+      if (presentacion) {
+        newDetalles[index] = { 
+          ...newDetalles[index], 
+          [field]: value,
+          precio_unitario: presentacion.precio_venta
+        };
+      } else {
+        newDetalles[index] = { ...newDetalles[index], [field]: value };
+      }
+    } 
+    // Para el precio, aplicar validación de número
+    else if (field === 'precio_unitario') {
+      // Permitir solo números positivos con hasta 2 decimales
+      const precio = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      // Validar formato de precio
+      if (precio === '' || /^\d+(\.\d{0,2})?$/.test(precio)) {
+        newDetalles[index] = { ...newDetalles[index], [field]: precio };
+      }
+    }
+    // Para la cantidad, asegurar que sea al menos 1
+    else if (field === 'cantidad') {
+      const cantidad = value.replace(/[^0-9]/g, '');
+      newDetalles[index] = { 
+        ...newDetalles[index], 
+        [field]: cantidad === '' ? '1' : cantidad
+      };
+    }
+    // Para cualquier otro campo, actualización normal
+    else {
+      newDetalles[index] = { ...newDetalles[index], [field]: value };
     }
     
-    // Si no es un duplicado o es cambio de cantidad, proceder normalmente
-    newDetalles[index] = { ...newDetalles[index], [field]: value };
     setDetalles(newDetalles);
   };
-
   // Función para agregar un nuevo detalle (producto)
   
   // Función para abrir el modal de selección de productos
@@ -329,10 +360,9 @@ export default function CreateVentaScreen() {
     let total = 0;
     
     detalles.forEach(detalle => {
-      const presentacion = presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id);
-      if (presentacion) {
-        total += parseFloat(presentacion.precio_venta) * parseInt(detalle.cantidad || '0');
-      }
+      // Si tiene precio_unitario definido, usarlo; de lo contrario usar el precio de la presentación
+      const precio = detalle.precio_unitario || presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.precio_venta || '0';
+      total += parseFloat(precio) * parseInt(detalle.cantidad || '1');
     });
     
     return total.toFixed(2);
@@ -410,7 +440,8 @@ export default function CreateVentaScreen() {
         tipo_pago: formData.tipo_pago,
         detalles: detalles.map(d => ({
           presentacion_id: parseInt(d.presentacion_id),
-          cantidad: parseInt(d.cantidad)
+          cantidad: parseInt(d.cantidad),
+          precio_unitario : parseFloat(d.precio_unitario)
         }))
       };
       
@@ -640,71 +671,116 @@ export default function CreateVentaScreen() {
               <ThemedView style={styles.productosContainer}>
                 {/* Grid de Productos */}
                 <ThemedView style={styles.productosGrid}>
-                  {detalles.map((detalle, index) => (
-                    <ThemedView key={index} style={styles.productoCard}>
-                    <TouchableOpacity
-                      style={styles.removeProductButton}
-                      onPress={() => removeDetalle(index)}
-                      disabled={detalles.length <= 1}
-                    >
-                      <ThemedText style={styles.removeProductButtonText}>×</ThemedText>
-                    </TouchableOpacity>
+                  {detalles.map((detalle, index) => {
+                    // Obtener la presentación correspondiente
+                    const presentacion = presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id);
+                    const precio = presentacion?.precio_venta || '0';
+                    const nombreProductoBase = presentacion?.producto?.nombre || '';
                     
-                    {/* Info del Producto con imagen */}
-                    <ThemedView style={styles.productoInfo}>
-                      {/* Imagen del producto */}
-                      <ThemedView style={styles.productoImageContainer}>
-                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.url_foto ? (
-                          <Image 
-                            source={{ 
-                              uri: `${API_CONFIG.baseUrl}/uploads/${presentacionesFiltradas.find(p => 
-                                p.id.toString() === detalle.presentacion_id
-                              )?.url_foto}` 
-                            }} 
-                            style={styles.productoImage}
-                            resizeMode="contain"
-                          />
-                        ) : (
-                          <ThemedView style={styles.productoImagePlaceholder}>
-                            <IconSymbol name="photo" size={24} color="#9BA1A6" />
+                    return (
+                      <ThemedView key={index} style={styles.productoCard}>
+                        {/* Botón para eliminar */}
+                        <TouchableOpacity
+                          style={styles.removeProductButton}
+                          onPress={() => removeDetalle(index)}
+                          disabled={detalles.length <= 1}
+                        >
+                          <ThemedText style={styles.removeProductButtonText}>×</ThemedText>
+                        </TouchableOpacity>
+                        
+                        {/* Cabecera con nombre */}
+                        <ThemedView style={styles.productoHeader}>
+                          <ThemedText style={styles.productoNombre} numberOfLines={1}>
+                            {presentacion?.nombre || 'Producto'}
+                          </ThemedText>
+                          <ThemedText style={styles.productoDescripcion} numberOfLines={1}>
+                            {nombreProductoBase}
+                          </ThemedText>
+                        </ThemedView>
+
+                        {/* Imagen del producto */}
+                        <ThemedView style={styles.productoImageContainer}>
+                          {presentacion?.url_foto ? (
+                            <Image 
+                              source={{ 
+                                uri: `${API_CONFIG.baseUrl}/uploads/${presentacion.url_foto}` 
+                              }} 
+                              style={styles.productoImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <ThemedView style={styles.productoImagePlaceholder}>
+                              <IconSymbol name="photo" size={32} color="#9BA1A6" />
+                            </ThemedView>
+                          )}
+                        </ThemedView>
+                        
+                        {/* Controles inferiores */}
+                        <ThemedView style={styles.productoControles}>
+                          {/* Precio editable */}
+                          <ThemedView style={styles.precioContainer}>
+                            <ThemedText style={styles.precioLabel}>Precio:</ThemedText>
+                            <TextInput
+                              style={styles.precioInput}
+                              value={detalle.precio_unitario || precio}
+                              onChangeText={(value) => handleDetalleChange(index, 'precio_unitario', value)}
+                              keyboardType="numeric"
+                              placeholder="0.00"
+                            />
                           </ThemedView>
-                        )}
+                          
+                          {/* Control de cantidad */}
+                          <ThemedView style={styles.cantidadContainer}>
+                            <ThemedText style={styles.cantidadLabel}>Cantidad:</ThemedText>
+                            <ThemedView style={styles.cantidadControles}>
+                              <TouchableOpacity 
+                                style={styles.cantidadButton}
+                                onPress={() => {
+                                  const currentQty = parseInt(detalle.cantidad) || 0;
+                                  if (currentQty > 1) {
+                                    handleDetalleChange(index, 'cantidad', (currentQty - 1).toString());
+                                  }
+                                }}
+                                disabled={parseInt(detalle.cantidad) <= 1}
+                              >
+                                <ThemedText style={[
+                                  styles.cantidadButtonText,
+                                  parseInt(detalle.cantidad) <= 1 && styles.cantidadButtonDisabled
+                                ]}>−</ThemedText>
+                              </TouchableOpacity>
+                              
+                              <TextInput
+                                style={styles.cantidadInput}
+                                value={detalle.cantidad}
+                                onChangeText={(value) => {
+                                  // Solo permitir números positivos
+                                  const numValue = value.replace(/[^0-9]/g, '');
+                                  const finalValue = numValue === '' ? '1' : numValue;
+                                  handleDetalleChange(index, 'cantidad', finalValue);
+                                }}
+                                keyboardType="numeric"
+                              />
+                              
+                              <TouchableOpacity 
+                                style={styles.cantidadButton}
+                                onPress={() => {
+                                  const currentQty = parseInt(detalle.cantidad) || 0;
+                                  handleDetalleChange(index, 'cantidad', (currentQty + 1).toString());
+                                }}
+                              >
+                                <ThemedText style={styles.cantidadButtonText}>+</ThemedText>
+                              </TouchableOpacity>
+                            </ThemedView>
+                          </ThemedView>
+                        </ThemedView>
                       </ThemedView>
-                      
-                      {/* Nombre del producto */}
-                      <ThemedText style={styles.productoNombre}>
-                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.nombre || 'Producto'}
-                      </ThemedText>
-                      
-                      {/* Descripción o nombre del producto base */}
-                      <ThemedText style={styles.productoDescripcion}>
-                        {presentacionesFiltradas.find(p => p.id.toString() === detalle.presentacion_id)?.producto?.nombre || ''}
-                      </ThemedText>
-                      
-                      {/* Precio centrado */}
-                      <ThemedText style={styles.productoPrecio}>
-                        ${parseFloat(presentacionesFiltradas.find(
-                          p => p.id.toString() === detalle.presentacion_id
-                        )?.precio_venta || '0').toFixed(2)}
-                      </ThemedText>
-                      
-                      {/* Input de Cantidad simplificado */}
-                      <TextInput
-                        style={styles.cantidadInput}
-                        value={detalle.cantidad}
-                        onChangeText={(value) => handleDetalleChange(index, 'cantidad', value)}
-                        keyboardType="numeric"
-                        placeholder="1"
-                      />
-                    </ThemedView>
-                  </ThemedView>
-                  ))}
+                    );
+                  })}
                   
-                  {/* Botón para agregar producto - usando un card similar */}
                   {/* Botón para agregar producto */}
                   <TouchableOpacity 
                     style={styles.addProductCard}
-                    onPress={openProductSelectionModal}  // Cambiado de addDetalle a openProductSelectionModal
+                    onPress={openProductSelectionModal}
                   >
                     <ThemedText style={styles.addProductText}>+</ThemedText>
                     <ThemedText style={styles.addProductLabel}>Agregar Producto</ThemedText>
@@ -934,16 +1010,123 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
+  // Estilos actualizados para tarjetas de producto
   productoCard: {
-    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+    backgroundColor: 'white',
     borderRadius: 12,
-    padding: 14,
+    padding: 12,
     width: '48%', // Casi mitad del ancho para que quepan 2 por fila
-    minHeight: 160,
+    minHeight: 220,
     position: 'relative',
     borderWidth: 1,
-    borderColor: 'rgba(10, 126, 164, 0.3)',
+    borderColor: '#E1E3E5',
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  productoHeader: {
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E3E5',
+  },
+  productoNombre: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  productoDescripcion: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  productoImageContainer: {
+    width: '100%',
+    height: 80,
+    marginVertical: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productoImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  productoControles: {
+    gap: 8,
+  },
+  precioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  precioLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  precioInput: {
+    borderWidth: 1,
+    borderColor: '#E1E3E5',
+    borderRadius: 8,
+    padding: 6,
+    width: 70,
+    textAlign: 'center',
+    backgroundColor: 'white',
+    fontSize: 14,
+  },
+  cantidadContainer: {
+    marginTop: 4,
+  },
+  cantidadLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  cantidadControles: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  cantidadButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0a7ea4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cantidadButtonText: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  cantidadButtonDisabled: {
+    opacity: 0.5,
+  },
+  cantidadInput: {
+    borderWidth: 1,
+    borderColor: '#E1E3E5',
+    borderRadius: 8,
+    padding: 8,
+    width: 40,
+    textAlign: 'center',
+    backgroundColor: 'white',
+    fontSize: 14,
+    marginHorizontal: 4,
   },
   removeProductButton: {
     position: 'absolute',
@@ -969,18 +1152,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  productoNombre: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  productoDescripcion: {
-    fontSize: 13,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
   productoPrecio: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -989,16 +1160,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 8,
   },
-  cantidadInput: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 8,
-    width: 70,
-    textAlign: 'center',
-    backgroundColor: 'white',
-    fontSize: 16,
-  },
+ 
   addProductCard: {
     backgroundColor: 'rgba(76, 175, 80, 0.1)',
     borderRadius: 12,
@@ -1151,25 +1313,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   // Estilos para imágenes en tarjetas de producto
-productoImageContainer: {
-  width: '100%',
-  height: 60,
-  marginBottom: 4,
-  borderRadius: 4,
-  overflow: 'hidden',
-  backgroundColor: '#f5f5f5',
-},
-productoImage: {
-  width: '100%',
-  height: '100%',
-},
-productoImagePlaceholder: {
-  width: '100%',
-  height: '100%',
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#f5f5f5',
-},
 // Estilos para imágenes en modal de selección
 productItemImageContainer: {
   width: 60,
