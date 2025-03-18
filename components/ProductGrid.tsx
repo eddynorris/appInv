@@ -1,5 +1,6 @@
+// Actualización para el componente ProductGrid
 import React, { memo, useMemo } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, StyleSheet } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import ProductCard from './ProductCard';
@@ -89,7 +90,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({
   
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.grid}>
+      <ThemedView style={[styles.grid, gridStyles.fixedGrid]}>
         {/* Renderizar productos */}
         {renderProductos}
         
@@ -99,6 +100,17 @@ const ProductGrid: React.FC<ProductGridProps> = ({
     </ThemedView>
   );
 };
+
+// Estilos adicionales para corregir la distribución en la grilla
+const gridStyles = StyleSheet.create({
+  fixedGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 2, // Un pequeño padding para evitar problemas en algunos dispositivos
+  }
+});
 
 // Usar memo para evitar renderizados innecesarios
 export default memo(ProductGrid);

@@ -175,16 +175,27 @@ export const FormStyles = StyleSheet.create({
 
 // Estilos de tarjetas de productos
 export const ProductCardStyles = StyleSheet.create({
+  container: {
+    width: '100%',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  // Resto de los estilos...
   productoCard: {
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
-    width: '48%',
+    width: '48%',  // Ancho fijo para que quepan 2 por fila
     minHeight: 220,
     position: 'relative',
     borderWidth: 1,
     borderColor: Colors.lightGray2,
     justifyContent: 'space-between',
+    marginBottom: Spacing.md,  // Margen inferior para separar las filas
     ...Shadows.small
   },
   productoHeader: {
@@ -310,13 +321,14 @@ export const ProductCardStyles = StyleSheet.create({
     backgroundColor: 'rgba(76, 175, 80, 0.1)',
     borderRadius: BorderRadius.md,
     padding: Spacing.xl,
-    width: '48%',
+    width: '48%',  // Ancho fijo para que quepan 2 por fila
     minHeight: 160,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(76, 175, 80, 0.3)',
     borderStyle: 'dashed',
+    marginBottom: Spacing.md,  // Margen inferior para separar las filas
   },
   addProductText: {
     fontSize: 40,

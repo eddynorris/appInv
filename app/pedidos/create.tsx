@@ -31,16 +31,17 @@ export default function CreatePedidoScreen() {
   // Estado para modal de productos
   const [showProductModal, setShowProductModal] = useState(false);
   
-  // Hooks personalizados
-  const {
-    presentaciones,
-    presentacionesFiltradas,
-    isLoading: isLoadingPresentaciones,
-    filtrarPorAlmacenId
-  } = useProductos({ 
-    filtrarPorAlmacen: false,  // Mostrar todas las presentaciones para pedidos
-    cargarAlInicio: true 
-  });
+ // Hooks personalizados
+const {
+  presentaciones,
+  presentacionesFiltradas,
+  isLoading: isLoadingPresentaciones,
+  filtrarPorAlmacenId,
+  cargarPresentaciones
+} = useProductos({ 
+  filtrarPorAlmacen: false,  // Mostrar todas las presentaciones para pedidos
+  cargarAlInicio: true 
+});
   
   const {
     formData,
@@ -73,13 +74,19 @@ export default function CreatePedidoScreen() {
     }
   }, [user]);
   
-  // Cargar datos iniciales
+ // Cargar datos iniciales
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoadingData(true);
         
-        // Cargar datos en paralelo
+        console.log("Inicializando pantalla de pedidos...");
+        
+        // Paso 1: Cargar presentaciones primero 
+        // Para pedidos no filtramos por almacén, así que aseguramos que todas las presentaciones estén cargadas
+        await cargarPresentaciones();
+        
+        // Paso 2: Cargar clientes y almacenes
         const [clientesRes, almacenesRes] = await Promise.all([
           clienteApi.getClientes(),
           almacenApi.getAlmacenes()
@@ -103,7 +110,20 @@ export default function CreatePedidoScreen() {
         }
         
         if (almacenIdToUse) {
-          handleAlmacenChange(almacenIdToUse);
+          // Establecer almacén_id en el formulario
+          handleChange('almacen_id', almacenIdToUse);
+          
+          // Para pedidos, no filtramos por almacén pero mantenemos la consistencia
+          console.log("Configurando pedido con almacén:", almacenIdToUse);
+          
+          // En pedidos, como no filtramos por almacén, simplemente usamos todas las presentaciones
+          // Pero aseguramos que el estado se actualice correctamente
+          setTimeout(() => {
+            if (presentacionesFiltradas.length === 0 && presentaciones.length > 0) {
+              console.log("Actualizando presentaciones filtradas para pedidos");
+              cargarPresentaciones();
+            }
+          }, 500);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -118,17 +138,20 @@ export default function CreatePedidoScreen() {
   
   // Manejar cambio de almacén
   const handleAlmacenChange = async (almacenId: string) => {
+    console.log("Cambiando almacén en pedidos:", almacenId);
     handleChange('almacen_id', almacenId);
-    await filtrarPorAlmacenId(almacenId);
-  };
-  
-  // Manejar selección de fecha
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      handleChange('fecha_entrega', formattedDate);
+    
+    // En pedidos no filtramos por almacén, pero aseguramos que las presentaciones estén cargadas
+    if (presentaciones.length === 0) {
+      console.log("No hay presentaciones cargadas, cargando ahora...");
+      await cargarPresentaciones();
+    } else {
+      console.log(`Ya hay ${presentaciones.length} presentaciones cargadas`);
     }
+    
+    // Para pedidos, esto no debería filtrar (porque filtrarPorAlmacen es false)
+    // pero llamamos para mantener la consistencia
+    await filtrarPorAlmacenId(almacenId);
   };
   
   // Manejar selección de producto

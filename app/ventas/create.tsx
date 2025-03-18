@@ -32,7 +32,8 @@ export default function CreateVentaScreen() {
     presentaciones,
     presentacionesFiltradas,
     isLoading: isLoadingPresentaciones,
-    filtrarPorAlmacenId
+    filtrarPorAlmacenId,
+    cargarPresentaciones
   } = useProductos({ 
     filtrarPorAlmacen: true, 
     soloConStock: true,  // Solo mostrar productos con stock para ventas
@@ -71,19 +72,24 @@ export default function CreateVentaScreen() {
     }
   }, [user]);
   
-  // Cargar datos iniciales
+    // Cargar datos iniciales - versión optimizada
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoadingData(true);
         
-        // Cargar datos en paralelo
-        const [clientesRes, almacenesRes] = await Promise.all([
+        // Paso 1: Cargar todo en paralelo para mayor eficiencia
+        const [
+          presentacionesResult,
+          clientesRes, 
+          almacenesRes
+        ] = await Promise.all([
+          cargarPresentaciones(),
           clienteApi.getClientes(),
           almacenApi.getAlmacenes()
         ]);
         
-        // Establecer datos
+        // Paso 2: Configurar datos del formulario
         setClientes(clientesRes.data || []);
         setAlmacenes(almacenesRes.data || []);
         
@@ -101,46 +107,57 @@ export default function CreateVentaScreen() {
         }
         
         if (almacenIdToUse) {
-          // Primero establecer almacén_id y luego filtrar presentaciones
+          // Establecer almacén_id en el formulario
           handleChange('almacen_id', almacenIdToUse);
-          await cargarInventarioPorAlmacen(almacenIdToUse);
+          
+          // Paso 3: Filtrar presentaciones por almacén - en un solo paso
+          await filtrarPorAlmacenId(almacenIdToUse);
         }
+        
+        // Paso 4: Detalles vacíos - el usuario agregará productos manualmente
+        setDetalles([]);
+        
       } catch (error) {
         console.error('Error loading data:', error);
         Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
       } finally {
+        // Todo listo, quitar la pantalla de carga
         setIsLoadingData(false);
       }
     };
     
     fetchData();
   }, []);
-  
   // Cargar inventario por almacén y actualizar detalles
   const cargarInventarioPorAlmacen = async (almacenId: string) => {
+    // Control para prevenir múltiples cargas
+    if (isLoadingData) return;
+    
     try {
-      // Filtrar presentaciones por almacén
+      // Mostrar pantalla de carga mientras ocurre todo el proceso
+      setIsLoadingData(true);
+      
+      // 1. Asegurar que tenemos presentaciones
+      if (presentaciones.length === 0) {
+        await cargarPresentaciones();
+      }
+      
+      // 2. Filtrar presentaciones por almacén - sin timeouts
       const presentacionesFiltradas = await filtrarPorAlmacenId(almacenId);
       
-      // Si hay presentaciones disponibles, inicializar el primer detalle
-      if (presentacionesFiltradas && presentacionesFiltradas.length > 0) {
-        const primeraPresentacion = presentacionesFiltradas[0];
-        
-        // Establecer el primer detalle con la primera presentación disponible
-        setDetalles([{
-          presentacion_id: primeraPresentacion.id.toString(),
-          cantidad: '1',
-          precio_unitario: primeraPresentacion.precio_venta || '0'
-        }]);
-      } else {
-        // Si no hay presentaciones, establecer un detalle vacío
-        setDetalles([]);
-      }
+      // 3. Inicializar detalles vacíos - ahora el usuario deberá agregar productos manualmente
+      setDetalles([]);
+      
+      // 4. Todo listo, quitar la pantalla de carga
+      setIsLoadingData(false);
+      
     } catch (error) {
       console.error('Error al cargar inventario:', error);
+      setIsLoadingData(false);
     }
   };
-  
+
+
   // Manejar cambio de almacén
   const handleAlmacenChange = async (almacenId: string) => {
     handleChange('almacen_id', almacenId);
@@ -316,12 +333,14 @@ export default function CreateVentaScreen() {
           <ThemedView style={styles.detallesSection}>
             <ThemedText type="subtitle" style={SectionStyles.subtitle}>Productos</ThemedText>
             
-            {isLoadingPresentaciones ? (
+            {isLoadingData || isLoadingPresentaciones ? (
+              // Mostrar un indicador de carga único mientras se preparan los datos
               <ThemedView style={styles.loadingPresentaciones}>
                 <ActivityIndicator size="small" color={Colors.primary} />
                 <ThemedText>Cargando productos disponibles...</ThemedText>
               </ThemedView>
             ) : presentacionesFiltradas.length === 0 ? (
+              // Mensaje cuando no hay presentaciones disponibles
               <ThemedView style={styles.noPresentaciones}>
                 <ThemedText style={styles.noPresentacionesText}>
                   No hay productos disponibles en este almacén
@@ -344,20 +363,19 @@ export default function CreateVentaScreen() {
                 )}
               </ThemedView>
             ) : (
-              <>
-                <ProductGrid
-                  detalles={detalles}
-                  presentaciones={presentaciones}
-                  onUpdate={actualizarProducto}
-                  onRemove={eliminarProducto}
-                  onAddProduct={() => setShowProductModal(true)}
-                  isPedido={false}
-                />
-                
-                {errors.detalles && (
-                  <ThemedText style={FormStyles.errorText}>{errors.detalles}</ThemedText>
-                )}
-              </>
+              // Mostrar grid para agregar productos o ver los existentes
+              <ProductGrid
+                detalles={detalles}
+                presentaciones={presentaciones}
+                onUpdate={actualizarProducto}
+                onRemove={eliminarProducto}
+                onAddProduct={() => setShowProductModal(true)}
+                isPedido={false}
+              />
+            )}
+            
+            {errors.detalles && (
+              <ThemedText style={FormStyles.errorText}>{errors.detalles}</ThemedText>
             )}
           </ThemedView>
           
