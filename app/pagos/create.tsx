@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -26,6 +28,7 @@ export default function CreatePagoScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [isLoadingVentas, setIsLoadingVentas] = useState(true);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -79,6 +82,18 @@ export default function CreatePagoScreen() {
     loadVentas();
   }, []);
 
+  // Solicitar permisos para acceder a la cámara y galería
+  useEffect(() => {
+    (async () => {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
+        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
+      }
+    })();
+  }, []);
+
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -95,10 +110,101 @@ export default function CreatePagoScreen() {
     }
   };
 
+  // Para seleccionar imagen desde la galería
+  const pickImage = async () => {
+    try {
+      // Evitar usar MediaTypeOptions o MediaType
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        
+        // Validar el tamaño del archivo (máximo 5MB)
+        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
+          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
+          return;
+        }
+        
+        // Determinar el tipo MIME
+        const uriParts = asset.uri.split('.');
+        const fileType = uriParts[uriParts.length - 1];
+        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
+        
+        setComprobante({
+          uri: asset.uri,
+          name: asset.fileName || `comprobante.${fileType}`,
+          type: mimeType
+        });
+        
+        // Para pagos/edit/[id].tsx, también debes agregar:
+        // setExistingComprobante(null);
+        
+        // Limpiar el error de comprobante si existe
+        if (errors.comprobante) {
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.comprobante;
+            return newErrors;
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error al seleccionar imagen:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        
+        // Validar el tamaño del archivo (máximo 5MB)
+        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
+        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
+          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
+          return;
+        }
+        
+        // Determinar el tipo MIME
+        const uriParts = asset.uri.split('.');
+        const fileType = uriParts[uriParts.length - 1];
+        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
+        
+        setComprobante({
+          uri: asset.uri,
+          name: asset.fileName || `comprobante.${fileType}`,
+          type: mimeType
+        });
+        
+        // Limpiar el error de comprobante si existe
+        if (errors.comprobante) {
+          setErrors(prev => {
+            const newErrors = { ...prev };
+            delete newErrors.comprobante;
+            return newErrors;
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error al tomar foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
+        type: ['application/pdf'],
         copyToCacheDirectory: true
       });
       
@@ -130,6 +236,15 @@ export default function CreatePagoScreen() {
     } catch (error) {
       console.error('Error al seleccionar documento:', error);
       Alert.alert('Error', 'No se pudo seleccionar el documento');
+    }
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      handleChange('fecha', formattedDate);
     }
   };
 
@@ -230,9 +345,9 @@ export default function CreatePagoScreen() {
       
       Alert.alert('Error', errorMessage);
     } finally {
-          setIsSubmitting(false);
-        }
-      };
+      setIsSubmitting(false);
+    }
+  };
 
   // Obtener información de la venta seleccionada
   const getVentaInfo = () => {
@@ -379,19 +494,26 @@ export default function CreatePagoScreen() {
 
             <ThemedView style={styles.formGroup}>
               <ThemedText style={styles.label}>Fecha</ThemedText>
-              <TextInput
+              <TouchableOpacity 
                 style={[
                   styles.input,
-                  { color: Colors[colorScheme].text }
+                  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
                 ]}
-                value={formData.fecha}
-                onChangeText={(value) => handleChange('fecha', value)}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#9BA1A6"
-              />
-              <ThemedText style={styles.helperText}>
-                Formato: YYYY-MM-DD (ej. 2023-12-31)
-              </ThemedText>
+                onPress={() => setShowDatePicker(true)}
+              >
+                <ThemedText style={{ color: Colors[colorScheme].text }}>
+                  {formData.fecha ? new Date(formData.fecha).toLocaleDateString() : 'Seleccionar fecha'}
+                </ThemedText>
+                <IconSymbol name="calendar" size={20} color={Colors[colorScheme].text} />
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={formData.fecha ? new Date(formData.fecha) : new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={onDateChange}
+                />
+              )}
             </ThemedView>
 
             {(formData.metodo_pago === 'transferencia' || formData.metodo_pago === 'tarjeta') && (
@@ -417,22 +539,56 @@ export default function CreatePagoScreen() {
             {formData.metodo_pago === 'transferencia' && (
               <ThemedView style={styles.formGroup}>
                 <ThemedText style={styles.label}>Comprobante *</ThemedText>
-                <TouchableOpacity 
-                  style={[
-                    styles.fileSelector,
-                    comprobante ? styles.fileSelectorSuccess : null,
-                    errors.comprobante && styles.inputError
-                  ]}
-                  onPress={pickDocument}
-                >
-                  <IconSymbol name={comprobante ? "doc.fill" : "paperplane.fill"} size={24} color="#757575" />
-                  <ThemedText style={styles.fileSelectorText}>
-                    {comprobante ? comprobante.name : 'Seleccionar comprobante'}
-                  </ThemedText>
-                </TouchableOpacity>
+                
+                {comprobante && (
+                  <ThemedView style={styles.comprobantePreview}>
+                    <IconSymbol 
+                      name={comprobante.type.includes('pdf') ? "doc.fill" : "photo.fill"} 
+                      size={24} 
+                      color="#0a7ea4" 
+                    />
+                    <ThemedText style={styles.comprobanteText}>
+                      {comprobante.name}
+                    </ThemedText>
+                  </ThemedView>
+                )}
+                
+                <ThemedView style={styles.comprobanteButtons}>
+                  <TouchableOpacity 
+                    style={[styles.comprobanteButton, { backgroundColor: '#2196F3' }]}
+                    onPress={pickImage}
+                  >
+                    <IconSymbol name="photo" size={20} color="#FFFFFF" />
+                    <ThemedText style={styles.comprobanteButtonText}>
+                      Galería
+                    </ThemedText>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.comprobanteButton, { backgroundColor: '#4CAF50' }]}
+                    onPress={takePhoto}
+                  >
+                    <IconSymbol name="camera.fill" size={20} color="#FFFFFF" />
+                    <ThemedText style={styles.comprobanteButtonText}>
+                      Cámara
+                    </ThemedText>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.comprobanteButton, { backgroundColor: '#9C27B0' }]}
+                    onPress={pickDocument}
+                  >
+                    <IconSymbol name="doc.fill" size={20} color="#FFFFFF" />
+                    <ThemedText style={styles.comprobanteButtonText}>
+                      PDF
+                    </ThemedText>
+                  </TouchableOpacity>
+                </ThemedView>
+                
                 {errors.comprobante && (
                   <ThemedText style={styles.errorText}>{errors.comprobante}</ThemedText>
                 )}
+                
                 <ThemedText style={styles.helperText}>
                   Formatos aceptados: JPG, PNG, PDF (máx. 5MB)
                 </ThemedText>
@@ -535,6 +691,38 @@ const styles = StyleSheet.create({
   },
   ventaInfoValue: {
     fontWeight: '600',
+  },
+  comprobantePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  comprobanteButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  comprobanteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+  },
+  comprobanteButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  comprobanteText: {
+    color: '#0a7ea4',
+    fontWeight: '500',
+    flex: 1,
   },
   fileSelector: {
     flexDirection: 'row',

@@ -101,10 +101,11 @@ export default function CreatePresentacionScreen() {
   };
 
   // Función para seleccionar una imagen desde la galería
+  // Función para seleccionar una imagen desde la galería - Fixed
   const pickImage = async () => {
     try {
+      // No usar MediaTypeOptions ni MediaType, simplemente configuración básica
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
@@ -114,14 +115,15 @@ export default function CreatePresentacionScreen() {
         setSelectedImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
+      console.error('Error al seleccionar imagen:', error);
       Alert.alert('Error', 'No se pudo seleccionar la imagen');
     }
   };
 
-  // Función para tomar una foto con la cámara
+  // Función para tomar una foto con la cámara - Fixed
   const takePhoto = async () => {
     try {
+      // No usar MediaTypeOptions ni MediaType, simplemente configuración básica
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
@@ -132,7 +134,7 @@ export default function CreatePresentacionScreen() {
         setSelectedImage(result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
+      console.error('Error al tomar foto:', error);
       Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
