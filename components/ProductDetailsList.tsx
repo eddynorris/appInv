@@ -54,6 +54,43 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
     return isNaN(value) ? '0.00' : value.toFixed(2);
   };
   
+  // Add this function to ProductDetailsList
+  const getImageUrl = (urlFoto) => {
+    if (!urlFoto) return null;
+    
+    // Normalize path separators
+    const normalizedPath = urlFoto.replace(/\\/g, '/');
+    return `${API_CONFIG.baseUrl}/uploads/${normalizedPath}`;
+  };
+
+  const renderImage = () => {
+      // Verificar explícitamente la presencia de url_foto para evitar errores
+      if (presentacion.url_foto) {
+        try {
+          const imageUrl = getImageUrl(presentacion.url_foto);
+          
+          if (imageUrl) {
+            return (
+              <Image 
+                source={{ uri: imageUrl }} 
+                style={styles.productoImage}
+                resizeMode="contain"
+              />
+            );
+          }
+        } catch (error) {
+          console.error("Error al renderizar imagen:", error);
+        }
+      }
+      
+      // Mostrar un placeholder si no hay imagen o hubo un error
+      return (
+        <ThemedView style={styles.productoImagePlaceholder}>
+          <IconSymbol name="photo" size={32} color="#9BA1A6" />
+        </ThemedView>
+      );
+    };
+
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="subtitle" style={styles.title}>{title}</ThemedText>
@@ -70,9 +107,10 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
               <View style={styles.productImageContainer}>
                 {detail.presentacion?.url_foto ? (
                   <Image 
-                    source={{ uri: `${API_CONFIG.baseUrl}/uploads/${detail.presentacion.url_foto}` }} 
+                    source={{ uri: getImageUrl(detail.presentacion.url_foto) }} 
                     style={styles.productImage} 
                     resizeMode="contain"
+                    onError={(e) => console.log('Error cargando imagen:', e.nativeEvent.error)}
                   />
                 ) : (
                   <View style={styles.productImagePlaceholder}>

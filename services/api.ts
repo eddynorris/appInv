@@ -10,7 +10,9 @@ import {
   Venta,
   VentaDetalle,
   Pedido,
-  PedidoDetalle
+  PedidoDetalle,
+  Pago,
+  Lote
 } from '@/models';
 import { authService } from './auth';
 
@@ -438,6 +440,7 @@ export const presentacionApi = {
   }
 };
 
+
 // API methods for Pagos
 export const pagoApi = {
   getPagos: async (page = 1, perPage = 10, ventaId?: number): Promise<ApiResponse<any>> => {
@@ -452,10 +455,34 @@ export const pagoApi = {
     return fetchApi<any>(`/pagos/${id}`);
   },
 
-  createPago: async (pago: any): Promise<any> => {
-    return fetchApi<any>('/pagos', {
+  createPago: async (pago: {
+    venta_id: number;
+    monto: string;
+    fecha?: string;
+    metodo_pago: string;
+    referencia?: string;
+  }): Promise<Pago> => {
+    // Formatear fecha en el formato que espera la API
+    let fechaFormateada = null;
+    if (pago.fecha) {
+      fechaFormateada = `${pago.fecha}T00:00:00Z`;
+    }
+    
+    // Asegurarnos de que el formato es exactamente como espera el backend
+    const formattedPago = {
+      venta_id: Number(pago.venta_id),
+      monto: String(pago.monto).replace(',', '.'),
+      metodo_pago: pago.metodo_pago,
+      // Solo incluir campos opcionales si tienen valor
+      ...(fechaFormateada && { fecha: fechaFormateada }),
+      ...(pago.referencia && { referencia: pago.referencia })
+    };
+    
+    console.log('Enviando datos de pago:', JSON.stringify(formattedPago));
+    
+    return fetchApi<Pago>('/pagos', {
       method: 'POST',
-      body: JSON.stringify(pago),
+      body: JSON.stringify(formattedPago),
     });
   },
 
@@ -471,38 +498,46 @@ export const pagoApi = {
       method: 'DELETE',
     });
   },
-  createPagoWithComprobante: async (pago: any, comprobanteUri: string | null): Promise<any> => {
-    // Si no hay comprobante, usar el método regular
-    if (!comprobanteUri) {
-      return pagoApi.createPago(pago);
-    }
-  
+
+  createPagoWithComprobante: async (pago: any, comprobanteUri: string): Promise<Pago> => {
     // Crear un FormData para enviar archivos
     const formData = new FormData();
     
-    // Agregar todos los campos del pago
+    // Formatear fecha si existe
+    if (pago.fecha) {
+      const fechaFormateada = `${pago.fecha}T00:00:00Z`;
+      pago = { ...pago, fecha: fechaFormateada };
+    }
+    
+    // Agregar todos los campos del pago al FormData
     Object.keys(pago).forEach(key => {
-      formData.append(key, pago[key]);
+      // Solo agregar si el valor no es undefined o null
+      if (pago[key] !== undefined && pago[key] !== null) {
+        formData.append(key, String(pago[key]));
+      }
     });
+    
+    console.log('Preparando pago con comprobante para venta_id:', pago.venta_id);
     
     // Agregar el archivo de comprobante
     const uriParts = comprobanteUri.split('.');
     const fileType = uriParts[uriParts.length - 1];
     
-    // @ts-ignore
+    // @ts-ignore - FormData espera un tipo específico
     formData.append('comprobante', {
       uri: comprobanteUri,
       name: `comprobante.${fileType}`,
       type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
     });
     
-    return fetchApi<any>('/pagos', {
+    // Usar content-type específico para multipart/form-data
+    return fetchApi<Pago>('/pagos', {
       method: 'POST',
       headers: {
-        'Content-Type': 'multipart/form-data',
-        'Accept': 'application/json'
+        // No incluir Content-Type para dejar que el navegador lo establezca automáticamente 
+        'Accept': 'application/json',
       },
-      body: formData as any,
+      body: formData,
     });
   },
   
@@ -653,4 +688,88 @@ export const pedidoApi = {
       throw error;
     }
   },
+};
+
+// API methods for Movimientos
+export const movimientoApi = {
+  getMovimientos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Movimiento>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    return fetchApi<ApiResponse<Movimiento>>(`/movimientos?${queryParams.toString()}`);
+  },
+  // ... otras funciones para movimientos
+};
+
+// API methods for Lotes
+export const loteApi = {
+  getLotes: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Lote>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    return fetchApi<ApiResponse<Lote>>(`/lotes?${queryParams.toString()}`);
+  },
+
+  getLote: async (id: number): Promise<Lote> => {
+    return fetchApi<Lote>(`/lotes/${id}`);
+  },
+
+  createLote: async (lote: {
+    producto_id: number;
+    proveedor_id?: number | null;
+    peso_humedo_kg: number;
+    peso_seco_kg?: number | null;
+    fecha_ingreso: string;
+  }): Promise<Lote> => {
+    return fetchApi<Lote>('/lotes', {
+      method: 'POST',
+      body: JSON.stringify(lote),
+    });
+  },
+
+  updateLote: async (id: number, lote: Partial<Lote>): Promise<Lote> => {
+    return fetchApi<Lote>(`/lotes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(lote),
+    });
+  },
+
+  deleteLote: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/lotes/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  
+  // Método para obtener lotes disponibles para un producto específico
+  getLotesPorProducto: async (productoId: number): Promise<ApiResponse<Lote>> => {
+    return fetchApi<ApiResponse<Lote>>(`/lotes?producto_id=${productoId}&disponible=true`);
+  },
+  
+  // Método para actualizar el peso seco de un lote (funcionalidad común)
+  actualizarPesoSeco: async (id: number, pesoSeco: number): Promise<Lote> => {
+    return fetchApi<Lote>(`/lotes/${id}/peso-seco`, {
+      method: 'PATCH',
+      body: JSON.stringify({ peso_seco_kg: pesoSeco }),
+    });
+  }
 };

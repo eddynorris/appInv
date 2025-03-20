@@ -64,11 +64,20 @@ export default function MoreScreen() {
             icon="house.fill" 
             route="/almacenes" 
           />
-          
           <MenuItem 
             title="Movimientos" 
             icon="arrow.left.arrow.right" 
             route="/movimientos" 
+          />
+          <MenuItem 
+            title="Presentaciones" 
+            icon="arrow.left.arrow.right" 
+            route="/presentaciones" 
+          />
+          <MenuItem 
+            title="Lotes" 
+            icon="arrow.left.arrow.right" 
+            route="/lotes" 
           />
         </ThemedView>
         

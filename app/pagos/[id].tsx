@@ -1,76 +1,74 @@
-// app/ventas/[id].tsx (actualizado con el nuevo componente)
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { StyleSheet, ActivityIndicator, ScrollView, Image, TouchableOpacity, Alert, Linking } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import ProductDetailsList from '@/components/ProductDetailsList';
-import { ventaApi } from '@/services/api';
-import { Venta } from '@/models';
+import { pagoApi } from '@/services/api';
+import { Pago } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { API_CONFIG } from '@/services/api';
 
-export default function VentaDetailScreen() {
+
+export default function PagoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [venta, setVenta] = useState<Venta | null>(null);
+  const [pago, setPago] = useState<Pago | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
 
   useEffect(() => {
-    const fetchVenta = async () => {
+    const fetchPago = async () => {
       if (!id) return;
       
       try {
         setIsLoading(true);
         setError(null);
         
-        const response = await ventaApi.getVenta(parseInt(id));
+        const response = await pagoApi.getPago(parseInt(id));
         
         if (response) {
-          setVenta(response);
+          setPago(response);
         } else {
-          setError('Error al cargar los datos de la venta');
+          setError('Error al cargar los datos del pago');
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos de la venta');
+        setError(err instanceof Error ? err.message : 'Error al cargar los datos del pago');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchVenta();
+    fetchPago();
   }, [id]);
 
   const handleEdit = () => {
-    // Navegar a la pantalla de edición
-    router.push(`/ventas/edit/${id}`);
+    router.push(`/pagos/edit/${id}`);
   };
 
   const handleDelete = async () => {
     if (!id) return;
     
     Alert.alert(
-      "Eliminar Venta",
-      "¿Está seguro que desea eliminar esta venta?",
+      'Eliminar Pago',
+      '¿Está seguro que desea eliminar este pago?',
       [
         {
-          text: "Cancelar",
-          style: "cancel"
+          text: 'Cancelar',
+          style: 'cancel'
         },
         {
-          text: "Eliminar",
-          style: "destructive",
+          text: 'Eliminar',
+          style: 'destructive',
           onPress: async () => {
             try {
               setIsLoading(true);
-              await ventaApi.deleteVenta(parseInt(id));
-              router.replace('/ventas');
+              await pagoApi.deletePago(parseInt(id));
+              router.replace('/pagos');
             } catch (error) {
-              setError('Error al eliminar la venta');
+              setError('Error al eliminar el pago');
               setIsLoading(false);
             }
           }
@@ -79,17 +77,10 @@ export default function VentaDetailScreen() {
     );
   };
 
-  // Estado de pago y colores
-  const getEstadoPagoInfo = (estado: string) => {
-    switch (estado) {
-      case 'pagado':
-        return { color: '#4CAF50', text: 'Pagado' };
-      case 'pendiente':
-        return { color: '#FFC107', text: 'Pendiente' };
-      case 'parcial':
-        return { color: '#FF9800', text: 'Pago Parcial' };
-      default:
-        return { color: '#757575', text: estado };
+  const viewReceipt = () => {
+    if (pago?.url_comprobante) {
+      const receiptUrl = `${API_CONFIG.baseUrl}/uploads/${pago.url_comprobante}`;
+      Linking.openURL(receiptUrl);
     }
   };
 
@@ -97,18 +88,18 @@ export default function VentaDetailScreen() {
     return (
       <>
         <Stack.Screen options={{ 
-          title: 'Detalles de Venta',
+          title: 'Detalles del Pago',
           headerShown: true 
         }} />
         <ThemedView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos de la venta...</ThemedText>
+          <ThemedText style={styles.loadingText}>Cargando datos del pago...</ThemedText>
         </ThemedView>
       </>
     );
   }
 
-  if (error || !venta) {
+  if (error || !pago) {
     return (
       <>
         <Stack.Screen options={{ 
@@ -116,94 +107,93 @@ export default function VentaDetailScreen() {
           headerShown: true 
         }} />
         <ThemedView style={styles.errorContainer}>
-          <IconSymbol name="exclamationmark.triangle" size={48} color={Colors[colorScheme].icon} />
+          <IconSymbol name="paperplane.fill" size={48} color={Colors[colorScheme].icon} />
           <ThemedText style={styles.errorText}>
-            {error || 'Venta no encontrada'}
+            {error || 'Pago no encontrado'}
           </ThemedText>
         </ThemedView>
       </>
     );
   }
 
-  const estadoPago = getEstadoPagoInfo(venta.estado_pago);
+  // Obtener el color para el método de pago
+  const getMethodColor = (method: string) => {
+    switch (method) {
+      case 'efectivo':
+        return '#4CAF50'; // Verde
+      case 'transferencia':
+        return '#2196F3'; // Azul
+      case 'tarjeta':
+        return '#9C27B0'; // Púrpura
+      default:
+        return '#757575'; // Gris
+    }
+  };
+
+  const methodColor = getMethodColor(pago.metodo_pago);
 
   return (
     <>
       <Stack.Screen options={{ 
-        title: `Venta #${venta.id}`,
+        title: `Pago #${pago.id}`,
         headerShown: true 
       }} />
       
       <ScrollView>
         <ThemedView style={styles.container}>
           <ThemedView style={styles.card}>
-            <ThemedText type="title" style={styles.totalText}>
-              ${parseFloat(venta.total).toFixed(2)}
+            <ThemedText type="title" style={styles.montoText}>
+              ${parseFloat(pago.monto).toFixed(2)}
             </ThemedText>
             
             <ThemedView 
               style={[
-                styles.estadoBadge, 
-                { backgroundColor: `${estadoPago.color}20` }
+                styles.methodBadge, 
+                { backgroundColor: `${methodColor}20` }
               ]}
             >
-              <ThemedText style={[styles.estadoText, { color: estadoPago.color }]}>
-                {estadoPago.text}
+              <ThemedText style={[styles.methodText, { color: methodColor }]}>
+                {pago.metodo_pago === 'efectivo' ? 'Efectivo' : 
+                 pago.metodo_pago === 'transferencia' ? 'Transferencia' : 'Tarjeta'}
               </ThemedText>
             </ThemedView>
             
             <ThemedView style={styles.section}>
-              <ThemedText type="subtitle">Información General</ThemedText>
+              <ThemedText type="subtitle">Detalles del Pago</ThemedText>
+              
+              <ThemedView style={styles.infoRow}>
+                <ThemedText type="defaultSemiBold">Venta ID:</ThemedText>
+                <TouchableOpacity onPress={() => router.push(`/ventas/${pago.venta_id}`)}>
+                  <ThemedText style={styles.linkText}>#{pago.venta_id}</ThemedText>
+                </TouchableOpacity>
+              </ThemedView>
               
               <ThemedView style={styles.infoRow}>
                 <ThemedText type="defaultSemiBold">Fecha:</ThemedText>
-                <ThemedText>{new Date(venta.fecha).toLocaleString()}</ThemedText>
+                <ThemedText>{new Date(pago.fecha).toLocaleDateString()}</ThemedText>
               </ThemedView>
               
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Cliente:</ThemedText>
-                <ThemedText>{venta.cliente?.nombre || 'No especificado'}</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Almacén:</ThemedText>
-                <ThemedText>{venta.almacen?.nombre || 'No especificado'}</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Tipo de Pago:</ThemedText>
-                <ThemedText style={{ textTransform: 'capitalize' }}>{venta.tipo_pago}</ThemedText>
-              </ThemedView>
-              
-              {venta.saldo_pendiente && parseFloat(venta.saldo_pendiente) > 0 && (
+              {pago.referencia && (
                 <ThemedView style={styles.infoRow}>
-                  <ThemedText type="defaultSemiBold">Saldo Pendiente:</ThemedText>
-                  <ThemedText style={{ color: '#FF5722', fontWeight: 'bold' }}>
-                    ${parseFloat(venta.saldo_pendiente).toFixed(2)}
-                  </ThemedText>
+                  <ThemedText type="defaultSemiBold">Referencia:</ThemedText>
+                  <ThemedText>{pago.referencia}</ThemedText>
                 </ThemedView>
               )}
             </ThemedView>
 
+            {pago.url_comprobante && (
+              <ThemedView style={styles.comprobante}>
+                <ThemedText type="subtitle">Comprobante</ThemedText>
+                <TouchableOpacity 
+                  style={styles.comprobanteButton} 
+                  onPress={viewReceipt}
+                >
+                  <IconSymbol name="doc.fill" size={24} color="#0a7ea4" />
+                  <ThemedText style={styles.comprobanteText}>Ver comprobante</ThemedText>
+                </TouchableOpacity>
+              </ThemedView>
+            )}
 
-            {/* Usar nuestro nuevo componente para la visualización de productos */}
-            <ThemedView style={styles.section}>
-              {venta.detalles && venta.detalles.length > 0 ? (
-                <ProductDetailsList
-                  details={venta.detalles}
-                  title="Detalles de la Venta"
-                  isPedido={false}
-                />
-              ) : (
-                <ThemedView style={styles.noDetalles}>
-                  <IconSymbol name="exclamationmark.circle" size={30} color="#FFC107" />
-                  <ThemedText style={styles.noDetallesText}>
-                    No hay detalles disponibles para esta venta
-                  </ThemedText>
-                </ThemedView>
-              )}
-            </ThemedView>
-            
             <ThemedView style={styles.actions}>
               <TouchableOpacity 
                 style={[styles.button, styles.editButton]} 
@@ -262,21 +252,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  totalText: {
+  montoText: {
     fontSize: 32,
     textAlign: 'center',
     marginBottom: 8,
   },
-  estadoBadge: {
+  methodBadge: {
     alignSelf: 'center',
     paddingVertical: 4,
     paddingHorizontal: 12,
     borderRadius: 16,
     marginBottom: 16,
   },
-  estadoText: {
+  methodText: {
     fontWeight: '600',
-    textTransform: 'uppercase',
   },
   section: {
     marginTop: 16,
@@ -289,17 +278,25 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'space-between',
   },
-  noDetalles: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center', 
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderRadius: 8,
-    marginVertical: 10,
+  linkText: {
+    color: '#0a7ea4',
+    textDecorationLine: 'underline',
   },
-  noDetallesText: {
-    marginTop: 8,
-    textAlign: 'center',
+  comprobante: {
+    marginTop: 24,
+    gap: 12,
+  },
+  comprobanteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+    borderRadius: 8,
+  },
+  comprobanteText: {
+    color: '#0a7ea4',
+    fontWeight: '500',
   },
   actions: {
     flexDirection: 'row',

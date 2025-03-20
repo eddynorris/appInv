@@ -181,6 +181,18 @@ const {
     }
   };
   
+  const onDateChange = (event, selectedDate) => {
+    // Ocultar el DatePicker después de la selección
+    setShowDatePicker(false);
+    
+    // Solo actualizar si hay una fecha seleccionada
+    if (selectedDate) {
+      // Formatear la fecha como YYYY-MM-DD para la API
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      // Actualizar el estado del formulario
+      handleChange('fecha_entrega', formattedDate);
+    }
+  };
   if (isLoadingData) {
     return (
       <>
