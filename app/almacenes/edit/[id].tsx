@@ -1,308 +1,136 @@
 // app/almacenes/edit/[id].tsx
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  Alert,
-  ScrollView
-} from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 
-import { ThemedView } from '@/components/ThemedView';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { FormField } from '@/components/form/FormField';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ThemedText } from '@/components/ThemedText';
 import { almacenApi } from '@/services/api';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useForm } from '@/hooks/useForm';
 import { Almacen } from '@/models';
 
 export default function EditAlmacenScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme() ?? 'light';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // Form state
-  const [formData, setFormData] = useState<Partial<Almacen>>({
+  // Custom hook for form state
+  const { 
+    formData, 
+    errors, 
+    isSubmitting, 
+    handleChange, 
+    handleSubmit,
+    setFormData
+  } = useForm({
     nombre: '',
     direccion: '',
     ciudad: '',
   });
 
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Load almacen data
+  // Use useEffect para cargar los datos una sola vez
   useEffect(() => {
     const fetchAlmacen = async () => {
       if (!id) return;
       
       try {
-        setIsLoading(true);
-        const response = await almacenApi.getAlmacen(parseInt(id));
+        setIsLoadingData(true);
+        setError(null);
         
-        if (response) {
+        const data = await almacenApi.getAlmacen(parseInt(id));
+        
+        if (data) {
+          // Cargar datos en el formulario
           setFormData({
-            nombre: response.nombre || '',
-            direccion: response.direccion || '',
-            ciudad: response.ciudad || '',
+            nombre: data.nombre || '',
+            direccion: data.direccion || '',
+            ciudad: data.ciudad || '',
           });
         } else {
-          Alert.alert('Error', 'No se pudo cargar los datos del almacén');
-          router.back();
+          setError('No se pudo cargar los datos del almacén');
         }
-      } catch (error) {
-        console.error('Error al cargar almacén:', error);
-        Alert.alert('Error', 'No se pudo cargar los datos del almacén');
-        router.back();
+      } catch (err) {
+        console.error('Error fetching almacen:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar los datos del almacén');
       } finally {
-        setIsLoading(false);
+        setIsLoadingData(false);
       }
     };
 
     fetchAlmacen();
-  }, [id]);
+  }, [id, setFormData]); // Solo depende de id y setFormData
 
-  const handleChange = (field: keyof Almacen, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
+  // Validation rules
+  const validationRules = {
+    nombre: (value: string) => !value.trim() ? 'El nombre es requerido' : null,
   };
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.nombre?.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate() || !id) {
-      return;
-    }
+  // Handle form submission
+  const submitForm = useCallback(async (data: typeof formData) => {
+    if (!id) return false;
     
     try {
-      setIsSubmitting(true);
-      
-      const response = await almacenApi.updateAlmacen(parseInt(id), formData);
+      const response = await almacenApi.updateAlmacen(parseInt(id), data);
       
       if (response) {
         Alert.alert(
           'Almacén Actualizado',
           'El almacén ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
+          [{ text: 'OK', onPress: () => router.back() }]
         );
+        return true;
       } else {
         Alert.alert('Error', 'No se pudo actualizar el almacén');
+        return false;
       }
-    } catch (err) {
-      console.error('Error al actualizar almacén:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar el almacén';
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al actualizar el almacén';
       Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      return false;
     }
-  };
-
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Editar Almacén',
-          headerShown: true 
-        }} />
-        <ThemedView style={[styles.container, styles.loadingContainer]}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando datos del almacén...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
+  }, [id]);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Editar Almacén',
-        headerShown: true 
-      }} />
-      
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedText type="title" style={styles.heading}>Editar Almacén</ThemedText>
+    <ScreenContainer 
+      title="Editar Almacén"
+      isLoading={isLoadingData}
+      error={error}
+      loadingMessage="Cargando datos del almacén..."
+    >
+      <ThemedText type="title" style={{ marginBottom: 20 }}>Editar Almacén</ThemedText>
 
-          <ThemedView style={styles.form}>
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Nombre *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.nombre && styles.inputError
-                ]}
-                value={formData.nombre}
-                onChangeText={(value) => handleChange('nombre', value)}
-                placeholder="Ingresa el nombre del almacén"
-                placeholderTextColor="#9BA1A6"
-              />
-              {errors.nombre && (
-                <ThemedText style={styles.errorText}>{errors.nombre}</ThemedText>
-              )}
-            </ThemedView>
+      <FormField
+        label="Nombre"
+        value={formData.nombre}
+        onChangeText={(value) => handleChange('nombre', value)}
+        placeholder="Ingresa el nombre del almacén"
+        error={errors.nombre}
+        required
+      />
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Ciudad</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text }
-                ]}
-                value={formData.ciudad}
-                onChangeText={(value) => handleChange('ciudad', value)}
-                placeholder="Ingresa la ciudad"
-                placeholderTextColor="#9BA1A6"
-              />
-            </ThemedView>
+      <FormField
+        label="Ciudad"
+        value={formData.ciudad}
+        onChangeText={(value) => handleChange('ciudad', value)}
+        placeholder="Ingresa la ciudad"
+      />
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Dirección</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.textArea,
-                  { color: Colors[colorScheme].text }
-                ]}
-                value={formData.direccion}
-                onChangeText={(value) => handleChange('direccion', value)}
-                placeholder="Ingresa la dirección"
-                placeholderTextColor="#9BA1A6"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </ThemedView>
+      <FormField
+        label="Dirección"
+        value={formData.direccion}
+        onChangeText={(value) => handleChange('direccion', value)}
+        placeholder="Ingresa la dirección"
+        multiline
+      />
 
-            <ThemedView style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => router.back()}
-              >
-                <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[
-                  styles.submitButton,
-                  isSubmitting && styles.submitButtonDisabled
-                ]}
-                onPress={handleSubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
-                )}
-              </TouchableOpacity>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+      <ActionButtons
+        onSave={() => handleSubmit(submitForm, validationRules)}
+        onCancel={() => router.back()}
+        isSubmitting={isSubmitting}
+        saveText="Guardar Cambios"
+      />
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heading: {
-    marginBottom: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  formGroup: {
-    gap: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    minHeight: 80,
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0E0E0',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#424242',
-  },
-  submitButton: {
-    flex: 2,
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

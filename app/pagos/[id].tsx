@@ -1,24 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView, Image, TouchableOpacity, Alert, Linking } from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+// app/pagos/[id].tsx
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { pagoApi } from '@/services/api';
+import { pagoApi, API_CONFIG } from '@/services/api';
 import { Pago } from '@/models';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { API_CONFIG } from '@/services/api';
-
 
 export default function PagoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [pago, setPago] = useState<Pago | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const colorScheme = useColorScheme() ?? 'light';
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
+  // Cargar datos del pago
   useEffect(() => {
     const fetchPago = async () => {
       if (!id) return;
@@ -27,14 +30,10 @@ export default function PagoDetailScreen() {
         setIsLoading(true);
         setError(null);
         
-        const response = await pagoApi.getPago(parseInt(id));
-        
-        if (response) {
-          setPago(response);
-        } else {
-          setError('Error al cargar los datos del pago');
-        }
+        const data = await pagoApi.getPago(parseInt(id));
+        setPago(data);
       } catch (err) {
+        console.error('Error fetching pago:', err);
         setError(err instanceof Error ? err.message : 'Error al cargar los datos del pago');
       } finally {
         setIsLoading(false);
@@ -44,80 +43,40 @@ export default function PagoDetailScreen() {
     fetchPago();
   }, [id]);
 
-  const handleEdit = () => {
+  // Navegación a pantalla de edición
+  const handleEdit = useCallback(() => {
     router.push(`/pagos/edit/${id}`);
-  };
+  }, [id]);
 
-  const handleDelete = async () => {
+  // Eliminar pago
+  const handleDelete = useCallback(async () => {
     if (!id) return;
     
-    Alert.alert(
-      'Eliminar Pago',
-      '¿Está seguro que desea eliminar este pago?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsLoading(true);
-              await pagoApi.deletePago(parseInt(id));
-              router.replace('/pagos');
-            } catch (error) {
-              setError('Error al eliminar el pago');
-              setIsLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
+    try {
+      setIsLoading(true);
+      await pagoApi.deletePago(parseInt(id));
+      router.replace('/pagos');
+    } catch (error) {
+      console.error('Error deleting pago:', error);
+      setError('Error al eliminar el pago');
+      setIsLoading(false);
+    } finally {
+      setShowDeleteDialog(false);
+    }
+  }, [id]);
 
-  const viewReceipt = () => {
+  // Ver comprobante
+  const viewReceipt = useCallback(() => {
     if (pago?.url_comprobante) {
       const receiptUrl = `${API_CONFIG.baseUrl}/uploads/${pago.url_comprobante}`;
-      Linking.openURL(receiptUrl);
+      Linking.openURL(receiptUrl).catch(err => {
+        console.error('Error al abrir el comprobante:', err);
+      });
     }
-  };
+  }, [pago]);
 
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Detalles del Pago',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos del pago...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
-
-  if (error || !pago) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Error',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.errorContainer}>
-          <IconSymbol name="paperplane.fill" size={48} color={Colors[colorScheme].icon} />
-          <ThemedText style={styles.errorText}>
-            {error || 'Pago no encontrado'}
-          </ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
-
-  // Obtener el color para el método de pago
-  const getMethodColor = (method: string) => {
+  // Obtener color según método de pago
+  const getMethodColor = useCallback((method: string) => {
     switch (method) {
       case 'efectivo':
         return '#4CAF50'; // Verde
@@ -128,130 +87,88 @@ export default function PagoDetailScreen() {
       default:
         return '#757575'; // Gris
     }
-  };
-
-  const methodColor = getMethodColor(pago.metodo_pago);
+  }, []);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: `Pago #${pago.id}`,
-        headerShown: true 
-      }} />
-      
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedView style={styles.card}>
-            <ThemedText type="title" style={styles.montoText}>
-              ${parseFloat(pago.monto).toFixed(2)}
+    <ScreenContainer
+      title={pago ? `Pago #${pago.id}` : 'Detalles del Pago'}
+      isLoading={isLoading}
+      error={error}
+      loadingMessage="Cargando datos del pago..."
+    >
+      {pago && (
+        <DetailCard>
+          <ThemedText type="title" style={styles.montoText}>
+            ${parseFloat(pago.monto).toFixed(2)}
+          </ThemedText>
+          
+          <ThemedView 
+            style={[
+              styles.methodBadge, 
+              { backgroundColor: `${getMethodColor(pago.metodo_pago)}20` }
+            ]}
+          >
+            <ThemedText style={[styles.methodText, { color: getMethodColor(pago.metodo_pago) }]}>
+              {pago.metodo_pago === 'efectivo' ? 'Efectivo' : 
+               pago.metodo_pago === 'transferencia' ? 'Transferencia' : 'Tarjeta'}
             </ThemedText>
-            
-            <ThemedView 
-              style={[
-                styles.methodBadge, 
-                { backgroundColor: `${methodColor}20` }
-              ]}
-            >
-              <ThemedText style={[styles.methodText, { color: methodColor }]}>
-                {pago.metodo_pago === 'efectivo' ? 'Efectivo' : 
-                 pago.metodo_pago === 'transferencia' ? 'Transferencia' : 'Tarjeta'}
-              </ThemedText>
-            </ThemedView>
-            
-            <ThemedView style={styles.section}>
-              <ThemedText type="subtitle">Detalles del Pago</ThemedText>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Venta ID:</ThemedText>
+          </ThemedView>
+          
+          <DetailSection title="Detalles del Pago">
+            <DetailRow 
+              label="Venta ID" 
+              value={
                 <TouchableOpacity onPress={() => router.push(`/ventas/${pago.venta_id}`)}>
                   <ThemedText style={styles.linkText}>#{pago.venta_id}</ThemedText>
                 </TouchableOpacity>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Fecha:</ThemedText>
-                <ThemedText>{new Date(pago.fecha).toLocaleDateString()}</ThemedText>
-              </ThemedView>
-              
-              {pago.referencia && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText type="defaultSemiBold">Referencia:</ThemedText>
-                  <ThemedText>{pago.referencia}</ThemedText>
-                </ThemedView>
-              )}
-            </ThemedView>
-
-            {pago.url_comprobante && (
-              <ThemedView style={styles.comprobante}>
-                <ThemedText type="subtitle">Comprobante</ThemedText>
-                <TouchableOpacity 
-                  style={styles.comprobanteButton} 
-                  onPress={viewReceipt}
-                >
-                  <IconSymbol name="doc.fill" size={24} color="#0a7ea4" />
-                  <ThemedText style={styles.comprobanteText}>Ver comprobante</ThemedText>
-                </TouchableOpacity>
-              </ThemedView>
+              }
+            />
+            <DetailRow 
+              label="Fecha" 
+              value={new Date(pago.fecha).toLocaleDateString()} 
+            />
+            
+            {pago.referencia && (
+              <DetailRow label="Referencia" value={pago.referencia} />
             )}
+          </DetailSection>
 
-            <ThemedView style={styles.actions}>
+          {pago.url_comprobante && (
+            <ThemedView style={styles.comprobante}>
+              <ThemedText type="subtitle">Comprobante</ThemedText>
               <TouchableOpacity 
-                style={[styles.button, styles.editButton]} 
-                onPress={handleEdit}
+                style={styles.comprobanteButton} 
+                onPress={viewReceipt}
               >
-                <ThemedText style={styles.buttonText}>Editar</ThemedText>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.button, styles.deleteButton]} 
-                onPress={handleDelete}
-              >
-                <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
+                <IconSymbol name="doc.fill" size={24} color="#0a7ea4" />
+                <ThemedText style={styles.comprobanteText}>Ver comprobante</ThemedText>
               </TouchableOpacity>
             </ThemedView>
-          </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+          )}
+
+          <ActionButtons
+            onSave={handleEdit}
+            saveText="Editar"
+            onDelete={() => setShowDeleteDialog(true)}
+            showDelete={true}
+          />
+        </DetailCard>
+      )}
+      
+      <ConfirmationDialog
+        visible={showDeleteDialog}
+        title="Eliminar Pago"
+        message="¿Está seguro que desea eliminar este pago? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  errorText: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#E53935',
-  },
-  card: {
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   montoText: {
     fontSize: 32,
     textAlign: 'center',
@@ -266,17 +183,6 @@ const styles = StyleSheet.create({
   },
   methodText: {
     fontWeight: '600',
-  },
-  section: {
-    marginTop: 16,
-    gap: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-    gap: 8,
-    justifyContent: 'space-between',
   },
   linkText: {
     color: '#0a7ea4',
@@ -297,27 +203,5 @@ const styles = StyleSheet.create({
   comprobanteText: {
     color: '#0a7ea4',
     fontWeight: '500',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 24,
-    gap: 16,
-  },
-  button: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  editButton: {
-    backgroundColor: '#2196F3',
-  },
-  deleteButton: {
-    backgroundColor: '#F44336',
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
   },
 });

@@ -1,46 +1,53 @@
 // app/almacenes/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
-import { Stack, router } from 'expo-router';
+import React, { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
 import { almacenApi } from '@/services/api';
+import { useApiResource } from '@/hooks/useApiResource';
 import { Almacen } from '@/models';
 
 export default function AlmacenesScreen() {
-  const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use our custom hook for API interaction
+  const { 
+    data: almacenes, 
+    isLoading, 
+    error, 
+    pagination, 
+    fetchData,
+    handlePageChange,
+    handleItemsPerPageChange,
+    deleteItem
+  } = useApiResource<Almacen>({
+    initialParams: { page: 1, perPage: 10 },
+    fetchFn: almacenApi.getAlmacenes,
+    deleteFn: almacenApi.deleteAlmacen
+  });
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
+  // Define table columns - memoized to prevent recreating on each render
+  const columns: Column<Almacen>[] = useMemo(() => [
     {
       id: 'id',
       label: 'ID',
       width: 0.5,
+      sortable: true,
     },
     {
       id: 'nombre',
       label: 'Nombre',
       width: 2,
+      sortable: true,
     },
     {
       id: 'ciudad',
       label: 'Ciudad',
       width: 1,
+      sortable: true,
       render: (item: Almacen) => <ThemedText>{item.ciudad || '-'}</ThemedText>,
     },
     {
@@ -49,137 +56,60 @@ export default function AlmacenesScreen() {
       width: 1.5,
       render: (item: Almacen) => <ThemedText>{item.direccion || '-'}</ThemedText>,
     },
-  ];
+  ], []);
 
-  const loadAlmacenes = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await almacenApi.getAlmacenes(page, perPage);
-      
-      if (response && response.data) {
-        setAlmacenes(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar los almacenes');
-      }
-    } catch (err) {
-      console.error('Error al cargar almacenes:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar los almacenes');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, itemsPerPage]);
-
-  // Initial load
-  useEffect(() => {
-    loadAlmacenes();
-  }, [loadAlmacenes]);
-
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadAlmacenes(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadAlmacenes, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadAlmacenes(page, itemsPerPage);
-  }, [loadAlmacenes, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadAlmacenes(1, perPage); // Reset to first page when changing items per page
-  }, [loadAlmacenes]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
-  
   const handleAddAlmacen = () => {
     router.push('/almacenes/create');
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/almacenes/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await almacenApi.deleteAlmacen(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadAlmacenes(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        almacenes.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Almacén eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar almacén:', error);
-      Alert.alert('Error', 'No se pudo eliminar el almacén');
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Almacenes',
-        headerShown: true 
-      }} />
-      
+    <ScreenContainer 
+      title="Almacenes"
+      scrollable={false}
+    >
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Almacenes:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
+              {isLoading ? 'Cargando...' : pagination.totalItems}
             </ThemedText>
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Almacen>
+        <EnhancedDataTable
           data={almacenes}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/almacenes"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay almacenes disponibles"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/almacenes"
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn: 'id',
+            sortOrder: 'asc',
+            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Almacén',
             message: '¿Está seguro que desea eliminar este almacén?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: async (id) => await deleteItem(Number(id))
           }}
+          emptyMessage="No hay almacenes disponibles"
+          onRefresh={fetchData}
         />
         
         <FloatingActionButton 
@@ -187,7 +117,7 @@ export default function AlmacenesScreen() {
           onPress={handleAddAlmacen} 
         />
       </ThemedView>
-    </>
+    </ScreenContainer>
   );
 }
 

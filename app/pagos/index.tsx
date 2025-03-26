@@ -1,206 +1,151 @@
 // app/pagos/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
-import { Stack, router } from 'expo-router';
+import React, { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
 import { pagoApi } from '@/services/api';
+import { useApiResource } from '@/hooks/useApiResource';
 import { Pago } from '@/models';
 
 export default function PagosScreen() {
-  const [pagos, setPagos] = useState<Pago[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use our custom hook for API interaction
+  const { 
+    data: pagos, 
+    isLoading, 
+    error, 
+    pagination, 
+    fetchData,
+    handlePageChange,
+    handleItemsPerPageChange,
+    deleteItem
+  } = useApiResource<Pago>({
+    initialParams: { page: 1, perPage: 10 },
+    fetchFn: pagoApi.getPagos,
+    deleteFn: pagoApi.deletePago
+  });
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-    },
+  // Define table columns - memoized to prevent recreating on each render
+  const columns: Column<Pago>[] = useMemo(() => [
     {
       id: 'venta_id',
       label: 'Venta ID',
       width: 0.8,
+      sortable: true,
     },
     {
       id: 'monto',
       label: 'Monto',
       width: 1,
+      sortable: true,
       render: (item: Pago) => <ThemedText>${parseFloat(item.monto).toFixed(2)}</ThemedText>,
     },
     {
       id: 'fecha',
       label: 'Fecha',
       width: 1,
+      sortable: true,
       render: (item: Pago) => <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>,
     },
     {
       id: 'metodo_pago',
       label: 'Método',
       width: 1,
-      render: (item: Pago) => (
-        <ThemedText>
-          {item.metodo_pago === 'efectivo' 
-            ? 'Efectivo' 
-            : item.metodo_pago === 'transferencia' 
-              ? 'Transferencia' 
-              : 'Tarjeta'}
-        </ThemedText>
-      ),
+      sortable: true,
+      render: (item: Pago) => {
+        // Color según método de pago
+        let color = '#757575'; // Gris por defecto
+        let label = item.metodo_pago;
+        
+        switch (item.metodo_pago) {
+          case 'efectivo':
+            color = '#4CAF50'; // Verde
+            label = 'Efectivo';
+            break;
+          case 'transferencia':
+            color = '#2196F3'; // Azul
+            label = 'Transferencia';
+            break;
+          case 'tarjeta':
+            color = '#9C27B0'; // Púrpura
+            label = 'Tarjeta';
+            break;
+        }
+        
+        return (
+          <ThemedText style={{ color, fontWeight: '500' }}>
+            {label}
+          </ThemedText>
+        );
+      },
     },
-  ];
+  ], []);
 
-  const loadPagos = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await pagoApi.getPagos(page, perPage);
-      
-      if (response && response.data) {
-        setPagos(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar los pagos');
-      }
-    } catch (err) {
-      console.error('Error al cargar pagos:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar los pagos');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, itemsPerPage]);
+  // Calcular el total de pagos
+  const totalPagos = useMemo(() => {
+    return pagos.reduce((acc, pago) => acc + parseFloat(pago.monto), 0).toFixed(2);
+  }, [pagos]);
 
-  // Initial load
-  useEffect(() => {
-    loadPagos();
-  }, [loadPagos]);
-
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadPagos(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadPagos, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadPagos(page, itemsPerPage);
-  }, [loadPagos, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadPagos(1, perPage); // Reset to first page when changing items per page
-  }, [loadPagos]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
-  
   const handleAddPago = () => {
     router.push('/pagos/create');
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/pagos/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await pagoApi.deletePago(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadPagos(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        pagos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Pago eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar pago:', error);
-      Alert.alert('Error', 'No se pudo eliminar el pago');
-      setIsLoading(false);
-    }
-  };
-
-  // Calcular el total de los pagos
-  const totalPagos = pagos.reduce((acc, pago) => acc + parseFloat(pago.monto), 0);
-
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Pagos',
-        headerShown: true 
-      }} />
-      
+    <ScreenContainer 
+      title="Pagos"
+      scrollable={false}
+    >
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Registros:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
+              {isLoading ? 'Cargando...' : pagination.totalItems}
             </ThemedText>
           </ThemedView>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Monto Total:</ThemedText>
-            <ThemedText style={styles.summaryValue}>${totalPagos.toFixed(2)}</ThemedText>
+            <ThemedText style={styles.summaryValue}>${totalPagos}</ThemedText>
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Pago>
+        <EnhancedDataTable
           data={pagos}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/pagos"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay pagos registrados"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/pagos"
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn: 'fecha',
+            sortOrder: 'desc',
+            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Pago',
             message: '¿Está seguro que desea eliminar este pago?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: async (id) => await deleteItem(Number(id))
           }}
+          emptyMessage="No hay pagos registrados"
+          onRefresh={fetchData}
         />
         
         <FloatingActionButton 
@@ -208,7 +153,7 @@ export default function PagosScreen() {
           onPress={handleAddPago} 
         />
       </ThemedView>
-    </>
+    </ScreenContainer>
   );
 }
 
