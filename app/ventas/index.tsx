@@ -1,196 +1,60 @@
-// app/ventas/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+// app/ventas/index.tsx - Versión refactorizada
+import React, { useEffect } from 'react';
+import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
-import { ventaApi } from '@/services/api';
-import { Venta } from '@/models';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { useVentas } from '@/hooks/crud/useVentas';
 
 export default function VentasScreen() {
-  const [ventas, setVentas] = useState<Venta[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Usar el hook especializado para ventas
+  const { 
+    ventas, 
+    isLoading, 
+    error, 
+    pagination, 
+    columns,
+    fetchData,
+    handlePageChange,
+    handleItemsPerPageChange,
+    deleteVenta,
+    getEstadisticas
+  } = useVentas();
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('fecha');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-    },
-    {
-      id: 'fecha',
-      label: 'Fecha',
-      width: 1,
-      render: (item: Venta) => <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>,
-    },
-    {
-      id: 'cliente',
-      label: 'Cliente',
-      width: 1.5,
-      render: (item: Venta) => <ThemedText>{item.cliente?.nombre || '-'}</ThemedText>,
-    },
-    {
-      id: 'total',
-      label: 'Total',
-      width: 1,
-      render: (item: Venta) => <ThemedText>${parseFloat(item.total).toFixed(2)}</ThemedText>,
-    },
-    {
-      id: 'estado_pago',
-      label: 'Estado',
-      width: 1,
-      render: (item: Venta) => {
-        let color = '#757575'; // Gris por defecto
-        
-        switch (item.estado_pago) {
-          case 'pagado':
-            color = '#4CAF50'; // Verde
-            break;
-          case 'pendiente':
-            color = '#FFC107'; // Amarillo
-            break;
-          case 'parcial':
-            color = '#FF9800'; // Naranja
-            break;
-        }
-        
-        return (
-          <ThemedText style={{ color, fontWeight: '500', textTransform: 'capitalize' }}>
-            {item.estado_pago}
-          </ThemedText>
-        );
-      },
-    },
-  ];
-
-  const loadVentas = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await ventaApi.getVentas(page, perPage);
-      
-      if (response && response.data) {
-        setVentas(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar las ventas');
-      }
-    } catch (err) {
-      console.error('Error al cargar ventas:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar las ventas');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, itemsPerPage]);
-
-  // Initial load
+  // Cargar datos al iniciar
   useEffect(() => {
-    loadVentas();
-  }, [loadVentas]);
+    fetchData();
+  }, [fetchData]);
 
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadVentas(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadVentas, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadVentas(page, itemsPerPage);
-  }, [loadVentas, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadVentas(1, perPage); // Reset to first page when changing items per page
-  }, [loadVentas]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
-  
+  // Navegar a la pantalla de creación de venta
   const handleAddVenta = () => {
     router.push('/ventas/create');
   };
-
-  const handleEdit = (id: string) => {
-    router.push(`/ventas/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await ventaApi.deleteVenta(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadVentas(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        ventas.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Venta eliminada correctamente');
-    } catch (error) {
-      console.error('Error al eliminar venta:', error);
-      Alert.alert('Error', 'No se pudo eliminar la venta');
-      setIsLoading(false);
-    }
-  };
-
-  // Calcular resumen de ventas
-  const ventasResumen = {
-    total: ventas.reduce((sum, venta) => sum + parseFloat(venta.total), 0),
-    pagadas: ventas.filter(v => v.estado_pago === 'pagado').length,
-    pendientes: ventas.filter(v => v.estado_pago === 'pendiente').length,
-    parciales: ventas.filter(v => v.estado_pago === 'parcial').length,
-  };
+  
+  // Calcular estadísticas 
+  const ventasResumen = getEstadisticas();
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Ventas',
-        headerShown: true 
-      }} />
-      
+    <ScreenContainer 
+      title="Ventas"
+      scrollable={false}
+    >
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total de Ventas:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
+              {isLoading ? 'Cargando...' : pagination.totalItems}
             </ThemedText>
           </ThemedView>
           
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Monto Total:</ThemedText>
-            <ThemedText style={styles.summaryValue}>${ventasResumen.total.toFixed(2)}</ThemedText>
+            <ThemedText style={styles.summaryValue}>${ventasResumen.total}</ThemedText>
           </ThemedView>
           
           <ThemedView style={styles.summaryBadges}>
@@ -208,32 +72,32 @@ export default function VentasScreen() {
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Venta>
+        <EnhancedDataTable
           data={ventas}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/ventas"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay ventas registradas"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/ventas"
+          pagination={pagination}
+          sorting={{
+            sortColumn: 'fecha',
+            sortOrder: 'desc',
+            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Venta',
             message: '¿Está seguro que desea eliminar esta venta?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: async (id) => await deleteVenta(Number(id))
           }}
+          emptyMessage="No hay ventas registradas"
+          onRefresh={fetchData}
         />
         
         <FloatingActionButton 
@@ -241,7 +105,7 @@ export default function VentasScreen() {
           onPress={handleAddVenta} 
         />
       </ThemedView>
-    </>
+    </ScreenContainer>
   );
 }
 
