@@ -1,9 +1,7 @@
-// components/form/PaymentForm.tsx
-import React, { useState, useEffect, memo } from 'react';
-import { View, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+// components/form/PaymentForm.tsx - Versión optimizada
+import React, { useState, useEffect, memo, useCallback } from 'react';
+import { View, TouchableOpacity, StyleSheet, Platform, Text } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -15,6 +13,7 @@ import { API_CONFIG } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { FormStyles } from '@/styles/Theme';
+import { FileInfo } from '@/hooks/useImageUploader';
 
 // Payment method options
 const PAYMENT_METHODS = [
@@ -42,184 +41,128 @@ interface PaymentFormProps {
   onChange: (field: string, value: string) => void;
   onSubmit: () => void;
   onCancel: () => void;
-  comprobante: { uri: string; name: string; type: string } | null;
-  setComprobante: (file: { uri: string; name: string; type: string } | null) => void;
+  comprobante: FileInfo | null;
+  setComprobante: (file: FileInfo | null) => void;
   existingComprobante: string | null;
   setExistingComprobante: (value: string | null) => void;
   ventaOptions?: VentaOption[];
   ventaInfo?: { total: string; cliente: string; saldoPendiente: string } | null;
   isEdit?: boolean;
+  pickImage?: () => Promise<void>;
+  takePhoto?: () => Promise<void>;
+  pickDocument?: () => Promise<void>;
 }
 
-// Memoized components for file handling
+// Componente memoizado que muestra información de venta
+const VentaInfo = memo(({ ventaInfo }: { ventaInfo: { total: string; cliente: string; saldoPendiente: string } | null }) => {
+  if (!ventaInfo) return null;
+  
+  return (
+    <ThemedView style={styles.ventaInfoContainer}>
+      <ThemedView style={styles.ventaInfoRow}>
+        <ThemedText style={styles.ventaInfoLabel}>Cliente:</ThemedText>
+        <ThemedText style={styles.ventaInfoValue}>{ventaInfo.cliente}</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.ventaInfoRow}>
+        <ThemedText style={styles.ventaInfoLabel}>Total Venta:</ThemedText>
+        <ThemedText style={styles.ventaInfoValue}>${ventaInfo.total}</ThemedText>
+      </ThemedView>
+      <ThemedView style={styles.ventaInfoRow}>
+        <ThemedText style={styles.ventaInfoLabel}>Saldo Pendiente:</ThemedText>
+        <ThemedText style={styles.ventaInfoValue}>${ventaInfo.saldoPendiente}</ThemedText>
+      </ThemedView>
+    </ThemedView>
+  );
+});
+
+// Componente para seleccionar fecha
+const DateField = memo(({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (date: string) => void;
+}) => {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      onChange(formattedDate);
+    }
+  }, [onChange]);
+
+  return (
+    <ThemedView style={FormStyles.formGroup}>
+      <ThemedText style={FormStyles.label}>Fecha</ThemedText>
+      <TouchableOpacity 
+        style={[
+          FormStyles.input,
+          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
+        ]}
+        onPress={() => setShowDatePicker(true)}
+      >
+        <ThemedText>
+          {value ? new Date(value).toLocaleDateString() : 'Seleccionar fecha'}
+        </ThemedText>
+        <IconSymbol name="calendar" size={20} color="#666666" />
+      </TouchableOpacity>
+      {showDatePicker && (
+        <DateTimePicker
+          value={value ? new Date(value) : new Date()}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+        />
+      )}
+    </ThemedView>
+  );
+});
+
+// Componente para gestionar el comprobante
 const FileUploadSection = memo(({
   metodo_pago,
   comprobante,
   existingComprobante,
   setComprobante,
   setExistingComprobante,
-  error
+  error,
+  pickImage,
+  takePhoto,
+  pickDocument
 }: {
   metodo_pago: string;
-  comprobante: { uri: string; name: string; type: string } | null;
+  comprobante: FileInfo | null;
   existingComprobante: string | null;
-  setComprobante: (file: { uri: string; name: string; type: string } | null) => void;
+  setComprobante: (file: FileInfo | null) => void;
   setExistingComprobante: (value: string | null) => void;
   error?: string;
+  pickImage?: () => Promise<void>;
+  takePhoto?: () => Promise<void>;
+  pickDocument?: () => Promise<void>;
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   
-  // Only show for transfers
+  // Solo mostrar para transferencias
   if (metodo_pago !== 'transferencia') {
     return null;
   }
 
-  // Request permissions on mount
-  useEffect(() => {
-    (async () => {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
-      }
-    })();
-  }, []);
-
-  // Image picker function
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: false,
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validate file size (max 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        // Determine MIME type
-        const uriParts = asset.uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.fileName || `comprobante.${fileType}`,
-          type: mimeType
-        });
-        
-        // Clear existing comprobante
-        setExistingComprobante(null);
-      }
-    } catch (error) {
-      console.error('Error al seleccionar imagen:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
-    }
-  };
-
-  // Camera function
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validate file size (max 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        // Determine MIME type
-        const uriParts = asset.uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.fileName || `comprobante.${fileType}`,
-          type: mimeType
-        });
-        
-        // Clear existing comprobante
-        setExistingComprobante(null);
-      }
-    } catch (error) {
-      console.error('Error al tomar foto:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
-    }
-  };
-
-  // Document picker function
-  const pickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validate file size (max 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.name || 'comprobante',
-          type: asset.mimeType || (asset.name?.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-        });
-        
-        // Clear existing comprobante
-        setExistingComprobante(null);
-      }
-    } catch (error) {
-      console.error('Error al seleccionar documento:', error);
-      Alert.alert('Error', 'No se pudo seleccionar el documento');
-    }
-  };
-
-  // View existing comprobante
+  // Ver comprobante existente
   const viewExistingComprobante = () => {
     if (existingComprobante) {
       const comprobanteUrl = `${API_CONFIG.baseUrl}/uploads/${existingComprobante}`;
-      Alert.alert('Comprobante', `URL: ${comprobanteUrl}`);
+      // En producción, aquí usarías Linking.openURL o similar
+      alert(`URL del comprobante: ${comprobanteUrl}`);
     }
   };
 
-  // Remove existing comprobante
+  // Eliminar comprobante existente
   const removeExistingComprobante = () => {
-    Alert.alert(
-      'Eliminar Comprobante',
-      '¿Está seguro que desea eliminar el comprobante actual?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive', 
-          onPress: () => {
-            setExistingComprobante(null);
-            setComprobante(null);
-          } 
-        }
-      ]
-    );
+    setExistingComprobante(null);
+    setComprobante(null);
   };
 
   return (
@@ -309,29 +252,7 @@ const FileUploadSection = memo(({
   );
 });
 
-// VentaInfo displays information about the selected sale
-const VentaInfo = memo(({ ventaInfo }: { ventaInfo: { total: string; cliente: string; saldoPendiente: string } | null }) => {
-  if (!ventaInfo) return null;
-  
-  return (
-    <ThemedView style={styles.ventaInfoContainer}>
-      <ThemedView style={styles.ventaInfoRow}>
-        <ThemedText style={styles.ventaInfoLabel}>Cliente:</ThemedText>
-        <ThemedText style={styles.ventaInfoValue}>{ventaInfo.cliente}</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.ventaInfoRow}>
-        <ThemedText style={styles.ventaInfoLabel}>Total Venta:</ThemedText>
-        <ThemedText style={styles.ventaInfoValue}>${ventaInfo.total}</ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.ventaInfoRow}>
-        <ThemedText style={styles.ventaInfoLabel}>Saldo Pendiente:</ThemedText>
-        <ThemedText style={styles.ventaInfoValue}>${ventaInfo.saldoPendiente}</ThemedText>
-      </ThemedView>
-    </ThemedView>
-  );
-});
-
-// Main PaymentForm component
+// Componente principal del formulario
 export const PaymentForm = memo(({
   formData,
   errors,
@@ -345,13 +266,20 @@ export const PaymentForm = memo(({
   setExistingComprobante,
   ventaOptions = [],
   ventaInfo,
-  isEdit = false
+  isEdit = false,
+  pickImage,
+  takePhoto,
+  pickDocument
 }: PaymentFormProps) => {
-  const [showDatePicker, setShowDatePicker] = useState(false);
   
+  // Manejar cambio de fecha
+  const handleDateChange = useCallback((newDate: string) => {
+    onChange('fecha', newDate);
+  }, [onChange]);
+
   return (
     <ThemedView style={styles.form}>
-      {/* Sale selection - only if not in edit mode */}
+      {/* Selección de venta - solo si no está en modo edición */}
       {!isEdit && (
         <FormSelect
           label="Venta"
@@ -363,10 +291,10 @@ export const PaymentForm = memo(({
         />
       )}
       
-      {/* Sale info if available */}
+      {/* Información de venta si está disponible */}
       {ventaInfo && <VentaInfo ventaInfo={ventaInfo} />}
       
-      {/* Amount */}
+      {/* Monto */}
       <FormField
         label="Monto"
         value={formData.monto}
@@ -377,7 +305,7 @@ export const PaymentForm = memo(({
         required
       />
       
-      {/* Payment method */}
+      {/* Método de pago */}
       <FormSelect
         label="Método de Pago"
         value={formData.metodo_pago}
@@ -385,16 +313,13 @@ export const PaymentForm = memo(({
         onChange={(value) => onChange('metodo_pago', value)}
       />
       
-      {/* Date */}
-      <FormField
-        label="Fecha"
-        value={new Date(formData.fecha).toLocaleDateString()}
-        onChangeText={() => {}} // Handled by date picker
-        placeholder="Seleccionar fecha"
-        disabled={true}
+      {/* Fecha */}
+      <DateField 
+        value={formData.fecha} 
+        onChange={handleDateChange}
       />
       
-      {/* Reference - Only for transfers or cards */}
+      {/* Referencia - Solo para transferencias o tarjetas */}
       {(formData.metodo_pago === 'transferencia' || formData.metodo_pago === 'tarjeta') && (
         <FormField
           label="Referencia"
@@ -406,7 +331,7 @@ export const PaymentForm = memo(({
         />
       )}
       
-      {/* File upload section for transfers */}
+      {/* Sección de carga de archivos para transferencias */}
       <FileUploadSection
         metodo_pago={formData.metodo_pago}
         comprobante={comprobante}
@@ -414,9 +339,12 @@ export const PaymentForm = memo(({
         setComprobante={setComprobante}
         setExistingComprobante={setExistingComprobante}
         error={errors.comprobante}
+        pickImage={pickImage}
+        takePhoto={takePhoto}
+        pickDocument={pickDocument}
       />
       
-      {/* Action buttons */}
+      {/* Botones de acción */}
       <ActionButtons
         onSave={onSubmit}
         onCancel={onCancel}

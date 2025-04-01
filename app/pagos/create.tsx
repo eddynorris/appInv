@@ -1,52 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Platform } from 'react-native';
+// app/pagos/create.tsx - Versión refactorizada
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { StyleSheet, Alert, View, ActivityIndicator, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { PaymentForm } from '@/components/form/PaymentForm';
 import { pagoApi, ventaApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Venta } from '@/models';
+import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';
 
-// Métodos de pago disponibles
-const METODOS_PAGO = [
-  'efectivo',
-  'transferencia',
-  'tarjeta'
-];
+// Tipos
+interface FormData {
+  venta_id: string;
+  monto: string;
+  fecha: string;
+  metodo_pago: string;
+  referencia: string;
+}
 
 export default function CreatePagoScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const isDark = colorScheme === 'dark';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [isLoadingVentas, setIsLoadingVentas] = useState(true);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   
-  // Form state
-  const [formData, setFormData] = useState({
+  // Usar hook personalizado para la gestión de archivos
+  const { 
+    file: comprobante, 
+    setFile: setComprobante,
+    pickImage,
+    takePhoto,
+    pickDocument
+  } = useImageUploader({
+    maxSizeMB: 5,
+    allowedTypes: ['image', 'document']
+  });
+  
+  // Estado del formulario
+  const [formData, setFormData] = useState<FormData>({
     venta_id: '',
     monto: '',
     fecha: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
-    metodo_pago: METODOS_PAGO[0],
+    metodo_pago: 'efectivo',
     referencia: '',
   });
 
-  // Comprobante file state
-  const [comprobante, setComprobante] = useState<{
-    uri: string;
-    name: string;
-    type: string;
-  } | null>(null);
-
-  // Error state
+  // Estado de errores
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Cargar ventas disponibles para asignar pagos
@@ -82,19 +84,8 @@ export default function CreatePagoScreen() {
     loadVentas();
   }, []);
 
-  // Solicitar permisos para acceder a la cámara y galería
-  useEffect(() => {
-    (async () => {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
-      }
-    })();
-  }, []);
-
-  const handleChange = (field: string, value: string) => {
+  // Handler de cambio de campos
+  const handleChange = useCallback((field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -108,147 +99,10 @@ export default function CreatePagoScreen() {
         return newErrors;
       });
     }
-  };
+  }, [errors]);
 
-  // Para seleccionar imagen desde la galería
-  const pickImage = async () => {
-    try {
-      // Evitar usar MediaTypeOptions o MediaType
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: false,
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validar el tamaño del archivo (máximo 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        // Determinar el tipo MIME
-        const uriParts = asset.uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.fileName || `comprobante.${fileType}`,
-          type: mimeType
-        });
-        
-        // Para pagos/edit/[id].tsx, también debes agregar:
-        // setExistingComprobante(null);
-        
-        // Limpiar el error de comprobante si existe
-        if (errors.comprobante) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
-            delete newErrors.comprobante;
-            return newErrors;
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error al seleccionar imagen:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validar el tamaño del archivo (máximo 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        // Determinar el tipo MIME
-        const uriParts = asset.uri.split('.');
-        const fileType = uriParts[uriParts.length - 1];
-        const mimeType = fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`;
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.fileName || `comprobante.${fileType}`,
-          type: mimeType
-        });
-        
-        // Limpiar el error de comprobante si existe
-        if (errors.comprobante) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
-            delete newErrors.comprobante;
-            return newErrors;
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error al tomar foto:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
-    }
-  };
-
-  const pickDocument = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        
-        // Validar el tamaño del archivo (máximo 5MB)
-        const fileInfo = await FileSystem.getInfoAsync(asset.uri);
-        if (fileInfo.exists && fileInfo.size > 5 * 1024 * 1024) {
-          Alert.alert('Error', 'El archivo es demasiado grande. El tamaño máximo es 5MB.');
-          return;
-        }
-        
-        setComprobante({
-          uri: asset.uri,
-          name: asset.name || 'comprobante',
-          type: asset.mimeType || (asset.name?.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-        });
-        
-        // Limpiar el error de comprobante si existe
-        if (errors.comprobante) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
-            delete newErrors.comprobante;
-            return newErrors;
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error al seleccionar documento:', error);
-      Alert.alert('Error', 'No se pudo seleccionar el documento');
-    }
-  };
-
-  const onDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0]; // Formato YYYY-MM-DD
-      handleChange('fecha', formattedDate);
-    }
-  };
-
-  const validate = () => {
+  // Validación de formulario
+  const validate = useCallback(() => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.venta_id) {
@@ -276,9 +130,10 @@ export default function CreatePagoScreen() {
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData, comprobante, ventaInfo]);
 
-  const handleSubmit = async () => {
+  // Envío del formulario
+  const handleSubmit = useCallback(async () => {
     if (!validate()) {
       return;
     }
@@ -292,18 +147,16 @@ export default function CreatePagoScreen() {
         monto: formData.monto.replace(',', '.'),
         fecha: formData.fecha,
         metodo_pago: formData.metodo_pago,
-        referencia: formData.referencia || null // Asegurar que siempre enviamos un valor, aunque sea vacío
+        referencia: formData.referencia || null
       };
       
       let response;
       
       // Si hay un comprobante, usar el método con comprobante
       if (comprobante) {
-        console.log('Enviando pago con comprobante');
         response = await pagoApi.createPagoWithComprobante(pagoData, comprobante.uri);
       } else {
         // Si no hay comprobante, usar el método JSON estándar
-        console.log('Enviando pago sin comprobante');
         response = await pagoApi.createPago(pagoData);
       }
       
@@ -322,22 +175,16 @@ export default function CreatePagoScreen() {
         Alert.alert('Error', 'No se pudo registrar el pago');
       }
     } catch (err) {
-      console.error('Error detallado:', err);
-      
       // Intentar obtener un mensaje de error más específico
       let errorMessage = 'Ocurrió un error al registrar el pago';
       
-      // Intentar extraer el mensaje de error de diferentes formatos posibles de respuesta
-      if (err.response) {
-        console.error('Respuesta del servidor:', JSON.stringify(err.response));
-        if (err.response.data) {
-          if (typeof err.response.data === 'string') {
-            errorMessage = err.response.data;
-          } else if (err.response.data.error) {
-            errorMessage = err.response.data.error;
-          } else if (err.response.data.message) {
-            errorMessage = err.response.data.message;
-          }
+      if (err.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else if (err.response.data.error) {
+          errorMessage = err.response.data.error;
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
         }
       } else if (err instanceof Error) {
         errorMessage = err.message;
@@ -347,10 +194,10 @@ export default function CreatePagoScreen() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, comprobante, validate]);
 
-  // Obtener información de la venta seleccionada
-  const getVentaInfo = () => {
+  // Obtener información de la venta seleccionada (memoizada)
+  const ventaInfo = useMemo(() => {
     if (!formData.venta_id) return null;
     
     const ventaSeleccionada = ventas.find(v => v.id.toString() === formData.venta_id);
@@ -363,9 +210,55 @@ export default function CreatePagoScreen() {
         ? parseFloat(ventaSeleccionada.saldo_pendiente).toFixed(2)
         : parseFloat(ventaSeleccionada.total).toFixed(2)
     };
-  };
+  }, [formData.venta_id, ventas]);
 
-  const ventaInfo = getVentaInfo();
+  // Opciones de venta para el selector (memoizadas)
+  const ventaOptions = useMemo(() => {
+    return ventas.map(venta => ({
+      id: venta.id.toString(),
+      label: `Venta #${venta.id} - ${venta.cliente?.nombre || 'Cliente'} - $${parseFloat(venta.total).toFixed(2)}`,
+      saldoPendiente: venta.saldo_pendiente || venta.total
+    }));
+  }, [ventas]);
+
+  // Renderizar pantalla de carga
+  if (isLoadingVentas) {
+    return (
+      <>
+        <Stack.Screen options={{ 
+          title: 'Registrar Pago',
+          headerShown: true 
+        }} />
+        
+        <ThemedView style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+          <ThemedText>Cargando ventas disponibles...</ThemedText>
+        </ThemedView>
+      </>
+    );
+  }
+
+  // Renderizar mensaje si no hay ventas disponibles
+  if (ventas.length === 0) {
+    return (
+      <>
+        <Stack.Screen options={{ 
+          title: 'Registrar Pago',
+          headerShown: true 
+        }} />
+        
+        <ThemedView style={styles.container}>
+          <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
+          
+          <ThemedView style={styles.errorContainer}>
+            <ThemedText style={styles.errorText}>
+              No hay ventas con pagos pendientes
+            </ThemedText>
+          </ThemedView>
+        </ThemedView>
+      </>
+    );
+  }
 
   return (
     <>
@@ -378,238 +271,23 @@ export default function CreatePagoScreen() {
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
 
-          <ThemedView style={styles.form}>
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Venta *</ThemedText>
-              {isLoadingVentas ? (
-                <ThemedView style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={Colors[colorScheme].tint} />
-                  <ThemedText>Cargando ventas...</ThemedText>
-                </ThemedView>
-              ) : ventas.length === 0 ? (
-                <ThemedView style={styles.errorContainer}>
-                  <ThemedText style={styles.errorText}>
-                    No hay ventas con pagos pendientes
-                  </ThemedText>
-                </ThemedView>
-              ) : (
-                <View style={[
-                  styles.pickerContainer,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-                ]}>
-                  <Picker
-                    selectedValue={formData.venta_id}
-                    onValueChange={(value) => handleChange('venta_id', value.toString())}
-                    style={[
-                      styles.picker,
-                      { color: Colors[colorScheme].text }
-                    ]}
-                    dropdownIconColor={Colors[colorScheme].text}
-                  >
-                    {ventas.map((venta) => (
-                      <Picker.Item 
-                        key={venta.id} 
-                        label={`Venta #${venta.id} - ${venta.cliente?.nombre || 'Cliente'} - ${parseFloat(venta.total).toFixed(2)}`} 
-                        value={venta.id.toString()} 
-                        color={isDark ? '#FFFFFF' : '#000000'}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              )}
-              {errors.venta_id && (
-                <ThemedText style={styles.errorText}>{errors.venta_id}</ThemedText>
-              )}
-            </ThemedView>
-
-            {ventaInfo && (
-              <ThemedView style={styles.ventaInfoContainer}>
-                <ThemedView style={styles.ventaInfoRow}>
-                  <ThemedText style={styles.ventaInfoLabel}>Cliente:</ThemedText>
-                  <ThemedText style={styles.ventaInfoValue}>{ventaInfo.cliente}</ThemedText>
-                </ThemedView>
-                <ThemedView style={styles.ventaInfoRow}>
-                  <ThemedText style={styles.ventaInfoLabel}>Total Venta:</ThemedText>
-                  <ThemedText style={styles.ventaInfoValue}>${ventaInfo.total}</ThemedText>
-                </ThemedView>
-                <ThemedView style={styles.ventaInfoRow}>
-                  <ThemedText style={styles.ventaInfoLabel}>Saldo Pendiente:</ThemedText>
-                  <ThemedText style={styles.ventaInfoValue}>${ventaInfo.saldoPendiente}</ThemedText>
-                </ThemedView>
-              </ThemedView>
-            )}
-
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Monto *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.monto && styles.inputError
-                ]}
-                value={formData.monto}
-                onChangeText={(value) => handleChange('monto', value)}
-                placeholder="0.00"
-                placeholderTextColor="#9BA1A6"
-                keyboardType="numeric"
-              />
-              {errors.monto && (
-                <ThemedText style={styles.errorText}>{errors.monto}</ThemedText>
-              )}
-            </ThemedView>
-
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Método de Pago</ThemedText>
-              <View style={[
-                styles.pickerContainer,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-              ]}>
-                <Picker
-                  selectedValue={formData.metodo_pago}
-                  onValueChange={(value) => handleChange('metodo_pago', value)}
-                  style={[
-                    styles.picker,
-                    { color: Colors[colorScheme].text }
-                  ]}
-                  dropdownIconColor={Colors[colorScheme].text}
-                >
-                  <Picker.Item 
-                    label="Efectivo" 
-                    value="efectivo" 
-                    color={isDark ? '#FFFFFF' : '#000000'}
-                  />
-                  <Picker.Item 
-                    label="Transferencia" 
-                    value="transferencia" 
-                    color={isDark ? '#FFFFFF' : '#000000'}
-                  />
-                  <Picker.Item 
-                    label="Tarjeta" 
-                    value="tarjeta" 
-                    color={isDark ? '#FFFFFF' : '#000000'}
-                  />
-                </Picker>
-              </View>
-            </ThemedView>
-
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Fecha</ThemedText>
-              <TouchableOpacity 
-                style={[
-                  styles.input,
-                  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
-                ]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <ThemedText style={{ color: Colors[colorScheme].text }}>
-                  {formData.fecha ? new Date(formData.fecha).toLocaleDateString() : 'Seleccionar fecha'}
-                </ThemedText>
-                <IconSymbol name="calendar" size={20} color={Colors[colorScheme].text} />
-              </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={formData.fecha ? new Date(formData.fecha) : new Date()}
-                  mode="date"
-                  display="default"
-                  onChange={onDateChange}
-                />
-              )}
-            </ThemedView>
-
-            {(formData.metodo_pago === 'transferencia' || formData.metodo_pago === 'tarjeta') && (
-              <ThemedView style={styles.formGroup}>
-                <ThemedText style={styles.label}>Referencia {formData.metodo_pago === 'transferencia' ? '*' : ''}</ThemedText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    { color: Colors[colorScheme].text },
-                    errors.referencia && styles.inputError
-                  ]}
-                  value={formData.referencia}
-                  onChangeText={(value) => handleChange('referencia', value)}
-                  placeholder="Número de referencia"
-                  placeholderTextColor="#9BA1A6"
-                />
-                {errors.referencia && (
-                  <ThemedText style={styles.errorText}>{errors.referencia}</ThemedText>
-                )}
-              </ThemedView>
-            )}
-
-            {formData.metodo_pago === 'transferencia' && (
-              <ThemedView style={styles.formGroup}>
-                <ThemedText style={styles.label}>Comprobante *</ThemedText>
-                
-                {comprobante && (
-                  <ThemedView style={styles.comprobantePreview}>
-                    <IconSymbol 
-                      name={comprobante.type.includes('pdf') ? "doc.fill" : "photo.fill"} 
-                      size={24} 
-                      color="#0a7ea4" 
-                    />
-                    <ThemedText style={styles.comprobanteText}>
-                      {comprobante.name}
-                    </ThemedText>
-                  </ThemedView>
-                )}
-                
-                <ThemedView style={styles.comprobanteButtons}>
-                  <TouchableOpacity 
-                    style={[styles.comprobanteButton, { backgroundColor: '#2196F3' }]}
-                    onPress={pickImage}
-                  >
-                    <IconSymbol name="photo" size={20} color="#FFFFFF" />
-                    <ThemedText style={styles.comprobanteButtonText}>
-                      Galería
-                    </ThemedText>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.comprobanteButton, { backgroundColor: '#4CAF50' }]}
-                    onPress={takePhoto}
-                  >
-                    <IconSymbol name="camera.fill" size={20} color="#FFFFFF" />
-                    <ThemedText style={styles.comprobanteButtonText}>
-                      Cámara
-                    </ThemedText>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.comprobanteButton, { backgroundColor: '#9C27B0' }]}
-                    onPress={pickDocument}
-                  >
-                    <IconSymbol name="doc.fill" size={20} color="#FFFFFF" />
-                    <ThemedText style={styles.comprobanteButtonText}>
-                      PDF
-                    </ThemedText>
-                  </TouchableOpacity>
-                </ThemedView>
-                
-                {errors.comprobante && (
-                  <ThemedText style={styles.errorText}>{errors.comprobante}</ThemedText>
-                )}
-                
-                <ThemedText style={styles.helperText}>
-                  Formatos aceptados: JPG, PNG, PDF (máx. 5MB)
-                </ThemedText>
-              </ThemedView>
-            )}
-
-            <TouchableOpacity 
-              style={[
-                styles.submitButton,
-                isSubmitting && styles.submitButtonDisabled
-              ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting || ventas.length === 0}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.submitButtonText}>Registrar Pago</ThemedText>
-              )}
-            </TouchableOpacity>
-          </ThemedView>
+          <PaymentForm
+            formData={formData}
+            errors={errors}
+            isSubmitting={isSubmitting}
+            onChange={handleChange}
+            onSubmit={handleSubmit}
+            onCancel={() => router.back()}
+            comprobante={comprobante}
+            setComprobante={setComprobante}
+            existingComprobante={null}
+            setExistingComprobante={() => {}}
+            ventaOptions={ventaOptions}
+            ventaInfo={ventaInfo}
+            pickImage={pickImage}
+            takePhoto={takePhoto}
+            pickDocument={pickDocument}
+          />
         </ThemedView>
       </ScrollView>
     </>
@@ -624,137 +302,22 @@ const styles = StyleSheet.create({
   heading: {
     marginBottom: 20,
   },
-  form: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 16,
   },
-  formGroup: {
-    gap: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#757575',
-    marginTop: 4,
-  },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: '#F5F5F7',
-    borderRadius: 8,
-  },
   errorContainer: {
-    padding: 12,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(229, 57, 53, 0.1)',
     borderRadius: 8,
   },
-  ventaInfoContainer: {
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  ventaInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  ventaInfoLabel: {
-    fontWeight: '500',
-  },
-  ventaInfoValue: {
-    fontWeight: '600',
-  },
-  comprobantePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: 'rgba(10, 126, 164, 0.1)',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  comprobanteButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  comprobanteButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 8,
-  },
-  comprobanteButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '500',
-  },
-  comprobanteText: {
-    color: '#0a7ea4',
-    fontWeight: '500',
-    flex: 1,
-  },
-  fileSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    backgroundColor: '#F5F5F7',
-  },
-  fileSelectorSuccess: {
-    borderColor: '#4CAF50',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-  },
-  fileSelectorText: {
-    color: '#757575',
-  },
-  submitButton: {
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
+  errorText: {
+    color: '#E53935',
     fontSize: 16,
-    fontWeight: '600',
-  },
+    textAlign: 'center',
+  }
 });
