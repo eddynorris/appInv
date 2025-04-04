@@ -255,8 +255,38 @@ export const proveedorApi = {
 
 // API methods for Almacen
 export const almacenApi = {
-  getAlmacenes: async (page = 1, perPage = 10): Promise<ApiResponse<Almacen>> => {
-    return fetchApi<ApiResponse<Almacen>>(`/almacenes?page=${page}&per_page=${perPage}`);
+  getAlmacenes: async (page = 1, perPage = 100): Promise<ApiResponse<Almacen>> => {
+    try {
+      const response = await fetchApi<ApiResponse<Almacen>>(`/almacenes?page=${page}&per_page=${perPage}`);
+      
+      // Asegurarse de que la respuesta tiene la estructura esperada
+      if (!response || !response.data) {
+        console.warn('La API de almacenes devolvió un formato inesperado:', response);
+        return {
+          data: [],
+          pagination: {
+            total: 0,
+            page: 1,
+            per_page: perPage, 
+            pages: 0
+          }
+        };
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Error al obtener almacenes:', error);
+      // Devolver una estructura de datos válida aunque vacía
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          page: 1,
+          per_page: perPage,
+          pages: 0
+        }
+      };
+    }
   },
   
   getAlmacen: async (id: number): Promise<Almacen> => {
@@ -334,11 +364,20 @@ export const ventaApi = {
     detalles: {
       presentacion_id: number;
       cantidad: number;
+      precio_unitario: string;  // Campo requerido
     }[];
   }): Promise<Venta> => {
+    console.log('Enviando datos a la API:', JSON.stringify(venta, null, 2));
+    
     return fetchApi<Venta>('/ventas', {
       method: 'POST',
       body: JSON.stringify(venta),
+    }).then(response => {
+      console.log('Respuesta recibida de la API:', response);
+      return response;
+    }).catch(error => {
+      console.error('Error al crear venta en la API:', error);
+      throw error;
     });
   },
 
@@ -510,6 +549,12 @@ export const pagoApi = {
   
   getPago: async (id: number): Promise<any> => {
     return fetchApi<any>(`/pagos/${id}`);
+  },
+
+  // Método para obtener pagos por venta
+  getPagosByVenta: async (ventaId: number): Promise<any[]> => {
+    const response = await pagoApi.getPagos(1, 100, ventaId);
+    return response.data || [];
   },
 
   createPago: async (pago: {

@@ -1,519 +1,849 @@
-// hooks/crud/useVentas.tsx
-import React, { useState, useCallback, useMemo } from 'react';
+// hooks/crud/useVentas.tsx - Versión optimizada
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
-import { useApiResource } from '@/hooks/useApiResource';
-import { ventaApi, clienteApi, almacenApi } from '@/services/api';
+
+import { useForm } from '../useForm';
 import { useAuth } from '@/context/AuthContext';
-import { Venta, Cliente, Almacen, Presentacion } from '@/models';
+import { Venta, VentaDetalle, Cliente, Almacen, Presentacion, Pago } from '@/models';
+import { ventaApi, clienteApi, almacenApi, pagoApi, inventarioApi } from '@/services/api';
+import { useProductos } from '@/hooks/crud/useProductos';
 import { ThemedText } from '@/components/ThemedText';
 
-// Interfaz para detalles de venta en el formulario
-export interface DetalleVentaForm {
-  presentacion_id: string;
-  cantidad: string;
-  precio_unitario: string;
-}
-
-// Interfaz para formulario de venta
-export interface VentaForm {
+// Tipos simplificados
+interface VentaForm {
   cliente_id: string;
   almacen_id: string;
-  fecha: string;
   tipo_pago: 'contado' | 'credito';
-  estado_pago?: 'pendiente' | 'parcial' | 'pagado';
-  consumo_diario_kg?: string;
+  consumo_diario_kg: string;
+  fecha: string;
+  detalles: {
+    id?: number;
+    presentacion_id: string;
+    cantidad: string;
+    precio_unitario: string;
+  }[];
 }
 
-export function useVentas() {
+// Tipo para respuesta de la API
+interface ApiResponse<T> {
+  data: T[];
+  pagination: {
+    total: number;
+    page: number;
+    per_page: number;
+    pages: number;
+  }
+}
+
+// Estado inicial del formulario
+const initialFormData: VentaForm = {
+  cliente_id: '',
+  almacen_id: '',
+  tipo_pago: 'contado',
+  consumo_diario_kg: '0',
+  fecha: new Date().toISOString().split('T')[0],
+  detalles: []
+};
+
+// Hook principal para gestión de ventas
+export const useVentas = () => {
+  // Auth
   const { user } = useAuth();
   
-  // Usa el hook genérico para CRUD de ventas
-  const {
-    data: ventas,
-    isLoading,
-    error,
-    pagination,
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteItem,
-    getItem
-  } = useApiResource<Venta>({
-    initialParams: { page: 1, perPage: 10 },
-    fetchFn: ventaApi.getVentas,
-    deleteFn: ventaApi.deleteVenta,
-    getFn: ventaApi.getVenta
-  });
-
-  // Estado para formulario de ventas
-  const [formData, setFormData] = useState<VentaForm>({
-    cliente_id: '',
-    almacen_id: user?.almacen_id?.toString() || '',
-    fecha: new Date().toISOString().split('T')[0],
-    tipo_pago: 'contado',
-    consumo_diario_kg: ''
-  });
-
-  // Estado para detalles de productos en la venta
-  const [detalles, setDetalles] = useState<DetalleVentaForm[]>([]);
+  // Estados principales (reducidos y agrupados semánticamente)
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
-  // Estado para errores de validación
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  
-  // Estado para indicar si se está procesando el envío
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Estado para datos adicionales
+  // Datos
+  const [ventas, setVentas] = useState<Venta[]>([]);
+  const [venta, setVenta] = useState<Venta | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
-  const [isLoadingRelated, setIsLoadingRelated] = useState(false);
+  const [pagos, setPagos] = useState<Pago[]>([]);
+  
+  // Caché y productos
+  const [productsByAlmacen, setProductsByAlmacen] = useState<Record<number, any[]>>({});
+  const [isLoadingPresentaciones, setIsLoadingPresentaciones] = useState(false);
+  
+  // Paginación y filtros
+  const [pagination, setPagination] = useState({
+    page: 1,
+    perPage: 10,
+    lastPage: 1,
+    total: 0
+  });
+  
+  const [sortBy, setSortBy] = useState('id');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  const [filters, setFilters] = useState({
+    cliente_id: '',
+    almacen_id: '',
+    fecha_inicio: '',
+    fecha_fin: ''
+  });
+  
+  // Referencias para evitar llamadas duplicadas
+  const ventaCargadaRef = useRef(false);
+  const ventaIdRef = useRef<number | null>(null);
+  const optionsLoadedRef = useRef(false);
+  
+  // Hook de productos
+  const { 
+    presentacionesFiltradas, 
+    isLoading: isLoadingProductos, 
+    filtrarPorAlmacenId: originalFiltrarPorAlmacenId 
+  } = useProductos({ filtrarPorAlmacen: true, soloConStock: true });
+  
+  // Formulario
+  const form = useForm<VentaForm>(initialFormData);
+  
+  // Reglas de validación
+  const validationRules = {
+    cliente_id: (value: string) => !value ? 'El cliente es requerido' : null,
+    almacen_id: (value: string) => !value ? 'El almacén es requerido' : null,
+    tipo_pago: (value: string) => !value ? 'El tipo de pago es requerido' : null,
+    fecha: (value: string) => !value ? 'La fecha es requerida' : null,
+    consumo_diario_kg: (value: string) => value && isNaN(parseFloat(value)) ? 'Debe ser un número válido' : null,
+    detalles: (detalles: VentaForm['detalles']) => !detalles || detalles.length === 0 ? 'Debe agregar al menos un producto' : null
+  };
 
-  // Definición de columnas para tabla de ventas
+  // Columnas para la tabla de ventas (memoizadas)
   const columns = useMemo(() => [
     {
       id: 'id',
       label: 'ID',
       width: 0.5,
+      sortable: true,
+      render: (item: Venta) => <ThemedText>{item.id}</ThemedText>,
     },
     {
       id: 'fecha',
       label: 'Fecha',
-      width: 1,
-      render: (item: Venta) => <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>,
+      width: 1.5,
+      sortable: true,
+      render: (item: Venta) => {
+        const fecha = new Date(item.fecha);
+        return <ThemedText>{fecha.toLocaleDateString()}</ThemedText>;
+      },
     },
     {
       id: 'cliente',
       label: 'Cliente',
-      width: 1.5,
-      render: (item: Venta) => <ThemedText>{item.cliente?.nombre || '-'}</ThemedText>,
+      width: 2,
+      sortable: true,
+      render: (item: Venta) => <ThemedText>{item.cliente?.nombre || 'Sin cliente'}</ThemedText>,
     },
     {
-      id: 'total',
-      label: 'Total',
+      id: 'tipo_pago',
+      label: 'Tipo',
       width: 1,
-      render: (item: Venta) => <ThemedText>${parseFloat(item.total).toFixed(2)}</ThemedText>,
+      sortable: true,
+      render: (item: Venta) => (
+        <ThemedText style={{ 
+          color: item.tipo_pago === 'contado' ? '#4CAF50' : '#2196F3',
+          fontWeight: '500'
+        }}>
+          {item.tipo_pago === 'contado' ? 'Contado' : 'Crédito'}
+        </ThemedText>
+      ),
     },
     {
       id: 'estado_pago',
       label: 'Estado',
-      width: 1,
+      width: 1.2,
+      sortable: true,
       render: (item: Venta) => {
-        let color = '#757575'; // Gris por defecto
-        
+        let color = '#757575';
         switch (item.estado_pago) {
-          case 'pagado':
-            color = '#4CAF50'; // Verde
-            break;
-          case 'pendiente':
-            color = '#FFC107'; // Amarillo
-            break;
-          case 'parcial':
-            color = '#FF9800'; // Naranja
-            break;
+          case 'pagado': color = '#4CAF50'; break;
+          case 'parcial': color = '#FFC107'; break;
+          case 'pendiente': color = '#F44336'; break;
         }
-        
         return (
-          <ThemedText style={{ color, fontWeight: '500', textTransform: 'capitalize' }}>
-            {item.estado_pago}
+          <ThemedText style={{ color, fontWeight: '500' }}>
+            {item.estado_pago.charAt(0).toUpperCase() + item.estado_pago.slice(1)}
           </ThemedText>
         );
       },
     },
+    {
+      id: 'total',
+      label: 'Total',
+      width: 1.2,
+      sortable: true,
+      render: (item: Venta) => (
+        <ThemedText style={{ fontWeight: '500' }}>
+          ${parseFloat(item.total).toFixed(2)}
+        </ThemedText>
+      ),
+    },
   ], []);
 
-  // Cargar datos relacionados (clientes y almacenes)
-  const loadRelatedData = useCallback(async () => {
+  // Cargar opciones (clientes, almacenes) - Optimizado
+  const loadOptions = useCallback(async () => {
+    // Evitar cargas duplicadas durante una llamada en curso
+    if (isLoadingOptions) {
+      console.log('Ya se están cargando opciones...');
+      return { clientes, almacenes };
+    }
+    
+    // Si ya tienen datos, usarlos directamente
+    if (clientes.length > 0 && almacenes.length > 0) {
+      console.log('Usando opciones ya cargadas');
+      return { clientes, almacenes };
+    }
+    
     try {
-      setIsLoadingRelated(true);
+      console.log('Cargando opciones...');
+      setIsLoadingOptions(true);
       
-      // Obtener clientes y almacenes en paralelo
       const [clientesRes, almacenesRes] = await Promise.all([
         clienteApi.getClientes(1, 100),
-        almacenApi.getAlmacenes(1, 100)
+        almacenApi.getAlmacenes()
       ]);
       
-      // Actualizar el estado
-      if (clientesRes?.data) setClientes(clientesRes.data);
-      if (almacenesRes?.data) setAlmacenes(almacenesRes.data);
+      const clientesData = clientesRes?.data || [];
+      const almacenesData = almacenesRes?.data || [];
       
-      // Inicializar el formulario con valores predeterminados
-      if (clientesRes?.data?.length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          cliente_id: clientesRes.data[0].id.toString()
-        }));
-      }
+      setClientes(clientesData);
+      setAlmacenes(almacenesData);
       
-      // Si el usuario tiene un almacén asignado, usarlo por defecto
-      if (user?.almacen_id) {
-        setFormData(prev => ({
-          ...prev,
-          almacen_id: user.almacen_id.toString()
-        }));
-      } else if (almacenesRes?.data?.length > 0) {
-        // Si no, usar el primer almacén de la lista
-        setFormData(prev => ({
-          ...prev,
-          almacen_id: almacenesRes.data[0].id.toString()
-        }));
-      }
-    } catch (error) {
-      console.error('Error cargando datos relacionados:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
-    } finally {
-      setIsLoadingRelated(false);
-    }
-  }, [user]);
-
-  // Manejar cambios en el formulario
-  const handleChange = useCallback((field: keyof VentaForm, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Limpiar error cuando cambia el valor
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  }, [errors]);
-
-  // Agregar producto a la venta
-  const agregarProducto = useCallback((
-    presentacionId: string, 
-    cantidad: string = '1', 
-    precioUnitario: string = '0'
-  ) => {
-    // Verificar si ya existe
-    const existe = detalles.some(d => d.presentacion_id === presentacionId);
-    if (existe) {
-      return false;
-    }
-    
-    // Agregar nuevo detalle
-    setDetalles(prev => [
-      ...prev,
-      {
-        presentacion_id: presentacionId,
-        cantidad,
-        precio_unitario: precioUnitario
-      }
-    ]);
-    
-    return true;
-  }, [detalles]);
-
-  // Actualizar producto existente
-  const actualizarProducto = useCallback((
-    index: number, 
-    field: keyof DetalleVentaForm, 
-    value: string
-  ) => {
-    const newDetalles = [...detalles];
-    
-    // Validaciones específicas según el campo
-    if (field === 'cantidad') {
-      const numValue = value.replace(/[^0-9]/g, '');
-      newDetalles[index] = { 
-        ...newDetalles[index], 
-        [field]: numValue === '' ? '1' : numValue
+      return {
+        clientes: clientesData,
+        almacenes: almacenesData
       };
-    } 
-    else if (field === 'precio_unitario') {
-      const precio = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      if (precio === '' || /^\d+(\.\d{0,2})?$/.test(precio)) {
-        newDetalles[index] = { ...newDetalles[index], [field]: precio };
-      }
-    } 
-    else {
-      newDetalles[index] = { ...newDetalles[index], [field]: value };
+    } catch (error) {
+      console.error('Error al cargar opciones:', error);
+      setError(error instanceof Error ? error.message : 'Error al cargar opciones');
+      return { clientes: [], almacenes: [] };
+    } finally {
+      setIsLoadingOptions(false);
     }
-    
-    setDetalles(newDetalles);
-  }, [detalles]);
+  }, [isLoadingOptions, clientes, almacenes]);
 
-  // Eliminar producto
-  const eliminarProducto = useCallback((index: number) => {
-    setDetalles(prev => {
-      const newDetalles = [...prev];
-      newDetalles.splice(index, 1);
-      return newDetalles;
-    });
-  }, []);
-
-  // Calcular total de la venta
-  const calcularTotal = useCallback(() => {
-    return detalles.reduce((total, detalle) => {
-      const cantidad = parseInt(detalle.cantidad || '0');
-      const precio = parseFloat(detalle.precio_unitario || '0');
-      return total + (cantidad * precio);
-    }, 0).toFixed(2);
-  }, [detalles]);
-
-  // Validar formulario
-  const validarFormulario = useCallback(() => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.cliente_id) {
-      newErrors.cliente_id = 'El cliente es requerido';
+  // Filtrar productos por almacén - Optimizado
+  const filtrarPorAlmacenId = useCallback(async (almacenId: number) => {
+    // Validar parámetro
+    if (!almacenId) {
+      console.warn('ID de almacén no válido');
+      return [];
     }
     
-    if (!formData.almacen_id) {
-      newErrors.almacen_id = 'El almacén es requerido';
+    // Evitar llamadas duplicadas
+    if (isLoadingPresentaciones) {
+      console.log(`Ya se están cargando productos para almacén ${almacenId}`);
+      return productsByAlmacen[almacenId] || [];
     }
     
-    if (!formData.fecha) {
-      newErrors.fecha = 'La fecha es requerida';
-    }
-    
-    if (detalles.length === 0) {
-      newErrors.detalles = 'Debe agregar al menos un producto';
-    }
-    
-    // Validar cada detalle
-    detalles.forEach((detalle, index) => {
-      if (!detalle.presentacion_id) {
-        newErrors[`detalle_${index}_presentacion`] = 'La presentación es requerida';
-      }
-      
-      if (!detalle.cantidad || parseInt(detalle.cantidad) <= 0) {
-        newErrors[`detalle_${index}_cantidad`] = 'La cantidad debe ser mayor a 0';
-      }
-      
-      if (!detalle.precio_unitario || parseFloat(detalle.precio_unitario) <= 0) {
-        newErrors[`detalle_${index}_precio`] = 'El precio debe ser mayor a 0';
-      }
-    });
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData, detalles]);
-
-  // Crear venta
-  const crearVenta = useCallback(async () => {
-    if (!validarFormulario()) {
-      return null;
+    // Usar caché si existe
+    if (productsByAlmacen[almacenId]?.length > 0) {
+      console.log(`Usando productos en caché para almacén ${almacenId}`);
+      return productsByAlmacen[almacenId];
     }
     
     try {
-      setIsSubmitting(true);
+      setIsLoadingPresentaciones(true);
+      console.log(`Cargando productos para almacén ${almacenId}...`);
       
-      // Preparar datos con el formato correcto para la API
+      const response = await inventarioApi.getInventarios(1, 100, almacenId);
+      const productos = response?.data || [];
+      
+      // Guardar en caché
+      setProductsByAlmacen(prev => ({
+      ...prev,
+        [almacenId]: productos
+      }));
+      
+      return productos;
+    } catch (error) {
+      console.error(`Error al cargar productos para almacén ${almacenId}:`, error);
+      return [];
+    } finally {
+      setIsLoadingPresentaciones(false);
+    }
+  }, [productsByAlmacen, isLoadingPresentaciones]);
+
+  // Cargar ventas - Optimizado y corregido para evitar llamadas redundantes
+  const loadVentas = useCallback(async (page = pagination.page, perPage = pagination.perPage) => {
+    try {
+      // Evitar cargas innecesarias si ya estamos en esa página y ya tenemos datos
+      if (page === pagination.page && ventas.length > 0 && !isLoading) {
+        console.log(`Ya estamos en la página ${page} con ${ventas.length} registros, evitando recarga`);
+        return ventas;
+      }
+      
+      setIsLoading(true);
+      console.log(`Cargando ventas (página ${page}, por página ${perPage})...`);
+      
+      // Preparar parámetros
+      const params = new URLSearchParams();
+      if (filters.cliente_id) params.append('cliente_id', filters.cliente_id);
+      if (filters.almacen_id) params.append('almacen_id', filters.almacen_id);
+      if (filters.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
+      if (filters.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
+      
+      // Llamar API
+      const response = await ventaApi.getVentas(page, perPage);
+      
+      // Procesar respuesta
+      if (response?.data && response?.pagination) {
+        setVentas(response.data);
+        setPagination({
+          page: response.pagination.page || 1,
+          perPage: response.pagination.per_page || 10,
+          lastPage: response.pagination.pages || 1,
+          total: response.pagination.total || 0
+        });
+        
+        console.log(`Cargadas ${response.data.length} ventas. Total: ${response.pagination.total}`);
+        return response.data;
+      } else {
+        console.error('Formato de respuesta inválido:', response);
+        setError('Error al procesar respuesta del servidor');
+        return [];
+      }
+    } catch (error) {
+      console.error('Error al cargar ventas:', error);
+      setError('Error al cargar ventas');
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pagination.page, pagination.perPage, filters, ventas.length, isLoading]);
+
+  // Manejar cambio de página - Corregido para evitar recargas automáticas
+  const handlePageChange = useCallback((page: number) => {
+    console.log(`Cambiando a página ${page} desde handlePageChange`);
+    // Actualizar estado de paginación solo si es necesario
+    if (page !== pagination.page) {
+      setPagination(prev => ({ ...prev, page }));
+      loadVentas(page, pagination.perPage);
+    }
+  }, [loadVentas, pagination.page, pagination.perPage]);
+
+  // Manejar cambio de elementos por página
+  const handlePerPageChange = useCallback((perPage: number) => {
+    console.log(`Cambiando a ${perPage} elementos por página`);
+    setPagination(prev => ({ ...prev, perPage, page: 1 }));
+    loadVentas(1, perPage);
+  }, [loadVentas]);
+
+  // Aplicar filtros
+  const applyFilters = useCallback((newFilters: typeof filters) => {
+    setFilters(newFilters);
+    loadVentas(1, pagination.perPage);
+  }, [loadVentas, pagination.perPage]);
+  
+  // Limpiar filtros
+  const clearFilters = useCallback(() => {
+    setFilters({
+      cliente_id: '',
+      almacen_id: '',
+      fecha_inicio: '',
+      fecha_fin: ''
+    });
+    loadVentas(1, pagination.perPage);
+  }, [loadVentas, pagination.perPage]);
+
+  // Cargar venta individual
+  const loadVenta = useCallback(async (id: number) => {
+    if (venta?.id === id && ventaCargadaRef.current) {
+      return venta;
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      const ventaData = await ventaApi.getVenta(id);
+      if (ventaData) {
+        setVenta(ventaData);
+        ventaCargadaRef.current = true;
+        
+        // Cargar pagos si existen - corregido para evitar error con undefined
+        if (ventaData.pagos && Array.isArray(ventaData.pagos) && ventaData.pagos.length > 0) {
+          const pagosData = await pagoApi.getPagosByVenta(id);
+          if (pagosData) setPagos(pagosData);
+        }
+        
+        return ventaData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error(`Error al cargar venta ${id}:`, error);
+      setError(`Error al cargar venta: ${error}`);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [venta]);
+
+  // Cargar venta para edición
+  const loadVentaForEdit = useCallback(async (id: number) => {
+    if (isLoading) return null;
+    
+    try {
+      setIsLoading(true);
+      ventaIdRef.current = id;
+      
+      // Cargar datos maestros si no existen
+      if (!optionsLoadedRef.current) {
+        await loadOptions();
+      }
+      
+      // Cargar venta
+      const ventaData = await ventaApi.getVenta(id);
+      if (!ventaData) {
+        setError('No se pudo cargar la venta');
+        return null;
+      }
+      
+      // Cargar productos por almacén si hay detalles
+      if (ventaData.almacen_id && ventaData.detalles?.length) {
+        await filtrarPorAlmacenId(ventaData.almacen_id);
+      }
+      
+      // Formatear fecha
+      const fecha = ventaData.fecha?.split('T')[0] || new Date().toISOString().split('T')[0];
+      
+      // Actualizar formulario
+      form.setFormData({
+        cliente_id: ventaData.cliente_id?.toString() || '',
+        almacen_id: ventaData.almacen_id?.toString() || '',
+        fecha,
+        tipo_pago: ventaData.tipo_pago || 'contado',
+        consumo_diario_kg: ventaData.consumo_diario_kg?.toString() || '0',
+        detalles: ventaData.detalles?.map(d => ({
+          id: d.id,
+          presentacion_id: d.presentacion_id?.toString() || '',
+          cantidad: d.cantidad?.toString() || '',
+          precio_unitario: d.precio_unitario || ''
+        })) || []
+      });
+      
+      return ventaData;
+    } catch (error) {
+      console.error(`Error al cargar venta ${id} para edición:`, error);
+      setError(`Error al cargar venta: ${error}`);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadOptions, filtrarPorAlmacenId, form, isLoading]);
+
+  // Crear venta
+  const createVenta = useCallback(async () => {
+    if (!form.validate(validationRules)) return false;
+    
+    try {
+      setIsLoading(true);
+      
+      // Preparar datos
       const ventaData = {
-        cliente_id: parseInt(formData.cliente_id),
-        almacen_id: parseInt(formData.almacen_id),
-        tipo_pago: formData.tipo_pago,
-        detalles: detalles.map(d => ({
+        cliente_id: parseInt(form.formData.cliente_id),
+        almacen_id: parseInt(form.formData.almacen_id),
+        tipo_pago: form.formData.tipo_pago,
+        consumo_diario_kg: form.formData.consumo_diario_kg,
+        fecha: `${form.formData.fecha}T00:00:00Z`,
+        detalles: form.formData.detalles.map(d => ({
           presentacion_id: parseInt(d.presentacion_id),
-          cantidad: parseInt(d.cantidad || '1'),
-          precio_unitario: parseFloat(d.precio_unitario || '0')
+          cantidad: parseInt(d.cantidad),
+          precio_unitario: parseFloat(d.precio_unitario).toFixed(2)
         }))
       };
       
-      // Solo añadir campos opcionales si tienen valor válido
-      if (formData.fecha && formData.fecha !== new Date().toISOString().split('T')[0]) {
-        ventaData['fecha'] = `${formData.fecha}T00:00:00Z`;
-      }
-      
-      if (formData.consumo_diario_kg && parseFloat(formData.consumo_diario_kg) > 0) {
-        ventaData['consumo_diario_kg'] = formData.consumo_diario_kg;
-      }
-      
-      console.log('Enviando datos de venta:', ventaData);
+      console.log('Creando venta:', ventaData);
       const response = await ventaApi.createVenta(ventaData);
       
-      if (response) {
-        // Refrescar la lista después de crear
-        fetchData();
-        
-        // Mostrar mensaje de éxito
+      if (response && response.id) {
         Alert.alert(
-          'Venta Creada',
+          'Venta Registrada',
           'La venta ha sido registrada exitosamente',
           [{ text: 'OK', onPress: () => router.replace('/ventas') }]
         );
+        return true;
+      } else {
+        Alert.alert('Error', 'No se pudo registrar la venta');
+        return false;
       }
-      
-      return response;
     } catch (error) {
       console.error('Error al crear venta:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Error al crear la venta');
-      return null;
+      Alert.alert('Error', error instanceof Error ? error.message : 'Error al crear venta');
+      return false;
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
-  }, [formData, detalles, validarFormulario, fetchData]);
+  }, [form, validationRules]);
 
-  // Actualizar venta existente
-  const actualizarVenta = useCallback(async (id: number) => {
-    if (!formData.cliente_id || !formData.almacen_id) {
-      setErrors({
-        ...(formData.cliente_id ? {} : { cliente_id: 'El cliente es requerido' }),
-        ...(formData.almacen_id ? {} : { almacen_id: 'El almacén es requerido' })
-      });
-      return null;
+  // Actualizar venta
+  const updateVenta = useCallback(async () => {
+    if (!form.validate(validationRules)) return false;
+    if (!ventaIdRef.current) {
+      Alert.alert('Error', 'ID de venta no válido');
+      return false;
     }
     
     try {
-      setIsSubmitting(true);
+      setIsLoading(true);
       
-      // Para actualización solo enviamos datos básicos
+      // Preparar datos
       const ventaData = {
-        cliente_id: parseInt(formData.cliente_id),
-        almacen_id: parseInt(formData.almacen_id),
-        fecha: formData.fecha,
-        tipo_pago: formData.tipo_pago,
-        estado_pago: formData.estado_pago
+        cliente_id: parseInt(form.formData.cliente_id),
+        almacen_id: parseInt(form.formData.almacen_id),
+        tipo_pago: form.formData.tipo_pago,
+        consumo_diario_kg: form.formData.consumo_diario_kg,
+        fecha: `${form.formData.fecha}T00:00:00Z`,
+        detalles: form.formData.detalles.map(d => {
+          const detalle: any = {
+            presentacion_id: parseInt(d.presentacion_id),
+            cantidad: parseInt(d.cantidad),
+            precio_unitario: d.precio_unitario
+          };
+          if (d.id) detalle.id = d.id;
+          return detalle;
+        })
       };
       
-      if (formData.consumo_diario_kg && parseFloat(formData.consumo_diario_kg) > 0) {
-        ventaData['consumo_diario_kg'] = formData.consumo_diario_kg;
-      }
-      
-      const response = await ventaApi.updateVenta(id, ventaData);
+      console.log(`Actualizando venta ${ventaIdRef.current}:`, ventaData);
+      const response = await ventaApi.updateVenta(ventaIdRef.current, ventaData);
       
       if (response) {
-        // Refrescar la lista después de actualizar
-        fetchData();
-        
-        // Mostrar mensaje de éxito
         Alert.alert(
           'Venta Actualizada',
           'La venta ha sido actualizada exitosamente',
-          [{ text: 'OK', onPress: () => router.back() }]
+          [{ text: 'OK', onPress: () => router.replace('/ventas') }]
         );
+        return true;
+      } else {
+        Alert.alert('Error', 'No se pudo actualizar la venta');
+        return false;
       }
-      
-      return response;
     } catch (error) {
       console.error('Error al actualizar venta:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Error al actualizar la venta');
-      return null;
+      Alert.alert('Error', error instanceof Error ? error.message : 'Error al actualizar venta');
+      return false;
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
-  }, [formData, fetchData]);
+  }, [form, validationRules]);
 
-  // Cargar venta para edición
-  const loadVenta = useCallback(async (id: number) => {
+  // Eliminar venta
+  const deleteVenta = useCallback(async (id: number) => {
     try {
-      const venta = await getItem(id);
+      setIsLoading(true);
       
-      if (venta) {
-        // Formatear los datos para el formulario
-        setFormData({
-          cliente_id: venta.cliente_id.toString(),
-          almacen_id: venta.almacen_id.toString(),
-          fecha: venta.fecha.split('T')[0],
-          tipo_pago: venta.tipo_pago as 'contado' | 'credito',
-          estado_pago: venta.estado_pago as 'pendiente' | 'parcial' | 'pagado',
-          consumo_diario_kg: venta.consumo_diario_kg || ''
-        });
-        
-        // Cargar detalles si existen
-        if (venta.detalles && venta.detalles.length > 0) {
-          setDetalles(venta.detalles.map(d => ({
-            presentacion_id: d.presentacion_id.toString(),
-            cantidad: d.cantidad.toString(),
-            precio_unitario: d.precio_unitario
-          })));
-        }
-        
-        return venta;
-      }
+      await ventaApi.deleteVenta(id);
       
-      return null;
+      // Recalcular página si necesario
+      const page = ventas.length === 1 && pagination.page > 1 
+        ? pagination.page - 1 
+        : pagination.page;
+      
+      await loadVentas(page, pagination.perPage);
+      
+      Alert.alert('Éxito', 'Venta eliminada correctamente');
+      return true;
     } catch (error) {
-      console.error('Error al cargar venta:', error);
-      Alert.alert('Error', 'No se pudo cargar la venta');
-      return null;
+      console.error('Error al eliminar venta:', error);
+      Alert.alert('Error', 'No se pudo eliminar la venta');
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-  }, [getItem]);
+  }, [loadVentas, pagination.page, pagination.perPage, ventas.length]);
 
-  // Obtener estadísticas para el dashboard
-  const getEstadisticas = useCallback(() => {
-    const estadisticas = {
-      total: ventas.reduce((sum, venta) => sum + parseFloat(venta.total), 0).toFixed(2),
-      pagadas: ventas.filter(v => v.estado_pago === 'pagado').length,
-      pendientes: ventas.filter(v => v.estado_pago === 'pendiente').length,
-      parciales: ventas.filter(v => v.estado_pago === 'parcial').length,
+  // Funciones auxiliares simplificadas
+  
+  // Confirmar eliminación
+  const confirmDelete = useCallback((id: number) => {
+    Alert.alert(
+      'Eliminar Venta',
+      '¿Está seguro que desea eliminar esta venta?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => deleteVenta(id) }
+      ]
+    );
+  }, [deleteVenta]);
+
+  // Cambio de almacén - Optimizado
+  const handleAlmacenChange = useCallback(async (almacenId: string) => {
+    // Validación básica
+    if (!almacenId) {
+      console.log('ID de almacén inválido');
+      return;
+    }
+
+    // Si el almacén no cambió y no es una llamada forzada, no hacer nada
+    if (form.formData.almacen_id === almacenId) {
+      console.log(`Almacén ${almacenId} ya seleccionado, evitando recarga innecesaria`);
+      return;
+    }
+    
+    console.log(`Cambiando almacén a: ${almacenId}`);
+    
+    // Verificar si hay productos ya agregados antes de cambiar el almacén
+    if (form.formData.detalles.length > 0) {
+      // Usar Alert.alert para mostrar diálogo de confirmación
+      Alert.alert(
+        "Cambiar almacén",
+        "Cambiar de almacén eliminará los productos seleccionados. ¿Desea continuar?",
+        [
+          {
+            text: "Cancelar",
+            style: "cancel",
+            onPress: () => {
+              // No hacer nada, mantener el almacén actual
+              console.log("Cambio de almacén cancelado por el usuario");
+            }
+          },
+          {
+            text: "Confirmar",
+            onPress: async () => {
+              // Actualizar el almacén y limpiar productos
+              form.handleChange('almacen_id', almacenId);
+              form.handleChange('detalles', []);
+              
+              // Cargar presentaciones del nuevo almacén
+              try {
+                setIsLoadingPresentaciones(true);
+                
+                // Limpiar caché local primero para evitar resultados mezclados
+                // Llamar solo a originalFiltrarPorAlmacenId que maneja el estado global
+                await originalFiltrarPorAlmacenId(almacenId);
+                
+                console.log(`Presentaciones cargadas para almacén ${almacenId}`);
+              } catch (error) {
+                console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
+                Alert.alert("Error", "No se pudieron cargar los productos para este almacén");
+              } finally {
+                setIsLoadingPresentaciones(false);
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    // Si no hay productos, cambiar directamente
+    form.handleChange('almacen_id', almacenId);
+    
+    try {
+      // Cargar presentaciones asociadas al almacén
+      console.log(`Cargando presentaciones para almacén ID: ${almacenId}`);
+      
+      setIsLoadingPresentaciones(true);
+      
+      // Limpiar caché local primero para evitar resultados mezclados
+      // Llamar solo a originalFiltrarPorAlmacenId que maneja el estado global
+      const result = await originalFiltrarPorAlmacenId(almacenId);
+      
+      console.log(`Presentaciones cargadas para almacén ${almacenId}, total: ${result?.length || 0}`);
+    } catch (error) {
+      console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
+      Alert.alert("Error", "No se pudieron cargar los productos para este almacén");
+    } finally {
+      setIsLoadingPresentaciones(false);
+    }
+  }, [form, originalFiltrarPorAlmacenId]);
+
+  // Calcular total
+  const calcularTotal = useCallback(() => {
+    return form.formData.detalles.reduce((total, detalle) => {
+      const cantidad = parseInt(detalle.cantidad) || 0;
+      const precio = parseFloat(detalle.precio_unitario) || 0;
+      return total + (cantidad * precio);
+    }, 0).toFixed(2);
+  }, [form.formData.detalles]);
+
+  // Manejar productos
+  const agregarProducto = useCallback((presentacionId: string, cantidad: string = '1', precioUnitario?: string) => {
+    // Verificar si el producto ya existe
+    const existeIndex = form.formData.detalles.findIndex(d => d.presentacion_id === presentacionId);
+    
+    if (existeIndex >= 0) {
+      // Actualizar cantidad
+      const detallesActualizados = [...form.formData.detalles];
+      const cantidadActual = parseInt(detallesActualizados[existeIndex].cantidad) || 0;
+      detallesActualizados[existeIndex].cantidad = (cantidadActual + parseInt(cantidad)).toString();
+      
+      form.handleChange('detalles', detallesActualizados);
+      return;
+    }
+    
+    // Obtener precio si no se proporciona
+    let precio = precioUnitario;
+    if (!precio) {
+      const presentacion = presentacionesFiltradas.find(p => p.id.toString() === presentacionId);
+      precio = presentacion?.precio_venta || '0';
+    }
+    
+    form.handleChange('detalles', [
+      ...form.formData.detalles, 
+      { presentacion_id: presentacionId, cantidad, precio_unitario: precio }
+    ]);
+  }, [form, presentacionesFiltradas]);
+
+  const actualizarProducto = useCallback((index: number, cantidad: string, precio: string) => {
+    if (index < 0 || index >= form.formData.detalles.length) return;
+    
+    const detallesActualizados = [...form.formData.detalles];
+    detallesActualizados[index] = {
+      ...detallesActualizados[index],
+      cantidad,
+      precio_unitario: precio
     };
     
-    return estadisticas;
-  }, [ventas]);
+    form.handleChange('detalles', detallesActualizados);
+  }, [form]);
 
-  // Información sobre estado de pago
-  const getEstadoPagoInfo = useCallback((estado: string) => {
-    switch (estado) {
-      case 'pagado':
-        return { color: '#4CAF50', text: 'Pagado' };
-      case 'pendiente':
-        return { color: '#FFC107', text: 'Pendiente' };
-      case 'parcial':
-        return { color: '#FF9800', text: 'Pago Parcial' };
-      default:
-        return { color: '#757575', text: estado };
+  const eliminarProducto = useCallback((index: number) => {
+    if (index < 0 || index >= form.formData.detalles.length) return;
+    
+    const detallesActualizados = [...form.formData.detalles];
+    detallesActualizados.splice(index, 1);
+    form.handleChange('detalles', detallesActualizados);
+  }, [form]);
+
+  // Cargar presentaciones por almacén
+  const loadPresentaciones = useCallback(async (almacenId?: number) => {
+    const idAlmacen = almacenId || parseInt(form.formData.almacen_id);
+    if (!idAlmacen) return [];
+    
+    return await filtrarPorAlmacenId(idAlmacen);
+  }, [form.formData.almacen_id, filtrarPorAlmacenId]);
+
+  // Cargar pagos
+  const loadPagos = useCallback(async (ventaId: number) => {
+    try {
+      const pagosData = await pagoApi.getPagosByVenta(ventaId);
+      if (pagosData) {
+        setPagos(pagosData);
+        return pagosData;
+      }
+      return [];
+    } catch (error) {
+      console.error('Error al cargar pagos:', error);
+      return [];
     }
   }, []);
 
-  // Resetear estado para nueva venta
-  const resetForm = useCallback(() => {
-    setFormData({
-      cliente_id: clientes.length > 0 ? clientes[0].id.toString() : '',
-      almacen_id: user?.almacen_id?.toString() || 
-                  (almacenes.length > 0 ? almacenes[0].id.toString() : ''),
-      fecha: new Date().toISOString().split('T')[0],
-      tipo_pago: 'contado',
-      consumo_diario_kg: ''
-    });
-    setDetalles([]);
-    setErrors({});
-  }, [clientes, almacenes, user]);
+  // Calcular estado de pago
+  const calcularEstadoPago = useCallback((total: number, pagosRealizados: number): 'pendiente' | 'parcial' | 'pagado' => {
+    if (pagosRealizados <= 0) return 'pendiente';
+    if (pagosRealizados >= total) return 'pagado';
+    return 'parcial';
+  }, []);
 
+  // Resetear formulario
+  const resetForm = useCallback(() => {
+    form.resetForm();
+    ventaCargadaRef.current = false;
+    ventaIdRef.current = null;
+  }, [form]);
+
+  // Calcular estadísticas
+  const getEstadisticas = useCallback(() => {
+    const totalVentas = pagination.total || 0;
+    
+    // Total de montos
+    const totalMonto = ventas.reduce((acc, venta) => 
+      acc + parseFloat(venta.total || '0'), 0);
+    
+    // Deuda total
+    const deudaTotal = ventas.reduce((acc, venta) => {
+      if (venta.estado_pago === 'pendiente') {
+        return acc + parseFloat(venta.total || '0');
+      } else if (venta.estado_pago === 'parcial') {
+        // Estimación para parciales
+        return acc + (parseFloat(venta.total || '0') * 0.5);
+      }
+      return acc;
+    }, 0);
+    
+    // Contadores por estado
+    const ventasPagadas = ventas.filter(v => v.estado_pago === 'pagado').length;
+    const ventasParciales = ventas.filter(v => v.estado_pago === 'parcial').length;
+    const ventasPendientes = ventas.filter(v => v.estado_pago === 'pendiente').length;
+    
+    // Contadores por tipo
+    const ventasContado = ventas.filter(v => v.tipo_pago === 'contado').length;
+    const ventasCredito = ventas.filter(v => v.tipo_pago === 'credito').length;
+    
+    return {
+      totalVentas,
+      totalMonto,
+      deudaTotal,
+      ventasPagadas,
+      ventasParciales,
+      ventasPendientes,
+      ventasContado,
+      ventasCredito
+    };
+  }, [ventas, pagination.total]);
+
+  // Retornar objeto con todas las funciones y estados necesarios
   return {
-    // Datos y estados
+    // Estados
     ventas,
-    formData,
-    detalles,
-    errors,
+    venta,
     isLoading,
-    isLoadingRelated,
-    isSubmitting,
+    isLoadingOptions,
+    isLoadingProductos,
     error,
-    pagination,
+    pagination: {
+      currentPage: pagination.page,
+      totalPages: pagination.lastPage,
+      itemsPerPage: pagination.perPage,
+      totalItems: pagination.total,
+      onPageChange: handlePageChange,
+      onItemsPerPageChange: handlePerPageChange
+    },
+    sortBy,
+    sortOrder,
     clientes,
     almacenes,
+    pagos,
+    presentacionesFiltradas,
+    filters,
+    
+    // Formulario
+    form,
+    validationRules,
+    
+    // Columnas
     columns,
     
-    // Acciones CRUD
-    loadRelatedData,
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteVenta: deleteItem,
+    // Funciones CRUD
+    loadVentas,
+    fetchData: loadVentas,
+    loadVenta,
+    loadVentaForEdit,
+    loadOptions,
+    handleSort: () => {}, // Simplificado, no implementado en el servidor
+    createVenta,
+    updateVenta,
+    deleteVenta,
+    confirmDelete,
     
-    // Manipulación del formulario
-    handleChange,
+    // Funciones específicas
+    calcularTotal,
     agregarProducto,
     actualizarProducto,
     eliminarProducto,
-    setDetalles,
-    
-    // Operaciones complejas
-    calcularTotal,
-    validarFormulario,
-    crearVenta,
-    actualizarVenta,
-    loadVenta,
+    handleAlmacenChange,
+    loadPresentaciones,
+    loadPagos,
+    calcularEstadoPago,
+    getEstadisticas,
     resetForm,
     
-    // Utilidades
-    getEstadisticas,
-    getEstadoPagoInfo
+    // Filtros
+    applyFilters,
+    clearFilters
   };
-}
+};

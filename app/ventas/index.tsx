@@ -1,7 +1,9 @@
-// app/ventas/index.tsx - Versión refactorizada
-import React, { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+// app/ventas/index.tsx - Versión optimizada
+import React, { useEffect, useCallback, useState } from 'react';
+import { StyleSheet, TouchableOpacity, View, TextInput, Pressable } from 'react-native';
 import { Stack, router } from 'expo-router';
+import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,8 +11,18 @@ import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { useVentas } from '@/hooks/crud/useVentas';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 
 export default function VentasScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  
+  // Estados para DatePicker
+  const [showFechaInicioPicker, setShowFechaInicioPicker] = useState(false);
+  const [showFechaFinPicker, setShowFechaFinPicker] = useState(false);
+  
   // Usar el hook especializado para ventas
   const { 
     ventas, 
@@ -18,17 +30,44 @@ export default function VentasScreen() {
     error, 
     pagination, 
     columns,
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
+    fetchData: hookFetchData,
+    loadVentas,
     deleteVenta,
-    getEstadisticas
+    getEstadisticas,
+    filters,
+    applyFilters,
+    clearFilters,
+    clientes,
+    almacenes,
+    loadOptions
   } = useVentas();
+  
+  // Estado local para filtros
+  const [localFilters, setLocalFilters] = useState({
+    cliente_id: '',
+    almacen_id: '',
+    fecha_inicio: '',
+    fecha_fin: ''
+  });
+  
+  // Crear un fallback para fetchData si no está disponible
+  const fetchData = useCallback(() => {
+    if (hookFetchData) {
+      return hookFetchData();
+    }
+    if (loadVentas) {
+      return loadVentas(pagination.currentPage, pagination.itemsPerPage);
+    }
+    console.error('No se encontró método fetchData ni loadVentas');
+    return Promise.resolve();
+  }, [hookFetchData, loadVentas, pagination.currentPage, pagination.itemsPerPage]);
   
   // Cargar datos al iniciar
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    console.log('Cargando ventas iniciales...');
+    loadVentas(1, 10);
+    loadOptions();
+  }, [loadVentas, loadOptions]);
 
   // Navegar a la pantalla de creación de venta
   const handleAddVenta = () => {
@@ -38,37 +77,141 @@ export default function VentasScreen() {
   // Calcular estadísticas 
   const ventasResumen = getEstadisticas();
 
+  // Manejar cambio en filtros
+  const handleFilterChange = (name: string, value: string) => {
+    setLocalFilters(prev => ({ ...prev, [name]: value }));
+  };
+  
+  // Manejar cambio de fecha inicio
+  const handleFechaInicioChange = (event: any, selectedDate?: Date) => {
+    setShowFechaInicioPicker(false);
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      handleFilterChange('fecha_inicio', formattedDate);
+    }
+  };
+  
+  // Manejar cambio de fecha fin
+  const handleFechaFinChange = (event: any, selectedDate?: Date) => {
+    setShowFechaFinPicker(false);
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      handleFilterChange('fecha_fin', formattedDate);
+    }
+  };
+  
+  // Aplicar filtros
+  const handleApplyFilters = () => {
+    applyFilters(localFilters);
+  };
+  
+  // Limpiar filtros
+  const handleClearFilters = () => {
+    setLocalFilters({
+      cliente_id: '',
+      almacen_id: '',
+      fecha_inicio: '',
+      fecha_fin: ''
+    });
+    clearFilters();
+  };
+
+  // Manejar cambio de página
+  const handlePageChange = (page: number) => {
+    loadVentas(page, pagination.itemsPerPage);
+  };
+
+  // Manejar cambio de elementos por página
+  const handleItemsPerPageChange = (perPage: number) => {
+    loadVentas(1, perPage);
+  };
+
   return (
     <ScreenContainer 
       title="Ventas"
       scrollable={false}
     >
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.summary}>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total de Ventas:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : pagination.totalItems}
-            </ThemedText>
-          </ThemedView>
-          
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Monto Total:</ThemedText>
-            <ThemedText style={styles.summaryValue}>${ventasResumen.total}</ThemedText>
-          </ThemedView>
-          
-          <ThemedView style={styles.summaryBadges}>
-            <ThemedView style={[styles.badge, styles.badgePagado]}>
-              <ThemedText style={styles.badgeText}>{ventasResumen.pagadas} Pagadas</ThemedText>
+        {/* Barra de herramientas compacta */}
+        <ThemedView style={styles.toolbar}>
+          <ThemedView style={styles.toolbarSummary}>
+            <ThemedView style={styles.summaryItem}>
+              <ThemedText style={styles.summaryLabel}>Total: </ThemedText>
+              <ThemedText style={styles.summaryValue}>{ventasResumen.totalVentas}</ThemedText>
             </ThemedView>
             
-            <ThemedView style={[styles.badge, styles.badgePendiente]}>
-              <ThemedText style={styles.badgeText}>{ventasResumen.pendientes} Pendientes</ThemedText>
+            <ThemedView style={styles.summaryItem}>
+              <ThemedText style={styles.summaryLabel}>Monto: </ThemedText>
+              <ThemedText style={styles.summaryValue}>${ventasResumen.totalMonto.toFixed(2)}</ThemedText>
             </ThemedView>
             
-            <ThemedView style={[styles.badge, styles.badgeParcial]}>
-              <ThemedText style={styles.badgeText}>{ventasResumen.parciales} Parciales</ThemedText>
+            <ThemedView style={styles.summaryItem}>
+              <ThemedText style={styles.summaryLabel}>Deuda: </ThemedText>
+              <ThemedText style={[styles.summaryValue, { color: '#F44336' }]}>
+                ${ventasResumen.deudaTotal.toFixed(2)}
+              </ThemedText>
             </ThemedView>
+          </ThemedView>
+        </ThemedView>
+        
+        {/* Filtro compacto de fechas */}
+        <ThemedView style={styles.dateFiltros}>
+          <ThemedView style={styles.dateFilterRow}>
+            <ThemedView style={styles.dateFilterItem}>
+              <TouchableOpacity 
+                style={styles.dateInput}
+                onPress={() => setShowFechaInicioPicker(true)}
+              >
+                <ThemedText style={styles.dateInputLabel}>Desde:</ThemedText>
+                <ThemedText style={styles.dateInputValue}>
+                  {localFilters.fecha_inicio || 'Seleccionar fecha'}
+                </ThemedText>
+                <IconSymbol name="calendar" size={16} color="#888" />
+              </TouchableOpacity>
+              {showFechaInicioPicker && (
+                <DateTimePicker
+                  value={localFilters.fecha_inicio ? new Date(localFilters.fecha_inicio) : new Date()}
+                  mode="date"
+                  onChange={handleFechaInicioChange}
+                />
+              )}
+            </ThemedView>
+            
+            <ThemedView style={styles.dateFilterItem}>
+              <TouchableOpacity 
+                style={styles.dateInput}
+                onPress={() => setShowFechaFinPicker(true)}
+              >
+                <ThemedText style={styles.dateInputLabel}>Hasta:</ThemedText>
+                <ThemedText style={styles.dateInputValue}>
+                  {localFilters.fecha_fin || 'Seleccionar fecha'}
+                </ThemedText>
+                <IconSymbol name="calendar" size={16} color="#888" />
+              </TouchableOpacity>
+              {showFechaFinPicker && (
+                <DateTimePicker
+                  value={localFilters.fecha_fin ? new Date(localFilters.fecha_fin) : new Date()}
+                  mode="date"
+                  onChange={handleFechaFinChange}
+                />
+              )}
+            </ThemedView>
+          </ThemedView>
+          
+          <ThemedView style={styles.dateFilterActions}>
+            <TouchableOpacity 
+              style={[styles.filterButton, styles.applyButton]} 
+              onPress={handleApplyFilters}
+            >
+              <ThemedText style={styles.buttonText}>Buscar</ThemedText>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.filterButton, styles.clearButton]} 
+              onPress={handleClearFilters}
+            >
+              <ThemedText style={styles.buttonText}>Limpiar</ThemedText>
+            </TouchableOpacity>
           </ThemedView>
         </ThemedView>
         
@@ -78,11 +221,18 @@ export default function VentasScreen() {
           isLoading={isLoading}
           error={error}
           baseRoute="/ventas"
-          pagination={pagination}
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange
+          }}
           sorting={{
             sortColumn: 'fecha',
             sortOrder: 'desc',
-            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+            onSort: () => {}
           }}
           actions={{
             onView: true,
@@ -113,49 +263,99 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  summary: {
-    padding: 16,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    margin: 16,
-    marginBottom: 0,
-    borderRadius: 8,
-    gap: 12,
-  },
-  summaryRow: {
+  // Barra de herramientas compacta
+  toolbar: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: 'rgba(33, 150, 243, 0.05)',
+  },
+  toolbarSummary: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  summaryItem: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
   summaryLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 14,
+    opacity: 0.8,
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  summaryBadges: {
+  toolbarButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 8,
   },
-  badge: {
-    flex: 1,
-    borderRadius: 4,
-    padding: 6,
+  iconButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  badgePagado: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  // Filtros de fecha compactos
+  dateFiltros: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
-  badgePendiente: {
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+  dateFilterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
   },
-  badgeParcial: {
-    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  dateFilterItem: {
+    flex: 1,
   },
-  badgeText: {
+  dateInput: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 4,
+    paddingHorizontal: 10,
+  },
+  dateInputLabel: {
     fontSize: 12,
-    fontWeight: '500',
+    opacity: 0.7,
+    marginRight: 6,
+  },
+  dateInputValue: {
+    flex: 1,
+    fontSize: 13,
+  },
+  dateFilterActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    flex: 1,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 4,
+  },
+  applyButton: {
+    backgroundColor: Colors.primary,
+  },
+  clearButton: {
+    backgroundColor: Colors.secondary,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
 });

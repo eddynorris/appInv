@@ -87,27 +87,15 @@ export function useProductos(options: UseProductosOptions = {}) {
     // Validar almacenId
     if (!almacenId) {
       console.log("ID de almacén inválido, no se puede filtrar");
+      setPresentacionesFiltradas([]);
       return [];
     }
     
     // Convertir a string para comparación
     const almacenIdStr = almacenId.toString();
-    
-    // Evitar filtrado duplicado si el almacén no ha cambiado
-    if (lastAlmacenIdRef.current === almacenIdStr && presentacionesFiltradas.length > 0) {
-      console.log(`Almacén ${almacenIdStr} ya filtrado, usando datos existentes`);
-      return presentacionesFiltradas;
-    }
-    
-    // Si no estamos filtrando por almacén, simplemente devolvemos todas las presentaciones
-    if (!filtrarPorAlmacen) {
-      console.log("Filtrado por almacén desactivado, retornando todas las presentaciones");
-      setPresentacionesFiltradas(presentaciones);
-      return presentaciones;
-    }
+    console.log(`Iniciando filtrado para almacén: ${almacenIdStr}`);
     
     try {
-      console.log(`Filtrando presentaciones para almacén ID: ${almacenIdStr}`);
       setIsLoading(true);
       
       // Actualizar referencia del último almacén filtrado
@@ -121,9 +109,13 @@ export function useProductos(options: UseProductosOptions = {}) {
         presentacionesAUsar = await cargarPresentaciones();
       }
       
+      // Limpiar presentaciones filtradas antes de asignar las nuevas
+      // Esto evita que se muestren productos de almacenes anteriores
+      setPresentacionesFiltradas([]);
+      
       // Ahora tenemos presentaciones, procedemos con el filtrado
       if (soloConStock) {
-        console.log("Filtrando solo productos con stock");
+        console.log(`Filtrando productos con stock para almacén: ${almacenIdStr}`);
         const inventarioRes = await inventarioApi.getInventarios(1, 100, Number(almacenId));
         
         if (inventarioRes && inventarioRes.data && inventarioRes.data.length > 0) {
@@ -140,10 +132,10 @@ export function useProductos(options: UseProductosOptions = {}) {
           );
           
           setPresentacionesFiltradas(filtradas);
-          console.log(`Presentaciones filtradas por stock: ${filtradas.length}`);
+          console.log(`Presentaciones filtradas por stock para almacén ${almacenIdStr}: ${filtradas.length}`);
           return filtradas;
         } else {
-          console.log("No se encontró inventario con stock para el almacén");
+          console.log(`No se encontró inventario con stock para el almacén ${almacenIdStr}`);
           setPresentacionesFiltradas([]);
           return [];
         }
@@ -153,12 +145,13 @@ export function useProductos(options: UseProductosOptions = {}) {
         return presentacionesAUsar;
       }
     } catch (err) {
-      console.error("Error al filtrar por almacén:", err);
+      console.error(`Error al filtrar por almacén ${almacenIdStr}:`, err);
+      setPresentacionesFiltradas([]);
       return [];
     } finally {
       setIsLoading(false);
     }
-  }, [filtrarPorAlmacen, soloConStock, presentaciones, cargarPresentaciones, presentacionesFiltradas.length]);
+  }, [filtrarPorAlmacen, soloConStock, presentaciones, cargarPresentaciones]);
 
   // Método para obtener presentaciones disponibles (no incluidas en detalles actuales)
   const getPresentacionesDisponibles = useCallback((detallesActuales: Array<{ presentacion_id: string }>) => {

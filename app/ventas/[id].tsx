@@ -1,275 +1,420 @@
 // app/ventas/[id].tsx - Versión refactorizada
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, ActivityIndicator, Alert, ScrollView, TouchableOpacity, View } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import ProductDetailsList from '@/components/ProductDetailsList';
-import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
-import { useVentas } from '@/hooks/crud/useVentas';
 import { Colors } from '@/constants/Colors';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { useVentas } from '@/hooks/crud/useVentas';
+import { Badge } from '@/components/ui/Badge';
+import ProductDetailsList from '@/components/ProductDetailsList';
 
 export default function VentaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  
-  // Estado para diálogo de confirmación
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const colorScheme = useColorScheme();
+  const [isInitialized, setIsInitialized] = useState(false);
   
   // Usar el hook de ventas
   const {
+    venta,
+    pagos,
+    isLoading,
+    error,
     loadVenta,
-    deleteVenta,
-    getEstadoPagoInfo
+    confirmDelete,
+    loadPagos
   } = useVentas();
   
-  // Estado local
-  const [venta, setVenta] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Control para cargar la venta una sola vez
+  const ventaCargada = useRef(false);
   
-  // Cargar los datos de la venta
+  // Cargar datos de la venta al iniciar
   useEffect(() => {
-    const fetchVentaData = async () => {
-      if (!id) return;
+    const cargarVenta = async () => {
+      if (!id || ventaCargada.current) return;
       
       try {
-        setIsLoading(true);
-        setError(null);
-        
         const ventaData = await loadVenta(parseInt(id));
-        
         if (ventaData) {
-          setVenta(ventaData);
-        } else {
-          setError('Error al cargar los datos de la venta');
+          ventaCargada.current = true;
+          
+          // Cargar pagos relacionados si es necesario
+          if (ventaData.pagos && ventaData.pagos.length > 0) {
+            await loadPagos(parseInt(id));
+          }
+          
+          setIsInitialized(true);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos de la venta');
-      } finally {
-        setIsLoading(false);
+        console.error('Error al cargar venta:', err);
       }
     };
 
-    fetchVentaData();
-  }, [id, loadVenta]);
+    cargarVenta();
+  }, [id, loadVenta, loadPagos]);
 
-  // Navegar a la página de edición
+  // Manejar la edición de la venta
   const handleEdit = () => {
-    if (!id) return;
+    if (id) {
     router.push(`/ventas/edit/${id}`);
-  };
-
-  // Manejar eliminación
-  const handleDelete = () => {
-    setShowDeleteDialog(true);
-  };
-  
-  // Confirmar eliminación
-  const confirmDelete = async () => {
-    if (!id) return;
-    
-    try {
-      setIsLoading(true);
-      const success = await deleteVenta(parseInt(id));
-      
-      if (success) {
-        router.replace('/ventas');
-      } else {
-        throw new Error('No se pudo eliminar la venta');
-      }
-    } catch (error) {
-      setError('Error al eliminar la venta');
-      setIsLoading(false);
-    } finally {
-      setShowDeleteDialog(false);
     }
   };
 
-  // Si tenemos datos, obtener información del estado de pago
-  const estadoPago = venta ? getEstadoPagoInfo(venta.estado_pago) : { color: '#757575', text: '-' };
+  // Manejar la eliminación de la venta
+  const handleDelete = () => {
+    if (id) {
+      confirmDelete(parseInt(id));
+    }
+  };
+  
+  // Manejar la visualización de pagos relacionados
+  const handleVerPagos = () => {
+    if (id) {
+      router.push(`/pagos?ventaId=${id}`);
+    }
+  };
+  
+  // Manejar la creación de un nuevo pago
+  const handleCrearPago = () => {
+    if (id) {
+      router.push(`/pagos/create?ventaId=${id}`);
+    }
+  };
+  
+  // Formatear fecha para mostrar
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  
+  // Obtener color del estado de pago
+  const getEstadoColor = (estado?: string) => {
+    if (!estado) return '#757575'; // Gris por defecto
+    
+    switch (estado) {
+      case 'pagado': return '#4CAF50'; // Verde
+      case 'parcial': return '#FFC107'; // Amarillo
+      case 'pendiente': return '#F44336'; // Rojo
+      default: return '#757575'; // Gris
+    }
+  };
+  
+  // Obtener color del tipo de pago
+  const getTipoPagoColor = (tipo?: string) => {
+    return tipo === 'contado' ? '#4CAF50' : '#2196F3'; // Verde para contado, azul para crédito
+  };
+  
+  // Formatear estado de pago para mostrar con primera letra mayúscula
+  const formatEstado = (estado?: string) => {
+    if (!estado) return 'Desconocido';
+    return estado.charAt(0).toUpperCase() + estado.slice(1);
+  };
+  
+  // Calcular total de pagos
+  const calcularTotalPagos = () => {
+    if (!pagos || pagos.length === 0) return 0;
+    
+    return pagos.reduce((acc, pago) => {
+      return acc + parseFloat(pago.monto);
+    }, 0);
+  };
+  
+  // Formatear cantidades monetarias
+  const formatMoney = (amount?: string | number) => {
+    if (amount === undefined || amount === null) return '$0.00';
+    
+    const value = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return `$${value.toFixed(2)}`;
+  };
+  
+  // Mostrar pantalla de carga
+  if (isLoading || !isInitialized) {
+    return (
+      <>
+        <Stack.Screen options={{ 
+          title: `Venta #${id}`,
+          headerShown: true 
+        }} />
+        <ThemedView style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+          <ThemedText style={styles.loadingText}>Cargando detalles de la venta...</ThemedText>
+        </ThemedView>
+      </>
+    );
+    }
+  
+  // Mostrar pantalla de error
+  if (error || !venta) {
+    return (
+      <>
+        <Stack.Screen options={{ 
+          title: 'Error',
+          headerShown: true 
+        }} />
+        <ThemedView style={styles.errorContainer}>
+          <IconSymbol name="exclamationmark.triangle" size={60} color="#F44336" />
+          <ThemedText style={styles.errorText}>
+            {error || 'No se pudo cargar la venta'}
+          </ThemedText>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ThemedText style={styles.backButtonText}>Volver</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+      </>
+    );
+  }
+  
+  // Calcular saldo pendiente y estado de pago
+  const totalVenta = parseFloat(venta.total || '0');
+  const totalPagado = calcularTotalPagos();
+  const saldoPendiente = totalVenta - totalPagado;
 
   return (
-    <ScreenContainer
-      title={venta ? `Venta #${venta.id}` : 'Detalles de Venta'}
-      isLoading={isLoading}
-      error={error}
-      loadingMessage="Cargando datos de la venta..."
-    >
-      {venta && (
+    <>
+      <Stack.Screen options={{ 
+        title: `Venta #${id}`,
+        headerShown: true 
+      }} />
+      
+      <ScrollView style={styles.container}>
         <ThemedView style={styles.card}>
-          <ThemedText type="title" style={styles.totalText}>
-            ${parseFloat(venta.total).toFixed(2)}
-          </ThemedText>
+          <ThemedView style={styles.headerRow}>
+            <ThemedText type="title">Detalles de Venta #{id}</ThemedText>
           
-          <ThemedView 
-            style={[
-              styles.estadoBadge, 
-              { backgroundColor: `${estadoPago.color}20` }
-            ]}
-          >
-            <ThemedText style={[styles.estadoText, { color: estadoPago.color }]}>
-              {estadoPago.text}
-            </ThemedText>
+            <ThemedView style={styles.estadoBadges}>
+              <Badge 
+                text={formatEstado(venta.estado_pago)}
+                color={getEstadoColor(venta.estado_pago)}
+              />
+              
+              <Badge 
+                text={venta.tipo_pago === 'contado' ? 'Contado' : 'Crédito'}
+                color={getTipoPagoColor(venta.tipo_pago)}
+              />
+            </ThemedView>
           </ThemedView>
           
           <ThemedView style={styles.section}>
             <ThemedText type="subtitle">Información General</ThemedText>
             
             <ThemedView style={styles.infoRow}>
-              <ThemedText type="defaultSemiBold">Fecha:</ThemedText>
-              <ThemedText>{new Date(venta.fecha).toLocaleString()}</ThemedText>
+              <ThemedText style={styles.label}>Fecha:</ThemedText>
+              <ThemedText>{formatDate(venta.fecha)}</ThemedText>
             </ThemedView>
             
             <ThemedView style={styles.infoRow}>
-              <ThemedText type="defaultSemiBold">Cliente:</ThemedText>
-              <ThemedText>{venta.cliente?.nombre || 'No especificado'}</ThemedText>
+              <ThemedText style={styles.label}>Cliente:</ThemedText>
+              <ThemedText>{venta.cliente?.nombre || 'Sin cliente'}</ThemedText>
             </ThemedView>
             
             <ThemedView style={styles.infoRow}>
-              <ThemedText type="defaultSemiBold">Almacén:</ThemedText>
-              <ThemedText>{venta.almacen?.nombre || 'No especificado'}</ThemedText>
+              <ThemedText style={styles.label}>Almacén:</ThemedText>
+              <ThemedText>{venta.almacen?.nombre || 'Sin almacén'}</ThemedText>
             </ThemedView>
             
-            <ThemedView style={styles.infoRow}>
-              <ThemedText type="defaultSemiBold">Tipo de Pago:</ThemedText>
-              <ThemedText style={{ textTransform: 'capitalize' }}>{venta.tipo_pago}</ThemedText>
-            </ThemedView>
-            
-            {venta.saldo_pendiente && parseFloat(venta.saldo_pendiente) > 0 && (
+            {venta.consumo_diario_kg && (
               <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Saldo Pendiente:</ThemedText>
-                <ThemedText style={{ color: '#FF5722', fontWeight: 'bold' }}>
-                  ${parseFloat(venta.saldo_pendiente).toFixed(2)}
-                </ThemedText>
+                <ThemedText style={styles.label}>Consumo Diario:</ThemedText>
+                <ThemedText>{venta.consumo_diario_kg} kg</ThemedText>
               </ThemedView>
             )}
           </ThemedView>
 
-          {/* Mostrar productos */}
           <ThemedView style={styles.section}>
-            {venta.detalles && venta.detalles.length > 0 ? (
-              <ProductDetailsList
-                details={venta.detalles}
-                title="Detalles de la Venta"
-                isPedido={false}
-              />
-            ) : (
-              <ThemedView style={styles.noDetalles}>
-                <IconSymbol name="exclamationmark.circle" size={30} color="#FFC107" />
-                <ThemedText style={styles.noDetallesText}>
-                  No hay detalles disponibles para esta venta
+            <ThemedText type="subtitle">Resumen Financiero</ThemedText>
+            
+            <ThemedView style={styles.infoRow}>
+              <ThemedText style={styles.label}>Total Venta:</ThemedText>
+              <ThemedText style={styles.montoTotal}>{formatMoney(venta.total)}</ThemedText>
+            </ThemedView>
+            
+            <ThemedView style={styles.infoRow}>
+              <ThemedText style={styles.label}>Total Pagado:</ThemedText>
+              <ThemedText style={styles.montoPagado}>{formatMoney(totalPagado)}</ThemedText>
+            </ThemedView>
+            
+            <ThemedView style={styles.infoRow}>
+              <ThemedText style={styles.label}>Saldo Pendiente:</ThemedText>
+              <ThemedText style={[
+                styles.montoPendiente,
+                { color: saldoPendiente <= 0 ? '#4CAF50' : '#F44336' }
+              ]}>
+                {formatMoney(saldoPendiente)}
                 </ThemedText>
               </ThemedView>
-            )}
           </ThemedView>
           
-          {/* Botones de acción */}
-          <ThemedView style={styles.actions}>
+          {/* Productos/Detalles de la venta */}
+          <ProductDetailsList 
+            details={venta.detalles || []} 
+            title="Productos en esta venta"
+          />
+          
+          {/* Acciones relacionadas a pagos */}
+          {venta.tipo_pago === 'credito' && saldoPendiente > 0 && (
+            <ThemedView style={styles.actionSection}>
+              <ThemedText type="subtitle">Acciones de Pago</ThemedText>
+              
+              <ThemedView style={styles.actionButtons}>
             <TouchableOpacity 
-              style={[styles.button, styles.editButton]} 
-              onPress={handleEdit}
+                  style={styles.actionButton}
+                  onPress={handleVerPagos}
             >
-              <ThemedText style={styles.buttonText}>Editar</ThemedText>
+                  <IconSymbol name="list.bullet" size={20} color="#FFFFFF" />
+                  <ThemedText style={styles.actionButtonText}>Ver Pagos</ThemedText>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.button, styles.deleteButton]} 
-              onPress={handleDelete}
+                  style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                  onPress={handleCrearPago}
             >
-              <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
+                  <IconSymbol name="plus.circle" size={20} color="#FFFFFF" />
+                  <ThemedText style={styles.actionButtonText}>Registrar Pago</ThemedText>
             </TouchableOpacity>
           </ThemedView>
         </ThemedView>
       )}
       
-      {/* Diálogo de confirmación para eliminar */}
-      <ConfirmationDialog
-        visible={showDeleteDialog}
-        title="Eliminar Venta"
-        message="¿Está seguro que desea eliminar esta venta? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={confirmDelete}
-        onCancel={() => setShowDeleteDialog(false)}
-      />
-    </ScreenContainer>
+          {/* Acciones generales */}
+          <ThemedView style={styles.actionSection}>
+            <ThemedText type="subtitle">Acciones</ThemedText>
+            
+            <ThemedView style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#2196F3' }]}
+                onPress={handleEdit}
+              >
+                <IconSymbol name="square.and.pencil" size={20} color="#FFFFFF" />
+                <ThemedText style={styles.actionButtonText}>Editar</ThemedText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, { backgroundColor: '#F44336' }]}
+                onPress={handleDelete}
+              >
+                <IconSymbol name="trash" size={20} color="#FFFFFF" />
+                <ThemedText style={styles.actionButtonText}>Eliminar</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          </ThemedView>
+        </ThemedView>
+      </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 8,
+  container: {
+    flex: 1,
     padding: 16,
-    marginBottom: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  backButton: {
+    backgroundColor: '#0a7ea4',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5,
+  },
+  backButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  card: {
+    borderRadius: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
-  totalText: {
-    fontSize: 32,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  estadoBadge: {
-    alignSelf: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+  headerRow: {
+    flexDirection: 'column',
     marginBottom: 16,
   },
-  estadoText: {
-    fontWeight: '600',
-    textTransform: 'uppercase',
+  estadoBadges: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 8,
   },
   section: {
-    marginTop: 16,
-    gap: 8,
+    marginBottom: 20,
   },
   infoRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-    gap: 8,
     justifyContent: 'space-between',
+    marginTop: 10,
   },
-  noDetalles: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center', 
-    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-    borderRadius: 8,
-    marginVertical: 10,
+  label: {
+    fontWeight: '600',
   },
-  noDetallesText: {
-    marginTop: 8,
-    textAlign: 'center',
+  montoTotal: {
+    fontWeight: 'bold',
+    fontSize: 16,
   },
-  actions: {
+  montoPagado: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#4CAF50',
+  },
+  montoPendiente: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  actionSection: {
+    marginTop: 16,
+  },
+  actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 24,
-    gap: 16,
+    marginTop: 12,
+    gap: 12,
   },
-  button: {
+  actionButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: '#0a7ea4',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
   },
-  editButton: {
-    backgroundColor: '#2196F3',
-  },
-  deleteButton: {
-    backgroundColor: '#F44336',
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
