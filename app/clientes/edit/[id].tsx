@@ -1,318 +1,143 @@
 // app/clientes/edit/[id].tsx
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  Alert,
-  ScrollView
-} from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 
-import { ThemedView } from '@/components/ThemedView';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { FormField } from '@/components/form/FormField';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ThemedText } from '@/components/ThemedText';
 import { clienteApi } from '@/services/api';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useForm } from '@/hooks/useForm';
 import { Cliente } from '@/models';
 
 export default function EditClienteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme() ?? 'light';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
-  // Form state
-  const [formData, setFormData] = useState<Partial<Cliente>>({
+  // Custom hook for form state
+  const { 
+    formData, 
+    errors, 
+    isSubmitting, 
+    handleChange, 
+    handleSubmit,
+    setFormData
+  } = useForm({
     nombre: '',
     telefono: '',
     direccion: '',
   });
 
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Load cliente data
+  // Use useEffect para cargar los datos una sola vez
   useEffect(() => {
     const fetchCliente = async () => {
       if (!id) return;
       
       try {
-        setIsLoading(true);
-        const response = await clienteApi.getCliente(parseInt(id));
+        setIsLoadingData(true);
+        setError(null);
         
-        if (response) {
+        const data = await clienteApi.getCliente(parseInt(id));
+        
+        if (data) {
+          // Cargar datos en el formulario
           setFormData({
-            nombre: response.nombre || '',
-            telefono: response.telefono || '',
-            direccion: response.direccion || '',
+            nombre: data.nombre || '',
+            telefono: data.telefono || '',
+            direccion: data.direccion || '',
           });
         } else {
-          Alert.alert('Error', 'No se pudo cargar los datos del cliente');
-          router.back();
+          setError('No se pudo cargar los datos del cliente');
         }
-      } catch (error) {
-        console.error('Error al cargar cliente:', error);
-        Alert.alert('Error', 'No se pudo cargar los datos del cliente');
-        router.back();
+      } catch (err) {
+        console.error('Error fetching cliente:', err);
+        setError(err instanceof Error ? err.message : 'Error al cargar los datos del cliente');
       } finally {
-        setIsLoading(false);
+        setIsLoadingData(false);
       }
     };
 
     fetchCliente();
-  }, [id]);
+  }, [id, setFormData]); // Solo depende de id y setFormData
 
-  const handleChange = (field: keyof Cliente, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
+  // Validation rules
+  const validationRules = {
+    nombre: (value: string) => !value.trim() ? 'El nombre es requerido' : null,
+    telefono: (value: string) => !value.trim() ? 'El teléfono es requerido' : null,
+    direccion: (value: string) => !value.trim() ? 'La dirección es requerida' : null,
   };
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.nombre?.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
-    }
-    
-    if (!formData.telefono?.trim()) {
-      newErrors.telefono = 'El teléfono es requerido';
-    }
-    
-    if (!formData.direccion?.trim()) {
-      newErrors.direccion = 'La dirección es requerida';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate() || !id) {
-      return;
-    }
+  // Handle form submission
+  const submitForm = useCallback(async (data: typeof formData) => {
+    if (!id) return false;
     
     try {
-      setIsSubmitting(true);
-      
-      const response = await clienteApi.updateCliente(parseInt(id), formData);
+      const response = await clienteApi.updateCliente(parseInt(id), data);
       
       if (response) {
         Alert.alert(
           'Cliente Actualizado',
           'El cliente ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
+          [{ text: 'OK', onPress: () => router.back() }]
         );
+        return true;
       } else {
         Alert.alert('Error', 'No se pudo actualizar el cliente');
+        return false;
       }
-    } catch (err) {
-      console.error('Error al actualizar cliente:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar el cliente';
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al actualizar el cliente';
       Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+      return false;
     }
-  };
-
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Editar Cliente',
-          headerShown: true 
-        }} />
-        <ThemedView style={[styles.container, styles.loadingContainer]}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando datos del cliente...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
+  }, [id]);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Editar Cliente',
-        headerShown: true 
-      }} />
-      
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedText type="title" style={styles.heading}>Editar Cliente</ThemedText>
+    <ScreenContainer 
+      title="Editar Cliente"
+      isLoading={isLoadingData}
+      error={error}
+      loadingMessage="Cargando datos del cliente..."
+    >
+      <ThemedText type="title" style={{ marginBottom: 20 }}>Editar Cliente</ThemedText>
 
-          <ThemedView style={styles.form}>
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Nombre *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.nombre && styles.inputError
-                ]}
-                value={formData.nombre}
-                onChangeText={(value) => handleChange('nombre', value)}
-                placeholder="Ingresa el nombre"
-                placeholderTextColor="#9BA1A6"
-              />
-              {errors.nombre && (
-                <ThemedText style={styles.errorText}>{errors.nombre}</ThemedText>
-              )}
-            </ThemedView>
+      <FormField
+        label="Nombre"
+        value={formData.nombre}
+        onChangeText={(value) => handleChange('nombre', value)}
+        placeholder="Ingresa el nombre del cliente"
+        error={errors.nombre}
+        required
+      />
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Teléfono *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.telefono && styles.inputError
-                ]}
-                value={formData.telefono}
-                onChangeText={(value) => handleChange('telefono', value)}
-                placeholder="Ingresa el teléfono"
-                placeholderTextColor="#9BA1A6"
-                keyboardType="phone-pad"
-              />
-              {errors.telefono && (
-                <ThemedText style={styles.errorText}>{errors.telefono}</ThemedText>
-              )}
-            </ThemedView>
+      <FormField
+        label="Teléfono"
+        value={formData.telefono}
+        onChangeText={(value) => handleChange('telefono', value)}
+        placeholder="Ingresa el teléfono del cliente" 
+        error={errors.telefono}
+        keyboardType="phone-pad"
+        required
+      />
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Dirección *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.direccion && styles.inputError
-                ]}
-                value={formData.direccion}
-                onChangeText={(value) => handleChange('direccion', value)}
-                placeholder="Ingresa la dirección"
-                placeholderTextColor="#9BA1A6"
-              />
-              {errors.direccion && (
-                <ThemedText style={styles.errorText}>{errors.direccion}</ThemedText>
-              )}
-            </ThemedView>
+      <FormField
+        label="Dirección"
+        value={formData.direccion}
+        onChangeText={(value) => handleChange('direccion', value)}
+        placeholder="Ingresa la dirección del cliente"
+        error={errors.direccion}
+        multiline
+        required
+      />
 
-            <ThemedView style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => router.back()}
-              >
-                <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[
-                  styles.submitButton,
-                  isSubmitting && styles.submitButtonDisabled
-                ]}
-                onPress={handleSubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
-                )}
-              </TouchableOpacity>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+      <ActionButtons
+        onSave={() => handleSubmit(submitForm, validationRules)}
+        onCancel={() => router.back()}
+        isSubmitting={isSubmitting}
+        saveText="Guardar Cambios"
+      />
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heading: {
-    marginBottom: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  formGroup: {
-    gap: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0E0E0',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#424242',
-  },
-  submitButton: {
-    flex: 2,
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

@@ -12,7 +12,9 @@ import {
   Pedido,
   PedidoDetalle,
   Pago,
-  Lote
+  Lote,
+  ProductoSimple,
+  ProveedorSimple
 } from '@/models';
 import { authService } from './auth';
 
@@ -31,6 +33,12 @@ export interface ApiResponse<T> {
 
 // Base URL configuration
 const getBaseUrl = () => {
+  // Usar la variable de entorno si está definida
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  
+  // Fallback por compatibilidad
   if (Platform.OS === 'android') {
     return 'http://192.168.1.37:5000'; // Usar IP para Android
   }
@@ -43,7 +51,43 @@ export const API_CONFIG = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 15000 // 15 segundos timeout
+  timeout: 15000, // 15 segundos timeout
+  getImageUrl: (path?: string): string => {
+    if (!path) {
+      console.log('No se proporcionó ruta de imagen');
+      return '';
+    }
+    
+    // Si ya es una URL absoluta, devolverla directamente
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      console.log('Usando URL absoluta:', path);
+      return path;
+    }
+    
+    // Manejar rutas relativas que empiezan con /uploads/
+    if (path.startsWith('/uploads/')) {
+      const fullUrl = `${API_CONFIG.baseUrl}${path}`;
+      console.log('URL con ruta /uploads/:', fullUrl);
+      return fullUrl;
+    }
+    
+    // Limpiar y normalizar la ruta
+    const cleanPath = path.replace(/\\/g, '/').replace(/^\//, '');
+    
+    // Construir la URL completa
+    const baseUrl = API_CONFIG.baseUrl.endsWith('/')
+      ? API_CONFIG.baseUrl.slice(0, -1)
+      : API_CONFIG.baseUrl;
+    
+    const fullUrl = `${baseUrl}/uploads/${cleanPath}`;
+    console.log('URL construida para imagen:', fullUrl);
+    return fullUrl;
+  },
+  // Función auxiliar para verificar si una URL de imagen es válida
+  isValidImageUrl: (url: string | undefined): boolean => {
+    if (!url) return false;
+    return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/uploads/');
+  }
 };
 
 // Simplified error handling
@@ -69,6 +113,12 @@ const handleApiError = (error: any): never => {
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   try {
     const url = `${API_CONFIG.baseUrl}${endpoint}`;
+    console.log(`API request: ${options.method || 'GET'} ${url}`);
+    
+    if (options.body) {
+      console.log('Request body:', options.body);
+    }
+    
     const authHeaders = await authService.getAuthHeader();
     
     // Verificar si se está enviando FormData
@@ -81,6 +131,8 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
       ...(options.headers || {}),
     };
     
+    console.log('Request headers:', JSON.stringify(headers));
+    
     const response = await fetch(url, {
       ...options,
       headers,
@@ -88,17 +140,22 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error(`API error: ${response.status} ${response.statusText}`, errorData);
       throw { response: { status: response.status, data: errorData } };
     }
     
     // Manejar respuestas vacías
     const text = await response.text();
     if (!text.trim()) {
+      console.log('API response: Empty response');
       return {} as T;
     }
     
-    return JSON.parse(text) as T;
+    const data = JSON.parse(text) as T;
+    console.log('API response success:', typeof data === 'object' ? 'Object data' : data);
+    return data;
   } catch (error) {
+    console.error('API fetch error:', error);
     return handleApiError(error);
   }
 }
@@ -647,12 +704,14 @@ export const pedidoApi = {
       
       // Filtrar solo los campos que pueden actualizarse
       const updatableFields = ['cliente_id', 'almacen_id', 'fecha_entrega', 'estado', 'notas'];
-      const filteredData = Object.keys(pedido)
-        .filter(key => updatableFields.includes(key))
-        .reduce((obj, key) => {
-          obj[key] = pedido[key];
-          return obj;
-        }, {});
+      const filteredData: Record<string, any> = {};
+      
+      // Agregar solo los campos actualizables
+      for (const key of Object.keys(pedido)) {
+        if (updatableFields.includes(key)) {
+          filteredData[key] = pedido[key as keyof Partial<Pedido>];
+        }
+      }
       
       return fetchApi<Pedido>(`/pedidos/${id}`, {
         method: 'PUT',
@@ -771,5 +830,26 @@ export const loteApi = {
       method: 'PATCH',
       body: JSON.stringify({ peso_seco_kg: pesoSeco }),
     });
-  }
+  },
+
+  // Añadimos estos dos métodos para obtener productos y proveedores
+  getProductos: async (): Promise<ProductoSimple[]> => {
+    try {
+      const response = await fetchApi<ApiResponse<ProductoSimple>>('/productos?per_page=100');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener productos:', error);
+      return [];
+    }
+  },
+  
+  getProveedores: async (): Promise<ProveedorSimple[]> => {
+    try {
+      const response = await fetchApi<ApiResponse<ProveedorSimple>>('/proveedores?per_page=100');
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener proveedores:', error);
+      return [];
+    }
+  },
 };

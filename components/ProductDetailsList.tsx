@@ -1,14 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Image, 
   View, 
-  ScrollView 
+  ScrollView,
+  Platform,
+  Text
 } from 'react-native';
 import { ThemedView } from './ThemedView';
 import { ThemedText } from './ThemedText';
 import { IconSymbol } from './ui/IconSymbol';
 import { API_CONFIG } from '@/services/api';
+
+const DEFAULT_IMAGE = require('@/assets/images/default/product-placeholder.png');
 
 // Tipo genérico para cualquier tipo de detalle (puede ser VentaDetalle o PedidoDetalle)
 interface ProductDetail {
@@ -23,7 +27,8 @@ interface ProductDetail {
     url_foto?: string;
     capacidad_kg?: string;
     producto?: {
-      nombre: string;
+      id?: number;
+      nombre?: string;
     };
   };
 }
@@ -34,11 +39,27 @@ interface ProductDetailsListProps {
   isPedido?: boolean; // Para determinar si es un pedido (usa precio_estimado) o venta (usa precio_unitario)
 }
 
+// Hacemos un log de la URL base para verificar configuración
+console.log('API base URL:', API_CONFIG.baseUrl);
+
 const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
   details,
   title = "Productos",
   isPedido = false
 }) => {
+  
+  // Estado para controlar si una imagen falló al cargarse
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+
+  // Efecto para hacer log de los detalles a mostrar (debugging)
+  useEffect(() => {
+    if (details && details.length > 0) {
+      console.log(`Mostrando ${details.length} productos en lista de detalles.`);
+      // Log el primero para ver su estructura
+      const firstDetail = details[0];
+      console.log('Primer producto completo:', JSON.stringify(firstDetail, null, 2));
+    }
+  }, [details]);
   
   // Función para obtener el precio correcto según el tipo de detalle
   const getPrice = (detail: ProductDetail) => {
@@ -54,42 +75,125 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
     return isNaN(value) ? '0.00' : value.toFixed(2);
   };
   
-  // Add this function to ProductDetailsList
-  const getImageUrl = (urlFoto) => {
-    if (!urlFoto) return null;
+  // Función para intentar construir una URL de imagen alternativa basada en IDs
+  const getFallbackImageUrl = (detail: ProductDetail): string | undefined => {
+    // Intentar usar el ID de presentación si está disponible
+    if (detail.presentacion_id) {
+      return `${API_CONFIG.baseUrl}/uploads/presentaciones/${detail.presentacion_id}.jpg`;
+    }
     
-    // Normalize path separators
-    const normalizedPath = urlFoto.replace(/\\/g, '/');
-    return `${API_CONFIG.baseUrl}/uploads/${normalizedPath}`;
+    // Intentar usar el ID de presentación desde el objeto presentacion
+    if (detail.presentacion?.id) {
+      return `${API_CONFIG.baseUrl}/uploads/presentaciones/${detail.presentacion.id}.jpg`;
+    }
+    
+    // Intentar usar el ID de producto si está disponible
+    if (detail.presentacion?.producto?.id) {
+      return `${API_CONFIG.baseUrl}/uploads/productos/${detail.presentacion.producto.id}.jpg`;
+    }
+    
+    return undefined;
   };
+  
+  // Manejar error de carga de imagen
+  const handleImageError = (detailId: number, url?: string) => {
+    console.error(`Error al cargar imagen para producto ID: ${detailId}, URL: ${url || 'No URL'}`);
+    setFailedImages(prev => ({
+      ...prev,
+      [detailId]: true
+    }));
+  };
+  
+  // Renderizar la imagen del producto
+  const renderProductImage = (detail: ProductDetail) => {
+    // Verificar si la imagen falló previamente
+    if (failedImages[detail.id]) {
+      return (
+        <Image 
+          source={DEFAULT_IMAGE}
+          style={styles.productImage}
+          resizeMode="contain"
+        />
+      );
+    }
 
-  const renderImage = () => {
-      // Verificar explícitamente la presencia de url_foto para evitar errores
-      if (presentacion.url_foto) {
-        try {
-          const imageUrl = getImageUrl(presentacion.url_foto);
-          
-          if (imageUrl) {
-            return (
-              <Image 
-                source={{ uri: imageUrl }} 
-                style={styles.productoImage}
-                resizeMode="contain"
-              />
-            );
-          }
-        } catch (error) {
-          console.error("Error al renderizar imagen:", error);
-        }
+    // Si no hay url_foto en la presentación, ir directamente a la imagen por defecto
+    // o si no existe la presentación, mostrar imagen por defecto
+    if (!detail.presentacion || !detail.presentacion.url_foto) {
+      return (
+        <Image 
+          source={DEFAULT_IMAGE}
+          style={styles.productImage}
+          resizeMode="contain"
+        />
+      );
+    }
+    
+    // Si llegamos aquí, hay una url_foto, intentar cargarla
+    try {
+      const imageUri = API_CONFIG.getImageUrl(detail.presentacion.url_foto);
+      
+      // Si la URL resultante contiene 'null' o es vacía, usar imagen por defecto
+      if (!imageUri || imageUri.includes('null') || imageUri.includes('undefined')) {
+        return (
+          <Image 
+            source={DEFAULT_IMAGE}
+            style={styles.productImage}
+            resizeMode="contain"
+          />
+        );
       }
       
-      // Mostrar un placeholder si no hay imagen o hubo un error
       return (
-        <ThemedView style={styles.productoImagePlaceholder}>
-          <IconSymbol name="photo" size={32} color="#9BA1A6" />
-        </ThemedView>
+        <Image 
+          source={{ uri: imageUri }} 
+          style={styles.productImage} 
+          resizeMode="contain"
+          onError={() => {
+            console.error(`Error al cargar imagen para producto ID: ${detail.id}, URL: ${imageUri}`);
+            // Marcar esta imagen como fallida para futuras renderizaciones
+            setFailedImages(prev => ({
+              ...prev,
+              [detail.id]: true
+            }));
+          }}
+        />
       );
-    };
+    } catch (error) {
+      console.error('Error construyendo URL desde url_foto:', error);
+      // Mostrar imagen por defecto en caso de error
+      return (
+        <Image 
+          source={DEFAULT_IMAGE}
+          style={styles.productImage}
+          resizeMode="contain"
+        />
+      );
+    }
+  };
+  
+  // Función para obtener el nombre del producto y capacidad
+  const getProductInfo = (detail: ProductDetail): { nombre: string, descripcion: string } => {
+    const nombre = detail.presentacion?.nombre || `Presentación #${detail.presentacion_id || detail.id}`;
+    
+    // Intentar construir una descripción
+    let descripcion = '';
+    
+    // Añadir nombre del producto si está disponible
+    if (detail.presentacion?.producto?.nombre) {
+      descripcion = detail.presentacion.producto.nombre;
+    }
+    
+    // Añadir capacidad si está disponible
+    if (detail.presentacion?.capacidad_kg) {
+      const capacidad = formatNumber(detail.presentacion.capacidad_kg);
+      descripcion = descripcion 
+        ? `${descripcion} - ${capacidad} kg`
+        : `${capacidad} kg`;
+    }
+    
+    return { nombre, descripcion };
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -101,60 +205,54 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
           style={styles.scrollView}
           contentContainerStyle={styles.productsList}
         >
-          {details.map((detail) => (
-            <ThemedView key={detail.id} style={styles.productCard}>
-              {/* Product Image */}
-              <View style={styles.productImageContainer}>
-                {detail.presentacion?.url_foto ? (
-                  <Image 
-                    source={{ uri: getImageUrl(detail.presentacion.url_foto) }} 
-                    style={styles.productImage} 
-                    resizeMode="contain"
-                    onError={(e) => console.log('Error cargando imagen:', e.nativeEvent.error)}
-                  />
-                ) : (
-                  <View style={styles.productImagePlaceholder}>
-                    <IconSymbol name="photo" size={24} color="#9BA1A6" />
-                  </View>
-                )}
-              </View>
-              
-              {/* Product Info */}
-              <ThemedView style={styles.productInfo}>
-                <ThemedText style={styles.productName} numberOfLines={2}>
-                  {detail.presentacion?.nombre || 'Producto'}
-                </ThemedText>
+          {details.map((detail) => {
+            const { nombre, descripcion } = getProductInfo(detail);
+            
+            return (
+              <ThemedView key={detail.id} style={styles.productCard}>
+                {/* Product Image */}
+                <View style={styles.productImageContainer}>
+                  {renderProductImage(detail)}
+                </View>
                 
-                <ThemedText style={styles.productDescription} numberOfLines={1}>
-                  {detail.presentacion?.producto?.nombre || 'Producto'}
-                  {detail.presentacion?.capacidad_kg && ` - ${formatNumber(detail.presentacion.capacidad_kg)} kg`}
-                </ThemedText>
-                
-                <ThemedView style={styles.productDetails}>
-                  <ThemedView style={styles.detailRow}>
-                    <ThemedText style={styles.detailLabel}>Cantidad:</ThemedText>
-                    <ThemedText style={styles.detailValue}>{detail.cantidad}</ThemedText>
-                  </ThemedView>
+                {/* Product Info */}
+                <ThemedView style={styles.productInfo}>
+                  <ThemedText style={styles.productName} numberOfLines={2}>
+                    {nombre}
+                  </ThemedText>
                   
-                  <ThemedView style={styles.detailRow}>
-                    <ThemedText style={styles.detailLabel}>
-                      {isPedido ? 'Precio Est.:' : 'Precio:'}
+                  {descripcion ? (
+                    <ThemedText style={styles.productDescription} numberOfLines={1}>
+                      {descripcion}
                     </ThemedText>
-                    <ThemedText style={styles.detailValue}>
-                      ${formatNumber(getPrice(detail))}
-                    </ThemedText>
-                  </ThemedView>
+                  ) : null}
                   
-                  <ThemedView style={styles.subtotalRow}>
-                    <ThemedText style={styles.subtotalLabel}>Subtotal:</ThemedText>
-                    <ThemedText style={styles.subtotalValue}>
-                      ${formatNumber(detail.cantidad * parseFloat(getPrice(detail)))}
-                    </ThemedText>
+                  <ThemedView style={styles.productDetails}>
+                    <ThemedView style={styles.detailRow}>
+                      <ThemedText style={styles.detailLabel}>Cantidad:</ThemedText>
+                      <ThemedText style={styles.detailValue}>{detail.cantidad}</ThemedText>
+                    </ThemedView>
+                    
+                    <ThemedView style={styles.detailRow}>
+                      <ThemedText style={styles.detailLabel}>
+                        {isPedido ? 'Precio Est.:' : 'Precio:'}
+                      </ThemedText>
+                      <ThemedText style={styles.detailValue}>
+                        ${formatNumber(getPrice(detail))}
+                      </ThemedText>
+                    </ThemedView>
+                    
+                    <ThemedView style={styles.subtotalRow}>
+                      <ThemedText style={styles.subtotalLabel}>Subtotal:</ThemedText>
+                      <ThemedText style={styles.subtotalValue}>
+                        ${formatNumber(detail.cantidad * parseFloat(getPrice(detail)))}
+                      </ThemedText>
+                    </ThemedView>
                   </ThemedView>
                 </ThemedView>
               </ThemedView>
-            </ThemedView>
-          ))}
+            );
+          })}
         </ScrollView>
       ) : (
         <ThemedView style={styles.emptyState}>
@@ -203,6 +301,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     overflow: 'hidden',
     backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   productImage: {
     width: '100%',
@@ -248,31 +348,29 @@ const styles = StyleSheet.create({
   subtotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
-    paddingTop: 5,
+    marginTop: 4,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: '#E1E3E5',
   },
   subtotalLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   subtotalValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
-    color: '#0a7ea4',
   },
   emptyState: {
-    padding: 30,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    borderRadius: 8,
   },
   emptyStateText: {
     marginTop: 10,
-    textAlign: 'center',
+    fontSize: 16,
     color: '#757575',
+    textAlign: 'center',
   },
 });
 

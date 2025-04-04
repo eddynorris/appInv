@@ -6,7 +6,7 @@ import { Stack, router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
+import { DataTable, Column } from '@/components/data/DataTable';
 import { productoApi } from '@/services/api';
 import { Producto } from '@/models';
 

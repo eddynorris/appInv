@@ -1,377 +1,155 @@
 // app/gastos/edit/[id].tsx
-import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  Alert,
-  ScrollView,
-  View
-} from 'react-native';
-import { Stack, useLocalSearchParams, router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { View, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { FormField } from '@/components/form/FormField';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { gastoApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Gasto } from '@/models';
-
-// Categorías de gastos predefinidas
-const CATEGORIAS = [
-  'Servicios',
-  'Personal',
-  'Alquiler',
-  'Marketing',
-  'Logística',
-  'Otros'
-];
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useGastos } from '@/hooks/crud/useGastos';
 
 export default function EditGastoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   
-  // Form state
-  const [formData, setFormData] = useState<Partial<Gasto>>({
-    descripcion: '',
-    monto: '',
-    categoria: CATEGORIAS[0],
-    fecha: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
-  });
-
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Load gasto data
+  const { 
+    form,
+    isLoading,
+    error,
+    updateGasto,
+    validationRules,
+    categorias,
+    showDatePicker,
+    setShowDatePicker,
+    handleDateSelection,
+    loadGastoForEdit
+  } = useGastos();
+  
+  const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
+  
+  // Cargar datos del gasto una sola vez al montar
   useEffect(() => {
-    const fetchGasto = async () => {
-      if (!id) return;
-      
+    if (!id) return;
+    
+    // Función para cargar los datos
+    const fetchData = async () => {
       try {
-        setIsLoading(true);
-        const response = await gastoApi.getGasto(parseInt(id));
-        
-        if (response) {
-          setFormData({
-            descripcion: response.descripcion || '',
-            monto: response.monto || '',
-            categoria: response.categoria || CATEGORIAS[0],
-            fecha: response.fecha ? response.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
-          });
-        } else {
-          Alert.alert('Error', 'No se pudo cargar los datos del gasto');
-          router.back();
-        }
+        console.log(`Cargando datos para gasto ID: ${id}`);
+        await loadGastoForEdit(parseInt(id));
+        setIsLoadingInitial(false);
       } catch (error) {
-        console.error('Error al cargar gasto:', error);
-        Alert.alert('Error', 'No se pudo cargar los datos del gasto');
-        router.back();
-      } finally {
-        setIsLoading(false);
+        console.error('Error cargando gasto:', error);
+        setIsLoadingInitial(false);
       }
     };
-
-    fetchGasto();
-  }, [id]);
-
-  const handleChange = (field: keyof Gasto, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
     
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.descripcion?.trim()) {
-      newErrors.descripcion = 'La descripción es requerida';
-    }
-    
-    if (!formData.monto?.trim()) {
-      newErrors.monto = 'El monto es requerido';
-    } else if (isNaN(parseFloat(formData.monto)) || parseFloat(formData.monto) <= 0) {
-      newErrors.monto = 'Ingrese un monto válido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate() || !id) {
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      const gastoData = {
-        ...formData,
-        monto: formData.monto?.replace(',', '.') // Asegurar formato decimal correcto
-      };
-      
-      const response = await gastoApi.updateGasto(parseInt(id), gastoData);
-      
-      if (response) {
-        Alert.alert(
-          'Gasto Actualizado',
-          'El gasto ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar el gasto');
-      }
-    } catch (err) {
-      console.error('Error al actualizar gasto:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar el gasto';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Editar Gasto',
-          headerShown: true 
-        }} />
-        <ThemedView style={[styles.container, styles.loadingContainer]}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando datos del gasto...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
+    fetchData();
+    // Sin dependencias para que solo se ejecute al montar
+  }, []);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Editar Gasto',
-        headerShown: true 
-      }} />
-      
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedText type="title" style={styles.heading}>Editar Gasto</ThemedText>
+    <ScreenContainer 
+      title="Editar Gasto"
+      isLoading={isLoading || isLoadingInitial}
+      error={error}
+      loadingMessage="Cargando datos del gasto..."
+    >
+      <ThemedText type="title" style={{ marginBottom: 20 }}>Editar Gasto</ThemedText>
 
-          <ThemedView style={styles.form}>
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Descripción *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.descripcion && styles.inputError
-                ]}
-                value={formData.descripcion}
-                onChangeText={(value) => handleChange('descripcion', value)}
-                placeholder="Ingresa la descripción del gasto"
-                placeholderTextColor="#9BA1A6"
+      <FormField
+        label="Descripción"
+        value={formData.descripcion}
+        onChangeText={(value) => handleChange('descripcion', value)}
+        placeholder="Ingresa la descripción del gasto"
+        error={errors.descripcion}
+        required
+      />
+
+      <FormField
+        label="Monto"
+        value={formData.monto}
+        onChangeText={(value) => handleChange('monto', value)}
+        placeholder="0.00"
+        error={errors.monto}
+        keyboardType="numeric"
+        required
+      />
+
+      <ThemedView style={{ marginBottom: 16 }}>
+        <ThemedText style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>
+          Categoría
+        </ThemedText>
+        <View style={{
+          borderWidth: 1,
+          borderColor: '#E1E3E5',
+          borderRadius: 8,
+          backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5'
+        }}>
+          <Picker
+            selectedValue={formData.categoria}
+            onValueChange={(value) => handleChange('categoria', value)}
+            style={{ color: Colors[colorScheme].text }}
+            dropdownIconColor={Colors[colorScheme].text}
+          >
+            {categorias.map((categoria) => (
+              <Picker.Item 
+                key={categoria} 
+                label={categoria} 
+                value={categoria} 
+                color={isDark ? '#FFFFFF' : '#000000'}
               />
-              {errors.descripcion && (
-                <ThemedText style={styles.errorText}>{errors.descripcion}</ThemedText>
-              )}
-            </ThemedView>
+            ))}
+          </Picker>
+        </View>
+      </ThemedView>
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Monto *</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text },
-                  errors.monto && styles.inputError
-                ]}
-                value={formData.monto}
-                onChangeText={(value) => handleChange('monto', value)}
-                placeholder="0.00"
-                placeholderTextColor="#9BA1A6"
-                keyboardType="numeric"
-              />
-              {errors.monto && (
-                <ThemedText style={styles.errorText}>{errors.monto}</ThemedText>
-              )}
-            </ThemedView>
+      <ThemedView style={{ marginBottom: 16 }}>
+        <ThemedText style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>
+          Fecha
+        </ThemedText>
+        <TouchableOpacity 
+          style={{
+            borderWidth: 1,
+            borderColor: '#E1E3E5',
+            borderRadius: 8,
+            backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5',
+            padding: 12,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+          onPress={() => setShowDatePicker(true)}
+        >
+          <ThemedText style={{ color: Colors[colorScheme].text }}>
+            {formData.fecha ? new Date(formData.fecha).toLocaleDateString() : 'Seleccionar fecha'}
+          </ThemedText>
+          <IconSymbol name="calendar" size={20} color={Colors[colorScheme].text} />
+        </TouchableOpacity>
+        {showDatePicker && (
+          <DateTimePicker
+            value={formData.fecha ? new Date(formData.fecha) : new Date()}
+            mode="date"
+            display="default"
+            onChange={(event, date) => handleDateSelection(date)}
+          />
+        )}
+      </ThemedView>
 
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Categoría</ThemedText>
-              <View style={[
-                styles.pickerContainer,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-              ]}>
-                <Picker
-                  selectedValue={formData.categoria}
-                  onValueChange={(value) => handleChange('categoria', value)}
-                  style={[
-                    styles.picker,
-                    { color: Colors[colorScheme].text }
-                  ]}
-                  dropdownIconColor={Colors[colorScheme].text}
-                >
-                  {CATEGORIAS.map((categoria) => (
-                    <Picker.Item 
-                      key={categoria} 
-                      label={categoria} 
-                      value={categoria} 
-                      color={isDark ? '#FFFFFF' : '#000000'}
-                    />
-                  ))}
-                </Picker>
-              </View>
-            </ThemedView>
-
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Fecha</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: Colors[colorScheme].text }
-                ]}
-                value={formData.fecha}
-                onChangeText={(value) => handleChange('fecha', value)}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#9BA1A6"
-              />
-              <ThemedText style={styles.helperText}>
-                Formato: YYYY-MM-DD (ej. 2023-12-31)
-              </ThemedText>
-            </ThemedView>
-
-            <ThemedView style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => router.back()}
-              >
-                <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[
-                  styles.submitButton,
-                  isSubmitting && styles.submitButtonDisabled
-                ]}
-                onPress={handleSubmit}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
-                )}
-              </TouchableOpacity>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+      <ActionButtons
+        onSave={() => id && handleSubmit(() => updateGasto(parseInt(id)), validationRules)}
+        onCancel={() => router.back()}
+        isSubmitting={isSubmitting}
+        saveText="Guardar Cambios"
+      />
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heading: {
-    marginBottom: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  formGroup: {
-    gap: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#757575',
-    marginTop: 4,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0E0E0',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#424242',
-  },
-  submitButton: {
-    flex: 2,
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

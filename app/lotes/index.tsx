@@ -1,243 +1,193 @@
 // app/lotes/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
-import { Stack, router } from 'expo-router';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View } from 'react-native';
+import { router } from 'expo-router';
 
-import { ThemedView } from '@/components/ThemedView';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedText } from '@/components/ThemedText';
+import { ThemedView } from '@/components/ThemedView';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { Divider } from '@/components/layout/Divider';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
-import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useLotes } from '@/hooks/crud/useLotes';
 import { Lote } from '@/models';
-import { loteApi } from '@/services/api';
 
 export default function LotesScreen() {
-  const [lotes, setLotes] = useState<Lote[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const [refreshing, setRefreshing] = useState(false);
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
+  const {
+    lotes,
+    isLoading,
+    error,
+    pagination,
+    loadLotes,
+    handlePageChange,
+    handlePerPageChange,
+    deleteLote,
+    confirmDelete,
+    calcularRendimiento,
+    sortBy,
+    sortOrder,
+    handleSort
+  } = useLotes();
+  
+  // Cargar lotes al montar el componente
+  useEffect(() => {
+    loadLotes();
+  }, [loadLotes]);
+  
+  // Manejar la acción de refresh
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadLotes();
+    setRefreshing(false);
+  }, [loadLotes]);
+  
+  // Calcular estadísticas
+  const totalLotes = pagination.total;
+  const totalPesoHumedo = lotes.reduce((sum, lote) => sum + parseFloat(lote.peso_humedo_kg.toString()), 0);
+  const totalPesoSeco = lotes.reduce((sum, lote) => {
+    if (lote.peso_seco_kg) {
+      return sum + parseFloat(lote.peso_seco_kg.toString());
+    }
+    return sum;
+  }, 0);
+  
+  // Definimos columnas para la tabla con renderers y usamos useMemo para optimizar
+  const tableColumns = useMemo(() => [
     {
       id: 'id',
       label: 'ID',
       width: 0.5,
+      sortable: true,
     },
     {
       id: 'producto',
       label: 'Producto',
       width: 1.5,
+      sortable: true,
       render: (item: Lote) => <ThemedText>{item.producto?.nombre || '-'}</ThemedText>,
-    },
-    {
-      id: 'proveedor',
-      label: 'Proveedor',
-      width: 1.5,
-      render: (item: Lote) => <ThemedText>{item.proveedor?.nombre || '-'}</ThemedText>,
     },
     {
       id: 'peso_humedo_kg',
       label: 'Peso Húmedo (kg)',
       width: 1,
+      sortable: true,
       render: (item: Lote) => <ThemedText>{parseFloat(item.peso_humedo_kg).toFixed(2)}</ThemedText>,
     },
     {
       id: 'peso_seco_kg',
       label: 'Peso Seco (kg)',
       width: 1,
+      sortable: true,
       render: (item: Lote) => <ThemedText>{item.peso_seco_kg ? parseFloat(item.peso_seco_kg).toFixed(2) : '-'}</ThemedText>,
+    },
+    {
+      id: 'rendimiento',
+      label: 'Rendimiento',
+      width: 1,
+      sortable: true,
+      render: (item: Lote) => (
+        <ThemedText>
+          {calcularRendimiento(
+            parseFloat(item.peso_humedo_kg), 
+            item.peso_seco_kg ? parseFloat(item.peso_seco_kg) : null
+          )}
+        </ThemedText>
+      ),
     },
     {
       id: 'fecha_ingreso',
       label: 'Fecha Ingreso',
       width: 1,
+      sortable: true,
       render: (item: Lote) => <ThemedText>{new Date(item.fecha_ingreso).toLocaleDateString()}</ThemedText>,
     },
-  ];
-
-  const loadLotes = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await loteApi.getLotes(page, perPage);
-      
-      if (response && response.data) {
-        setLotes(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar los lotes');
-      }
-    } catch (err) {
-      console.error('Error al cargar lotes:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar los lotes');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentPage, itemsPerPage]);
-
-  // Initial load
-  useEffect(() => {
-    loadLotes();
-  }, [loadLotes]);
-
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadLotes(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadLotes, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadLotes(page, itemsPerPage);
-  }, [loadLotes, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadLotes(1, perPage); // Reset to first page when changing items per page
-  }, [loadLotes]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
+  ], [calcularRendimiento]);
   
-  const handleAddLote = () => {
-    router.push('/lotes/create');
-  };
-
-  const handleEdit = (id: string) => {
-    router.push(`/lotes/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await loteApi.deleteLote(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadLotes(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        lotes.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Lote eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar lote:', error);
-      Alert.alert('Error', 'No se pudo eliminar el lote');
-      setIsLoading(false);
+  // Función para manejar la eliminación desde la tabla
+  const handleDelete = useCallback(async (id: string | number) => {
+    const success = await deleteLote(Number(id), false);
+    if (success) {
+      loadLotes();
     }
-  };
-
-  // Calcular peso total de todos los lotes
-  const calcularPesoTotal = () => {
-    return lotes.reduce((acc, lote) => acc + parseFloat(lote.peso_humedo_kg || '0'), 0).toFixed(2);
-  };
-
+    return success;
+  }, [deleteLote, loadLotes]);
+  
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Lotes',
-        headerShown: true 
-      }} />
-      
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.summary}>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total Lotes:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
-            </ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Peso Total (kg):</ThemedText>
-            <ThemedText style={styles.summaryValue}>{calcularPesoTotal()}</ThemedText>
-          </ThemedView>
+    <ScreenContainer 
+      title="Lotes" 
+      isLoading={isLoading && !refreshing}
+      error={error}
+      loadingMessage="Cargando lotes..."
+      scrollable={false}
+    >
+      <ThemedView style={{ flex: 1, paddingHorizontal: 16 }}>
+        {/* Resumen */}
+        <ThemedView style={{ padding: 16, borderRadius: 8, marginBottom: 16, backgroundColor: 'rgba(76, 175, 80, 0.1)' }}>
+          <ThemedText type="subtitle">Resumen</ThemedText>
+          <Divider style={{ marginVertical: 8 }} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View>
+              <ThemedText style={{ fontWeight: 'bold' }}>{totalLotes}</ThemedText>
+              <ThemedText style={{ fontSize: 12 }}>Total de Lotes</ThemedText>
+            </View>
+            <View>
+              <ThemedText style={{ fontWeight: 'bold' }}>{totalPesoHumedo.toFixed(2)} kg</ThemedText>
+              <ThemedText style={{ fontSize: 12 }}>Peso Húmedo Total</ThemedText>
+            </View>
+            <View>
+              <ThemedText style={{ fontWeight: 'bold' }}>{totalPesoSeco.toFixed(2)} kg</ThemedText>
+              <ThemedText style={{ fontSize: 12 }}>Peso Seco Total</ThemedText>
+            </View>
+          </View>
         </ThemedView>
         
-        <DataTable<Lote>
+        {/* Usar el componente EnhancedDataTable estándar */}
+        <EnhancedDataTable
           data={lotes}
-          columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/lotes"
+          columns={tableColumns}
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay lotes registrados"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/lotes"
+          pagination={{
+            currentPage: pagination.page,
+            totalPages: pagination.lastPage,
+            itemsPerPage: pagination.perPage,
+            totalItems: pagination.total,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handlePerPageChange
+          }}
+          sorting={{
+            sortColumn: sortBy,
+            sortOrder: sortOrder,
+            onSort: handleSort
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Lote',
             message: '¿Está seguro que desea eliminar este lote? Esta acción podría afectar al inventario.',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: handleDelete
           }}
-        />
-        
-        <FloatingActionButton 
-          icon="plus.circle.fill" 
-          onPress={handleAddLote} 
+          emptyMessage="No hay lotes disponibles"
+          onRefresh={loadLotes}
         />
       </ThemedView>
-    </>
+      
+      {/* Botón flotante para agregar */}
+      <FloatingActionButton 
+        icon="plus.circle.fill" 
+        onPress={() => router.push('/lotes/create')} 
+      />
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  summary: {
-    padding: 16,
-    backgroundColor: 'rgba(76, 175, 80, 0.1)', // Verde claro para lotes (material agrícola)
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 0,
-    gap: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});

@@ -1,22 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useLocalSearchParams, router } from 'expo-router';
 
-import { ThemedView } from '@/components/ThemedView';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedText } from '@/components/ThemedText';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import { clienteApi } from '@/services/api';
-import { Cliente } from '@/models/cliente';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { Cliente } from '@/models';
 
 export default function ClienteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const colorScheme = useColorScheme() ?? 'light';
-
+  
+  // Use useEffect para cargar los datos una sola vez
   useEffect(() => {
     const fetchCliente = async () => {
       if (!id) return;
@@ -25,14 +25,10 @@ export default function ClienteDetailScreen() {
         setIsLoading(true);
         setError(null);
         
-        const response = await clienteApi.getCliente(parseInt(id));
-        
-        if (response) {
-          setCliente(response);
-        } else {
-          setError('Error al cargar los datos del cliente');
-        }
+        const data = await clienteApi.getCliente(parseInt(id));
+        setCliente(data);
       } catch (err) {
+        console.error('Error fetching cliente:', err);
         setError(err instanceof Error ? err.message : 'Error al cargar los datos del cliente');
       } finally {
         setIsLoading(false);
@@ -40,145 +36,84 @@ export default function ClienteDetailScreen() {
     };
 
     fetchCliente();
+  }, [id]); // Solo depende de id
+
+  const handleEdit = useCallback(() => {
+    router.push(`/clientes/edit/${id}`);
   }, [id]);
 
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Detalles del Cliente',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos del cliente...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
-
-  if (error || !cliente) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Error',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.errorContainer}>
-          <IconSymbol name="paperplane.fill" size={48} color={Colors[colorScheme].icon} />
-          <ThemedText style={styles.errorText}>
-            {error || 'Cliente no encontrado'}
-          </ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
+  const handleDelete = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setIsLoading(true);
+      await clienteApi.deleteCliente(parseInt(id));
+      router.replace('/clientes');
+    } catch (error) {
+      console.error('Error deleting cliente:', error);
+      setError('Error al eliminar el cliente');
+      setIsLoading(false);
+    } finally {
+      setShowDeleteDialog(false);
+    }
+  }, [id]);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: cliente.nombre,
-        headerShown: true 
-      }} />
+    <ScreenContainer
+      title={cliente?.nombre || 'Detalles del Cliente'}
+      isLoading={isLoading}
+      error={error}
+      loadingMessage="Cargando datos del cliente..."
+    >
+      {cliente && (
+        <DetailCard>
+          <ThemedText type="title">{cliente.nombre}</ThemedText>
+          
+          <DetailSection title="Información Financiera">
+            <DetailRow 
+              label="Saldo Pendiente" 
+              value={`$${parseFloat(cliente.saldo_pendiente || '0').toFixed(2)}`} 
+            />
+          </DetailSection>
+          
+          <DetailSection title="Información de Contacto">
+            <DetailRow label="Teléfono" value={cliente.telefono || 'No especificado'} />
+            <DetailRow label="Dirección" value={cliente.direccion || 'No especificada'} />
+          </DetailSection>
+
+          <DetailSection title="Datos Adicionales">
+            <DetailRow 
+              label="Fecha de Registro" 
+              value={cliente.created_at ? new Date(cliente.created_at).toLocaleDateString() : 'No especificada'} 
+            />
+            <DetailRow 
+              label="Frecuencia de Compra" 
+              value={cliente.frecuencia_compra_dias ? `${cliente.frecuencia_compra_dias} días` : 'No especificada'} 
+            />
+            <DetailRow 
+              label="Última Compra" 
+              value={cliente.ultima_fecha_compra ? new Date(cliente.ultima_fecha_compra).toLocaleDateString() : 'No hay compras registradas'} 
+            />
+          </DetailSection>
+
+          <ActionButtons
+            onSave={handleEdit}
+            saveText="Editar"
+            onDelete={() => setShowDeleteDialog(true)}
+            showDelete={true}
+          />
+        </DetailCard>
+      )}
       
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedView style={styles.card}>
-            <ThemedText type="title">{cliente.nombre}</ThemedText>
-            
-            <ThemedView style={styles.saldoContainer}>
-              <ThemedText type="subtitle">Saldo Pendiente</ThemedText>
-              <ThemedText style={styles.saldo}>
-                ${parseFloat(cliente.saldo_pendiente).toFixed(2)}
-              </ThemedText>
-            </ThemedView>
-
-            <ThemedView style={styles.section}>
-              <ThemedText type="subtitle">Información de Contacto</ThemedText>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Teléfono:</ThemedText>
-                <ThemedText>{cliente.telefono}</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Dirección:</ThemedText>
-                <ThemedText>{cliente.direccion}</ThemedText>
-              </ThemedView>
-            </ThemedView>
-
-            <ThemedView style={styles.section}>
-              <ThemedText type="subtitle">Datos Adicionales</ThemedText>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Fecha de Registro:</ThemedText>
-                <ThemedText>
-                  {new Date(cliente.created_at).toLocaleDateString()}
-                </ThemedText>
-              </ThemedView>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+      <ConfirmationDialog
+        visible={showDeleteDialog}
+        title="Eliminar Cliente"
+        message="¿Está seguro que desea eliminar este cliente? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  errorText: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#E53935',
-  },
-  card: {
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  saldoContainer: {
-    marginTop: 16,
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(10, 126, 164, 0.1)', // Tint color with low opacity
-  },
-  saldo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  section: {
-    marginTop: 16,
-    gap: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-    gap: 8,
-  },
-});

@@ -1,6 +1,6 @@
 // app/pedidos/[id].tsx (actualizado)
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, ActivityIndicator, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -12,72 +12,43 @@ import { pedidoApi } from '@/services/api';
 import { Pedido } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { usePedidos } from '@/hooks/crud/usePedidos';
 
 export default function PedidoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [pedido, setPedido] = useState<Pedido | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const idNumerico = id ? parseInt(id as string) : 0;
   const colorScheme = useColorScheme() ?? 'light';
+  
+  // Control para evitar múltiples cargas
+  const isInitialMount = useRef(true);
+  
+  // Usar el hook de pedidos
+  const {
+    pedido,
+    isLoading,
+    error,
+    loadPedido,
+    deletePedido
+  } = usePedidos();
 
+  // Cargar datos del pedido
   useEffect(() => {
-    const fetchPedido = async () => {
-      if (!id) return;
-      
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const response = await pedidoApi.getPedido(parseInt(id));
-        
-        if (response) {
-          setPedido(response);
-        } else {
-          setError('Error al cargar los datos del pedido');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos del pedido');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchPedido();
-  }, [id]);
+    if (isInitialMount.current && idNumerico) {
+      console.log(`Cargando pedido ID ${idNumerico}...`);
+      loadPedido(idNumerico);
+      isInitialMount.current = false;
+    }
+  }, [idNumerico, loadPedido]);
 
   const handleEdit = () => {
     // Navegar a la pantalla de edición
-    router.push(`/pedidos/edit/${id}`);
+    router.push(`/pedidos/edit/${idNumerico}`);
   };
 
   const handleDelete = async () => {
-    if (!id) return;
-    
-    Alert.alert(
-      "Eliminar Proyección",
-      "¿Está seguro que desea eliminar esta proyección?",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel"
-        },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsLoading(true);
-              await pedidoApi.deletePedido(parseInt(id));
-              router.replace('/pedidos');
-            } catch (error) {
-              setError('Error al eliminar el pedido');
-              setIsLoading(false);
-            }
-          }
-        }
-      ]
-    );
+    if (idNumerico) {
+      await deletePedido(idNumerico, true);
+    }
   };
 
   // Estado del pedido y colores
@@ -191,7 +162,7 @@ export default function PedidoDetailScreen() {
               )}
             </ThemedView>
 
-            {/* Usar nuestro nuevo componente para mostrar los detalles del pedido */}
+            {/* Usar nuestro componente para mostrar los detalles del pedido */}
             <ThemedView style={styles.section}>
               {pedido.detalles && pedido.detalles.length > 0 ? (
                 <ProductDetailsList
@@ -212,7 +183,7 @@ export default function PedidoDetailScreen() {
             <ThemedView style={styles.actions}>
               {/* No mostrar botón de convertir si ya está entregado o cancelado */}
               <PedidoConversion 
-                pedidoId={parseInt(id)}
+                pedidoId={idNumerico}
                 isDisabled={pedido.estado === 'entregado' || pedido.estado === 'cancelado'}
               />
               

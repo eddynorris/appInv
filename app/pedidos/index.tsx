@@ -1,76 +1,83 @@
 // app/pedidos/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
-import { pedidoApi } from '@/services/api';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { usePedidos } from '@/hooks/crud/usePedidos';
 import { Pedido } from '@/models';
 
 export default function PedidosScreen() {
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    pedidos,
+    isLoading,
+    error,
+    pagination,
+    loadPedidos,
+    deletePedido,
+    getEstadisticas,
+    getStateColor
+  } = usePedidos();
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
+  // Control para evitar múltiples cargas
+  const isInitialMount = useRef(true);
+  
+  // Cargar datos solo una vez al montar el componente
+  useEffect(() => {
+    // Solo realizar la carga inicial
+    if (isInitialMount.current) {
+      console.log('Cargando datos de pedidos (carga inicial)');
+      loadPedidos();
+      isInitialMount.current = false;
+    }
+  }, []); // Sin dependencias para evitar recargas
+  
+  // Obtener las estadísticas
+  const estadisticas = getEstadisticas();
 
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('fecha_entrega');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const handleAddPedido = () => {
+    router.push('/pedidos/create');
+  };
 
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
+  // Definir columnas para la tabla directamente en el componente
+  const columns = useMemo(() => [
     {
       id: 'id',
       label: 'ID',
       width: 0.5,
+      sortable: true,
     },
     {
       id: 'fecha_entrega',
       label: 'Fecha Entrega',
       width: 1,
+      sortable: true,
       render: (item: Pedido) => <ThemedText>{new Date(item.fecha_entrega).toLocaleDateString()}</ThemedText>,
     },
     {
       id: 'cliente',
       label: 'Cliente',
       width: 1.5,
+      sortable: true,
       render: (item: Pedido) => <ThemedText>{item.cliente?.nombre || '-'}</ThemedText>,
     },
     {
       id: 'total_estimado',
       label: 'Total Est.',
       width: 1,
+      sortable: true,
       render: (item: Pedido) => <ThemedText>${parseFloat(item.total_estimado || '0').toFixed(2)}</ThemedText>,
     },
     {
       id: 'estado',
       label: 'Estado',
       width: 1,
+      sortable: true,
       render: (item: Pedido) => {
-        let color = '#757575'; // Gris por defecto
-        
-        switch (item.estado) {
-          case 'programado':
-            color = '#FFC107'; // Amarillo
-            break;
-          case 'confirmado':
-            color = '#2196F3'; // Azul
-            break;
-          case 'entregado':
-            color = '#4CAF50'; // Verde
-            break;
-          case 'cancelado':
-            color = '#F44336'; // Rojo
-            break;
-        }
+        const color = getStateColor(item.estado);
         
         return (
           <ThemedText style={{ color, fontWeight: '500', textTransform: 'capitalize' }}>
@@ -79,101 +86,17 @@ export default function PedidosScreen() {
         );
       },
     },
-  ];
+  ], [getStateColor]);
 
-  const loadPedidos = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await pedidoApi.getPedidos(page, perPage);
-      
-      if (response && response.data) {
-        setPedidos(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar los pedidos');
-      }
-    } catch (err) {
-      console.error('Error al cargar pedidos:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar los pedidos');
-    } finally {
-      setIsLoading(false);
+  // Función callback para manejar la eliminación
+  const handleDelete = useMemo(() => async (id: string | number) => {
+    const success = await deletePedido(Number(id), false);
+    if (success) {
+      // Recargar la lista después de eliminar
+      loadPedidos();
     }
-  }, [currentPage, itemsPerPage]);
-
-  // Initial load
-  useEffect(() => {
-    loadPedidos();
-  }, [loadPedidos]);
-
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadPedidos(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadPedidos, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadPedidos(page, itemsPerPage);
-  }, [loadPedidos, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadPedidos(1, perPage); // Reset to first page when changing items per page
-  }, [loadPedidos]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
-  
-  const handleAddPedido = () => {
-    router.push('/pedidos/create');
-  };
-
-  const handleEdit = (id: string) => {
-    router.push(`/pedidos/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await pedidoApi.deletePedido(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadPedidos(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        pedidos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Pedido eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar pedido:', error);
-      Alert.alert('Error', 'No se pudo eliminar el pedido');
-      setIsLoading(false);
-    }
-  };
-
-  // Calcular resumen de pedidos
-  const pedidosResumen = {
-    total: totalItems,
-    programados: pedidos.filter(p => p.estado === 'programado').length,
-    confirmados: pedidos.filter(p => p.estado === 'confirmado').length,
-    entregados: pedidos.filter(p => p.estado === 'entregado').length,
-    cancelados: pedidos.filter(p => p.estado === 'cancelado').length,
-  };
+    return success;
+  }, [deletePedido, loadPedidos]);
 
   return (
     <>
@@ -187,55 +110,62 @@ export default function PedidosScreen() {
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Proyecciones:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
+              {isLoading ? 'Cargando...' : estadisticas.total}
             </ThemedText>
           </ThemedView>
           
           <ThemedView style={styles.summaryBadges}>
             <ThemedView style={[styles.badge, styles.badgeProgramado]}>
-              <ThemedText style={styles.badgeText}>{pedidosResumen.programados} Prog.</ThemedText>
+              <ThemedText style={styles.badgeText}>{estadisticas.programados} Prog.</ThemedText>
             </ThemedView>
             
             <ThemedView style={[styles.badge, styles.badgeConfirmado]}>
-              <ThemedText style={styles.badgeText}>{pedidosResumen.confirmados} Conf.</ThemedText>
+              <ThemedText style={styles.badgeText}>{estadisticas.confirmados} Conf.</ThemedText>
             </ThemedView>
             
             <ThemedView style={[styles.badge, styles.badgeEntregado]}>
-              <ThemedText style={styles.badgeText}>{pedidosResumen.entregados} Entr.</ThemedText>
+              <ThemedText style={styles.badgeText}>{estadisticas.entregados} Entr.</ThemedText>
             </ThemedView>
             
             <ThemedView style={[styles.badge, styles.badgeCancelado]}>
-              <ThemedText style={styles.badgeText}>{pedidosResumen.cancelados} Canc.</ThemedText>
+              <ThemedText style={styles.badgeText}>{estadisticas.cancelados} Canc.</ThemedText>
             </ThemedView>
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Pedido>
+        <EnhancedDataTable
           data={pedidos}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/pedidos"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay proyecciones registradas"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/pedidos"
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn: 'id',
+            sortOrder: 'asc',
+            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Proyección',
             message: '¿Está seguro que desea eliminar esta proyección?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: handleDelete
           }}
+          emptyMessage="No hay proyecciones disponibles"
+          onRefresh={loadPedidos}
         />
         
         <FloatingActionButton 
@@ -250,37 +180,38 @@ export default function PedidosScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: 16,
   },
   summary: {
-    padding: 16,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    margin: 16,
-    marginBottom: 0,
+    backgroundColor: '#f8f9fa',
     borderRadius: 8,
-    gap: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 16,
     fontWeight: '500',
   },
   summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
   },
   summaryBadges: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
+    marginTop: 8,
   },
   badge: {
-    flex: 1,
     borderRadius: 4,
-    padding: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    minWidth: 70,
     alignItems: 'center',
   },
   badgeProgramado: {

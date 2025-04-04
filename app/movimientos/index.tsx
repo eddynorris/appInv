@@ -6,7 +6,7 @@ import { Picker } from '@react-native-picker/picker';
 import { movimientoApi } from '@/services/api';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { DataTable, Column } from '@/components/DataTable';
+import { DataTable, Column } from '@/components/data/DataTable';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';

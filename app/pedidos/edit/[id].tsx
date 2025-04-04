@@ -1,6 +1,6 @@
 // app/pedidos/edit/[id].tsx
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, View } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -8,205 +8,80 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { pedidoApi, clienteApi, almacenApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Cliente, Almacen, Pedido } from '@/models';
 import { useAuth } from '@/context/AuthContext';
+import { usePedidos } from '@/hooks/crud/usePedidos';
 
 export default function EditPedidoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const idNumerico = id ? parseInt(id as string) : 0;
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const { user } = useAuth(); // Obtenemos el usuario actual
+  const { user } = useAuth();
   
-  // Estado para controlar los roles y permisos
+  // Estados locales
   const [isAdmin, setIsAdmin] = useState(false);
-  
-  // Estado para date picker
   const [showDatePicker, setShowDatePicker] = useState(false);
   
-  // Data for dropdowns
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
+  // Control para evitar múltiples cargas
+  const isInitialMount = useRef(true);
+  const pedidoCargado = useRef(false);
   
-  enum PedidoEstado {
-    Programado = 'programado',
-    Confirmado = 'confirmado',
-    Entregado = 'entregado',
-    Cancelado = 'cancelado'
-  }
-
-  // Form state
-  const [formData, setFormData] = useState<Partial<Pedido>>({
-    cliente_id: 0,
-    almacen_id: 0,
-    fecha_entrega: new Date().toISOString().split('T')[0],
-    estado: 'programado' as PedidoEstado,
-    notas: ''
-  });
-
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
+  // Usar el hook de pedidos
+  const {
+    pedido,
+    form,
+    clientes,
+    isLoading,
+    isLoadingOptions,
+    error,
+    loadPedidoForEdit,
+    updatePedido
+  } = usePedidos();
+  
+  // Cargar datos del pedido para edición - Solo una vez
+  useEffect(() => {
+    const cargarDatos = async () => {
+      if (isInitialMount.current && idNumerico && !pedidoCargado.current) {
+        console.log(`Cargando pedido ID ${idNumerico} para edición...`);
+        await loadPedidoForEdit(idNumerico);
+        isInitialMount.current = false;
+        pedidoCargado.current = true;
+      }
+    };
+    
+    cargarDatos();
+  }, [idNumerico, loadPedidoForEdit]);
+  
   // Establecer el rol del usuario al cargar el componente
   useEffect(() => {
     if (user) {
-      console.log('Datos del usuario:', user);
-      
-      if (user.rol) {
-        console.log('Rol del usuario:', user.rol);
-        const isUserAdmin = user.rol.toLowerCase() === 'admin';
-        console.log('¿Es administrador?:', isUserAdmin);
-        setIsAdmin(isUserAdmin);
-      } else {
-        console.log('No se encontró rol en el usuario, estableciendo como no-admin');
-        setIsAdmin(false);
-      }
-    } else {
-      // Si no hay usuario, definitivamente no es admin
-      setIsAdmin(false);
+      const isUserAdmin = user.rol?.toLowerCase() === 'admin';
+      setIsAdmin(isUserAdmin);
     }
   }, [user]);
-
-  // Load data for form
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!id) return;
-      
-      try {
-        setIsLoading(true);
-        
-        // Cargar datos en paralelo
-        const [pedidoData, clientesData, almacenesData] = await Promise.all([
-          pedidoApi.getPedido(parseInt(id)),
-          clienteApi.getClientes(),
-          almacenApi.getAlmacenes()
-        ]);
-        
-        // Cargar listas de clientes y almacenes
-        setClientes(clientesData.data || []);
-        setAlmacenes(almacenesData.data || []);
-        
-        // Cargar datos del pedido
-        if (pedidoData) {
-          setFormData({
-            cliente_id: pedidoData.cliente_id,
-            almacen_id: pedidoData.almacen_id,
-            fecha_entrega: pedidoData.fecha_entrega.split('T')[0],
-            estado: pedidoData.estado,
-            notas: pedidoData.notas,
-            // No podemos editar los detalles del pedido desde aquí
-          });
-          
-          console.log('Pedido cargado:', pedidoData);
-        } else {
-          Alert.alert('Error', 'No se pudo cargar el pedido');
-          router.back();
-        }
-      } catch (error) {
-        console.error('Error loading data:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
-        router.back();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [id]);
-
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  };
-
+  
+  // Manejar selección de fecha
   const onDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
       const formattedDate = selectedDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-      handleChange('fecha_entrega', formattedDate);
+      form.handleChange('fecha_entrega', formattedDate);
     }
   };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.cliente_id) {
-      newErrors.cliente_id = 'El cliente es requerido';
-    }
-    
-    if (!formData.almacen_id) {
-      newErrors.almacen_id = 'El almacén es requerido';
-    }
-    
-    if (!formData.fecha_entrega) {
-      newErrors.fecha_entrega = 'La fecha de entrega es requerida';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
+  
+  // Manejar envío del formulario
   const handleSubmit = async () => {
-    if (!validate() || !id) {
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      // Preparar datos para actualizar
-      // NOTA: Solo actualizamos campos básicos, no los detalles del pedido
-      const fechaFormateada = `${formData.fecha_entrega}T00:00:00Z`;
-
-      const updateData = {
-        cliente_id: formData.cliente_id,
-        almacen_id: formData.almacen_id,
-        fecha_entrega: fechaFormateada,
-        estado: formData.estado,
-        notas: formData.notas
-      };
-      
-      const response = await pedidoApi.updatePedido(parseInt(id), updateData);
-      
-      if (response) {
-        Alert.alert(
-          'Proyección Actualizada',
-          'La proyección ha sido actualizada exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar la proyección');
+    if (idNumerico) {
+      const success = await updatePedido(idNumerico);
+      if (success) {
+        router.back();
       }
-    } catch (err) {
-      console.error('Error updating pedido:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar la proyección';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
     }
   };
-
-  if (isLoading) {
+  
+  if (isLoading || isLoadingOptions) {
     return (
       <>
         <Stack.Screen options={{ 
@@ -214,13 +89,30 @@ export default function EditPedidoScreen() {
           headerShown: true 
         }} />
         <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+          <ActivityIndicator size="large" color={Colors.primary} />
           <ThemedText>Cargando datos...</ThemedText>
         </ThemedView>
       </>
     );
   }
-
+  
+  if (error || !pedido) {
+    return (
+      <>
+        <Stack.Screen options={{ 
+          title: 'Error',
+          headerShown: true 
+        }} />
+        <ThemedView style={styles.errorContainer}>
+          <IconSymbol name="exclamationmark.triangle" size={48} color={Colors[colorScheme].icon} />
+          <ThemedText style={styles.errorText}>
+            {error || 'No se pudo cargar la proyección para editar'}
+          </ThemedText>
+        </ThemedView>
+      </>
+    );
+  }
+  
   return (
     <>
       <Stack.Screen options={{ 
@@ -229,15 +121,15 @@ export default function EditPedidoScreen() {
       }} />
       
       <ScrollView style={styles.container}>
-        <ThemedText type="title" style={styles.heading}>Editar Proyección</ThemedText>
+        <ThemedText type="title" style={styles.heading}>Editar Proyección #{idNumerico}</ThemedText>
         
         <ThemedView style={styles.infoBox}>
           <ThemedText style={styles.infoText}>
-            Nota: Solo puedes modificar información básica de la proyección. Los detalles de productos no se pueden editar.
+            Solo puedes modificar información básica de la proyección. Los detalles de productos no se pueden editar.
           </ThemedText>
         </ThemedView>
-
-        <ThemedView style={styles.form}>
+        
+        <ThemedView style={styles.formContainer}>
           {/* Cliente Selector */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Cliente *</ThemedText>
@@ -246,64 +138,80 @@ export default function EditPedidoScreen() {
               { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
             ]}>
               <Picker
-                selectedValue={formData.cliente_id?.toString()}
-                onValueChange={(value) => handleChange('cliente_id', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
+                selectedValue={form.formData.cliente_id}
+                onValueChange={(value) => form.handleChange('cliente_id', value)}
+                style={[styles.picker, { color: isDark ? Colors[colorScheme].text : Colors[colorScheme].text }]}
               >
                 {clientes.map(cliente => (
                   <Picker.Item 
-                    key={cliente.id} 
-                    label={cliente.nombre} 
+                    key={cliente.id.toString()} 
+                    label={cliente.nombre || `Cliente ${cliente.id}`} 
                     value={cliente.id.toString()} 
                   />
                 ))}
               </Picker>
             </View>
-            {errors.cliente_id && (
-              <ThemedText style={styles.errorText}>{errors.cliente_id}</ThemedText>
+            {form.getError('cliente_id') && (
+              <ThemedText style={styles.errorText}>{form.getError('cliente_id')}</ThemedText>
             )}
           </ThemedView>
-
-          {/* Almacén Selector */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Almacén *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
-              !isAdmin && styles.disabledContainer
-            ]}>
-              <Picker
-                selectedValue={formData.almacen_id?.toString()}
-                onValueChange={(value) => handleChange('almacen_id', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
-                enabled={isAdmin}
-              >
-                {almacenes.map(almacen => (
+          
+          {/* Almacén Selector - Solo para administradores */}
+          {pedido.almacen && (
+            <ThemedView style={styles.formGroup}>
+              <ThemedText style={styles.label}>Almacén *</ThemedText>
+              <View style={[
+                styles.pickerContainer,
+                { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
+                !isAdmin && styles.disabledContainer
+              ]}>
+                <Picker
+                  selectedValue={form.formData.almacen_id}
+                  onValueChange={(value) => form.handleChange('almacen_id', value)}
+                  style={[styles.picker, { color: isDark ? Colors[colorScheme].text : Colors[colorScheme].text }]}
+                  enabled={isAdmin}
+                >
                   <Picker.Item 
-                    key={almacen.id} 
-                    label={almacen.nombre} 
-                    value={almacen.id.toString()} 
+                    key={pedido.almacen.id.toString()} 
+                    label={pedido.almacen.nombre || `Almacén ${pedido.almacen.id}`} 
+                    value={pedido.almacen.id.toString()} 
                   />
-                ))}
-              </Picker>
-            </View>
-            {!isAdmin && (
-              <ThemedText style={styles.infoText}>
-                Solo administradores pueden cambiar el almacén
+                </Picker>
+              </View>
+              {!isAdmin && (
+                <ThemedText style={styles.infoText}>
+                  Solo administradores pueden cambiar el almacén
+                </ThemedText>
+              )}
+            </ThemedView>
+          )}
+          
+          {/* Fecha de Entrega */}
+          <ThemedView style={styles.formGroup}>
+            <ThemedText style={styles.label}>Fecha de Entrega *</ThemedText>
+            <TouchableOpacity
+              style={[styles.input, { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <ThemedText>
+                {form.formData.fecha_entrega ? new Date(form.formData.fecha_entrega).toLocaleDateString() : 'Seleccionar fecha'}
               </ThemedText>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={form.formData.fecha_entrega ? new Date(form.formData.fecha_entrega) : new Date()}
+                mode="date"
+                display="default"
+                onChange={onDateChange}
+                minimumDate={new Date()} // Fecha mínima es hoy
+              />
             )}
-            {errors.almacen_id && (
-              <ThemedText style={styles.errorText}>{errors.almacen_id}</ThemedText>
+            {form.getError('fecha_entrega') && (
+              <ThemedText style={styles.errorText}>{form.getError('fecha_entrega')}</ThemedText>
             )}
           </ThemedView>
-
-          {/* Estado del Pedido */}
+          
+          {/* Estado Selector */}
           <ThemedView style={styles.formGroup}>
             <ThemedText style={styles.label}>Estado</ThemedText>
             <View style={[
@@ -311,12 +219,9 @@ export default function EditPedidoScreen() {
               { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
             ]}>
               <Picker
-                selectedValue={formData.estado}
-                onValueChange={(value) => handleChange('estado', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
+                selectedValue={form.formData.estado}
+                onValueChange={(value) => form.handleChange('estado', value)}
+                style={[styles.picker, { color: isDark ? Colors[colorScheme].text : Colors[colorScheme].text }]}
               >
                 <Picker.Item label="Programado" value="programado" />
                 <Picker.Item label="Confirmado" value="confirmado" />
@@ -325,78 +230,57 @@ export default function EditPedidoScreen() {
               </Picker>
             </View>
           </ThemedView>
-
-          {/* Fecha de entrega */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Fecha de Entrega *</ThemedText>
-            <TouchableOpacity 
-              style={[
-                styles.input,
-                errors.fecha_entrega && styles.inputError,
-                { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
-              ]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <ThemedText style={{ color: Colors[colorScheme].text }}>
-                {formData.fecha_entrega ? new Date(formData.fecha_entrega).toLocaleDateString() : 'Seleccionar fecha'}
-              </ThemedText>
-              <IconSymbol name="calendar" size={20} color={Colors[colorScheme].text} />
-            </TouchableOpacity>
-            {errors.fecha_entrega && (
-              <ThemedText style={styles.errorText}>{errors.fecha_entrega}</ThemedText>
-            )}
-            {showDatePicker && (
-              <DateTimePicker
-                value={formData.fecha_entrega ? new Date(formData.fecha_entrega) : new Date()}
-                mode="date"
-                display="default"
-                onChange={onDateChange}
-                minimumDate={formData.estado === 'programado' ? new Date() : undefined} // Solo restringir para pedidos programados
-              />
-            )}
-          </ThemedView>
-
+          
           {/* Notas */}
           <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Notas (opcional)</ThemedText>
+            <ThemedText style={styles.label}>Notas</ThemedText>
             <TextInput
               style={[
-                styles.input,
                 styles.textArea,
-                { color: Colors[colorScheme].text }
+                { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5', color: isDark ? Colors[colorScheme].text : Colors[colorScheme].text }
               ]}
-              value={formData.notas}
-              onChangeText={(value) => handleChange('notas', value)}
-              placeholder="Información adicional sobre la proyección"
-              placeholderTextColor="#9BA1A6"
+              value={form.formData.notas}
+              onChangeText={(text) => form.handleChange('notas', text)}
+              placeholder="Notas adicionales sobre la proyección..."
+              placeholderTextColor={isDark ? '#999' : '#777'}
               multiline
-              numberOfLines={3}
             />
           </ThemedView>
-
-          <ThemedView style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => router.back()}
-            >
-              <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[
-                styles.submitButton,
-                isSubmitting && styles.submitButtonDisabled
-              ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
-              )}
-            </TouchableOpacity>
+          
+          {/* Información de Productos (solo lectura) */}
+          <ThemedView style={styles.infoSection}>
+            <ThemedText type="subtitle">Productos en la Proyección</ThemedText>
+            <ThemedText style={styles.infoText}>
+              Los productos asociados a esta proyección no pueden ser modificados desde esta pantalla.
+              Para ver los detalles completos, vuelve a la vista de detalles.
+            </ThemedText>
+            <ThemedView style={styles.productSummary}>
+              <ThemedText style={styles.productCount}>
+                {pedido.detalles?.length || 0} productos incluidos
+              </ThemedText>
+              <TouchableOpacity 
+                style={styles.viewButton}
+                onPress={() => router.replace(`/pedidos/${idNumerico}`)}
+              >
+                <ThemedText style={styles.viewButtonText}>Ver Detalles</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
           </ThemedView>
+          
+          {/* Botones de acción */}
+          <TouchableOpacity 
+            style={styles.submitButton}
+            onPress={handleSubmit}
+          >
+            <ThemedText style={styles.submitButtonText}>Guardar Cambios</ThemedText>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.cancelButton}
+            onPress={() => router.back()}
+          >
+            <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
+          </TouchableOpacity>
         </ThemedView>
       </ScrollView>
     </>
@@ -408,48 +292,51 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  heading: {
+    marginBottom: 16,
+    textAlign: 'center',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 24,
   },
-  heading: {
-    marginBottom: 16,
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 14,
+    textAlign: 'center',
+    color: Colors.danger,
   },
   infoBox: {
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    padding: 16,
+    marginBottom: 16,
+    padding: 12,
     borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
   },
   infoText: {
     fontSize: 14,
+    lineHeight: 20,
   },
-  form: {
-    gap: 16,
+  formContainer: {
+    marginBottom: 24,
   },
   formGroup: {
-    gap: 4,
+    marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    marginBottom: 8,
     fontWeight: '500',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
   pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
     borderRadius: 8,
+    marginBottom: 4,
     overflow: 'hidden',
   },
   disabledContainer: {
@@ -460,47 +347,70 @@ const styles = StyleSheet.create({
     height: 50,
     width: '100%',
   },
-  inputError: {
-    borderColor: '#E53935',
+  input: {
+    height: 50,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
   },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-    marginTop: 4,
+  textArea: {
+    height: 100,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    textAlignVertical: 'top',
   },
-  buttonContainer: {
+  infoSection: {
+    marginTop: 16,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+  },
+  productSummary: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    alignItems: 'center',
     marginTop: 16,
   },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E0E0E0',
+  productCount: {
+    fontWeight: '500',
   },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#424242',
+  viewButton: {
+    backgroundColor: Colors.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  viewButtonText: {
+    color: 'white',
+    fontWeight: '500',
+    fontSize: 14,
   },
   submitButton: {
-    flex: 2,
-    backgroundColor: '#0a7ea4',
+    backgroundColor: Colors.primary,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
+    marginBottom: 12,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: 'white',
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.danger,
+    marginBottom: 40,
+  },
+  cancelButtonText: {
+    color: Colors.danger,
+    fontWeight: '500',
+    fontSize: 16,
   },
 });

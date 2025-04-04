@@ -1,197 +1,151 @@
 // app/gastos/index.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
-import { Stack, router } from 'expo-router';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/DataTable';
-import { gastoApi } from '@/services/api';
+import { useGastos } from '@/hooks/crud/useGastos';
 import { Gasto } from '@/models';
 
 export default function GastosScreen() {
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { 
+    entities: gastos, 
+    isLoading, 
+    error, 
+    pagination,
+    loadEntities,
+    deleteEntity,
+    getEstadisticas,
+    getCategoryColor
+  } = useGastos();
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
+  // Control para evitar múltiples cargas
+  const isInitialMount = useRef(true);
+  
+  // Cargar datos solo una vez al montar el componente
+  useEffect(() => {
+    // Solo realizar la carga inicial
+    if (isInitialMount.current) {
+      console.log('Cargando datos de gastos (carga inicial)');
+      loadEntities();
+      isInitialMount.current = false;
+    }
+  }, []); // Sin dependencias para evitar recargas
+  
+  // Obtener las estadísticas
+  const { totalMonto, totalGastos } = getEstadisticas();
 
-  // Sorting state
-  const [sortColumn, setSortColumn] = useState('id');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const handleAddGasto = () => {
+    router.push('/gastos/create');
+  };
 
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-    },
+  // Definir columnas para la tabla directamente en el componente
+  const columns = useMemo(() => [
     {
       id: 'descripcion',
       label: 'Descripción',
       width: 2,
+      sortable: true,
     },
     {
       id: 'monto',
       label: 'Monto',
       width: 1,
-      render: (item: Gasto) => <ThemedText>${parseFloat(item.monto).toFixed(2)}</ThemedText>,
+      sortable: true,
+      render: (item: Gasto) => (
+        <ThemedText>${parseFloat(item.monto).toFixed(2)}</ThemedText>
+      ),
     },
     {
       id: 'categoria',
       label: 'Categoría',
       width: 1,
+      sortable: true,
+      render: (item: Gasto) => (
+        <ThemedText style={{ color: getCategoryColor(item.categoria) }}>
+          {item.categoria.charAt(0).toUpperCase() + item.categoria.slice(1)}
+        </ThemedText>
+      ),
     },
     {
       id: 'fecha',
       label: 'Fecha',
       width: 1,
-      render: (item: Gasto) => <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>,
+      sortable: true,
+      render: (item: Gasto) => (
+        <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>
+      ),
     },
-  ];
+  ], [getCategoryColor]);
 
-  const loadGastos = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await gastoApi.getGastos(page, perPage);
-      
-      if (response && response.data) {
-        setGastos(response.data);
-        setTotalPages(response.pagination.pages);
-        setCurrentPage(response.pagination.page);
-        setTotalItems(response.pagination.total);
-        setItemsPerPage(response.pagination.per_page);
-      } else {
-        console.error('Formato de respuesta inesperado:', response);
-        setError('Error al cargar los gastos');
-      }
-    } catch (err) {
-      console.error('Error al cargar gastos:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar los gastos');
-    } finally {
-      setIsLoading(false);
+  // Función callback para manejar la eliminación
+  const handleDelete = useMemo(() => async (id: string | number) => {
+    const success = await deleteEntity(Number(id));
+    if (success) {
+      // Recargar la lista después de eliminar
+      loadEntities();
     }
-  }, [currentPage, itemsPerPage]);
-
-  // Initial load
-  useEffect(() => {
-    loadGastos();
-  }, [loadGastos]);
-
-  // Handle refresh
-  const handleRefresh = useCallback(() => {
-    loadGastos(1, itemsPerPage); // Reset to first page on refresh
-  }, [loadGastos, itemsPerPage]);
-
-  // Handle page change
-  const handlePageChange = useCallback((page: number) => {
-    loadGastos(page, itemsPerPage);
-  }, [loadGastos, itemsPerPage]);
-
-  // Handle items per page change
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    loadGastos(1, perPage); // Reset to first page when changing items per page
-  }, [loadGastos]);
-
-  // Handle sort
-  const handleSort = useCallback((column: string) => {
-    setSortOrder(prevOrder => 
-      column === sortColumn 
-        ? prevOrder === 'asc' ? 'desc' : 'asc' 
-        : 'asc'
-    );
-    setSortColumn(column);
-    
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
-  }, [sortColumn, sortOrder]);
-  
-  const handleAddGasto = () => {
-    router.push('/gastos/create');
-  };
-
-  const handleEdit = (id: string) => {
-    router.push(`/gastos/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await gastoApi.deleteGasto(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadGastos(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        gastos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Gasto eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar gasto:', error);
-      Alert.alert('Error', 'No se pudo eliminar el gasto');
-      setIsLoading(false);
-    }
-  };
-
-  // Calcular el total de gastos
-  const totalGastos = gastos.reduce((acc, gasto) => acc + parseFloat(gasto.monto), 0);
+    return success;
+  }, [deleteEntity, loadEntities]);
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Gastos',
-        headerShown: true 
-      }} />
-      
+    <ScreenContainer 
+      title="Gastos"
+      scrollable={false}
+    >
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Registros:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : totalItems}
+              {isLoading ? 'Cargando...' : totalGastos}
             </ThemedText>
           </ThemedView>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Gastos:</ThemedText>
-            <ThemedText style={styles.summaryValue}>${totalGastos.toFixed(2)}</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              ${isLoading ? '0.00' : totalMonto.toFixed(2)}
+            </ThemedText>
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Gasto>
+        <EnhancedDataTable
           data={gastos}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/gastos"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay gastos registrados"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/gastos"
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn: 'id',
+            sortOrder: 'asc',
+            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Gasto',
             message: '¿Está seguro que desea eliminar este gasto?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: handleDelete
           }}
+          emptyMessage="No hay gastos disponibles"
+          onRefresh={loadEntities}
         />
         
         <FloatingActionButton 
@@ -199,33 +153,33 @@ export default function GastosScreen() {
           onPress={handleAddGasto} 
         />
       </ThemedView>
-    </>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal: 16,
   },
   summary: {
-    padding: 16,
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    backgroundColor: '#f5f5f5',
     borderRadius: 8,
-    margin: 16,
-    marginBottom: 0,
-    gap: 8,
+    padding: 16,
+    marginBottom: 16,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 16,
     fontWeight: '500',
   },
   summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
