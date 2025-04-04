@@ -184,45 +184,57 @@ export const useVentas = () => {
 
   // Cargar opciones (clientes, almacenes) - Optimizado
   const loadOptions = useCallback(async () => {
-    // Evitar cargas duplicadas durante una llamada en curso
-    if (isLoadingOptions) {
-      console.log('Ya se están cargando opciones...');
-      return { clientes, almacenes };
-    }
-    
-    // Si ya tienen datos, usarlos directamente
-    if (clientes.length > 0 && almacenes.length > 0) {
-      console.log('Usando opciones ya cargadas');
-      return { clientes, almacenes };
-    }
-    
     try {
-      console.log('Cargando opciones...');
+      console.log('Iniciando carga de opciones...');
       setIsLoadingOptions(true);
       
-      const [clientesRes, almacenesRes] = await Promise.all([
-        clienteApi.getClientes(1, 100),
-        almacenApi.getAlmacenes()
-      ]);
+      // Cargar primero los almacenes y verificar la respuesta
+      const almacenesRes = await almacenApi.getAlmacenes();
+      console.log('Respuesta de almacenes:', almacenesRes);
       
-      const clientesData = clientesRes?.data || [];
-      const almacenesData = almacenesRes?.data || [];
+      // Verificar si la respuesta tiene la estructura esperada
+      if (!almacenesRes || !Array.isArray(almacenesRes.data)) {
+        console.error('Respuesta de almacenes inválida:', almacenesRes);
+        // Establecer un array vacío como fallback
+        setAlmacenes([]);
+      } else {
+        const almacenesData = almacenesRes.data;
+        console.log(`Almacenes cargados: ${almacenesData.length}`, almacenesData);
+        setAlmacenes(almacenesData);
+      }
       
-      setClientes(clientesData);
-      setAlmacenes(almacenesData);
+      // Cargar clientes después
+      const clientesRes = await clienteApi.getClientes(1, 100);
+      console.log('Respuesta de clientes:', clientesRes);
+      
+      // Verificar si la respuesta tiene la estructura esperada
+      if (!clientesRes || !Array.isArray(clientesRes.data)) {
+        console.error('Respuesta de clientes inválida:', clientesRes);
+        // Establecer un array vacío como fallback
+        setClientes([]);
+      } else {
+        const clientesData = clientesRes.data;
+        console.log(`Clientes cargados: ${clientesData.length}`);
+        setClientes(clientesData);
+      }
       
       return {
-        clientes: clientesData,
-        almacenes: almacenesData
+        clientes: clientesRes?.data || [],
+        almacenes: almacenesRes?.data || []
       };
     } catch (error) {
-      console.error('Error al cargar opciones:', error);
+      console.error('Error detallado al cargar opciones:', error);
+      // Mostrar más detalles del error
+      if (error instanceof Error) {
+        console.error('Mensaje:', error.message);
+        console.error('Stack:', error.stack);
+      }
       setError(error instanceof Error ? error.message : 'Error al cargar opciones');
       return { clientes: [], almacenes: [] };
     } finally {
       setIsLoadingOptions(false);
     }
-  }, [isLoadingOptions, clientes, almacenes]);
+  }, []);
 
   // Filtrar productos por almacén - Optimizado
   const filtrarPorAlmacenId = useCallback(async (almacenId: number) => {
@@ -841,6 +853,8 @@ export const useVentas = () => {
     calcularEstadoPago,
     getEstadisticas,
     resetForm,
+
+    setClientes,
     
     // Filtros
     applyFilters,

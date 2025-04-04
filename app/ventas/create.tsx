@@ -1,10 +1,12 @@
 // app/ventas/create.tsx - Pantalla simplificada y amigable
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput as RNTextInput, Alert, ActivityIndicator, Platform, Modal, Image, FlatList } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput as RNTextInput, Alert, ActivityIndicator, Platform, Modal, Image, FlatList, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+import { ClienteFormModal } from '@/components/ClienteModal';
+import { Cliente } from '@/models';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -28,6 +30,7 @@ export default function CreateVentaScreen() {
   const [clienteSearch, setClienteSearch] = useState('');
   const [clientesFiltrados, setClientesFiltrados] = useState<any[]>([]);
   const [showClientesDropdown, setShowClientesDropdown] = useState(false);
+  const [showClienteFormModal, setShowClienteFormModal] = useState(false);
   
   // Usar el hook de ventas
   const {
@@ -46,63 +49,105 @@ export default function CreateVentaScreen() {
     actualizarProducto,
     eliminarProducto,
     handleAlmacenChange,
+    setClientes,
   } = useVentas();
   
   // Control para verificar si ya se cargaron las opciones
   const opcionesCargadas = useRef(false);
-  
-  // Precargar almacén del usuario y cargar presentaciones iniciales
-  useEffect(() => {
-    // Evitar ejecuciones repetidas usando una referencia
-    if (opcionesCargadas.current) {
+
+  const handleClienteCreated = (cliente: Cliente) => {
+    console.log('Nuevo cliente creado:', cliente);
+    
+    // Verificar si clientes y setClientes existen
+    if (!setClientes) {
+      console.error('setClientes no está disponible');
+      // Fallback: actualizar solo clientesFiltrados y seleccionar el cliente
+      setClientesFiltrados(prev => [cliente, ...prev]);
+      form.handleChange('cliente_id', cliente.id.toString());
+      setClienteSearch(cliente.nombre);
+      setShowClientesDropdown(false);
       return;
     }
+    
+    // Actualizar la lista de clientes con el nuevo cliente al inicio
+    if (Array.isArray(clientes)) {
+      setClientes([cliente, ...clientes]);
+    } else {
+      setClientes([cliente]);
+    }
+    
+    // Seleccionar automáticamente el cliente recién creado
+    form.handleChange('cliente_id', cliente.id.toString());
+    setClienteSearch(cliente.nombre);
+    setShowClientesDropdown(false);
+  }
 
-    // Datos del usuario y opciones por defecto
-    const loadInitialData = async () => {
-      try {
-        // Cargar opciones
-        await loadOptions();
+useEffect(() => {
+  // Evitar ejecuciones repetidas usando una referencia
+  if (opcionesCargadas.current) {
+    return;
+  }
+
+  // Datos del usuario y opciones por defecto
+  const loadInitialData = async () => {
+    try {
+      // Cargar opciones primero
+      await loadOptions();
+      
+      // Mejorar el log para diagnosticar
+      console.log("Usuario actual:", user);
+      console.log("Almacenes disponibles:", almacenes.map(a => `${a.id}:${a.nombre}`).join(', '));
+      
+      // Configurar valores iniciales si están disponibles
+      let almacenIdToUse = '';
+      
+      // Verificar si el usuario tiene almacén asignado
+      if (user?.almacen_id && almacenes.length > 0) {
+        // Usar toString para asegurar una comparación de tipo consistente
+        const userAlmacenIdStr = user.almacen_id.toString();
+        console.log(`Buscando almacén con ID: ${userAlmacenIdStr} (tipo: ${typeof userAlmacenIdStr})`);
         
-        // Mejorar el log para diagnosticar
-        console.log("Usuario actual:", user);
-        console.log("Almacenes disponibles:", almacenes.map(a => `${a.id}:${a.nombre}`).join(', '));
+        // Buscar el almacén asegurando comparación de strings
+        const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
         
-        // Configurar valores iniciales si están disponibles
-        const userAlmacenId = user?.almacen_id;
-        if (userAlmacenId && almacenes.length > 0) {
-          // Usar toString para asegurar una comparación de tipo consistente
-          const userAlmacenIdStr = userAlmacenId.toString();
-          console.log(`Buscando almacén con ID: ${userAlmacenIdStr} (tipo: ${typeof userAlmacenIdStr})`);
-          
-          // Buscar el almacén asegurando comparación de strings
-          const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
-          
-          if (userAlmacen) {
-            console.log(`Precargando almacén del usuario: ${userAlmacen.nombre} (ID: ${userAlmacen.id})`);
-            
-            // Actualizar el formulario con el ID del almacén
-            form.handleChange('almacen_id', userAlmacenIdStr);
-            
-            // Cargar presentaciones para este almacén usando la función del hook
-            await handleAlmacenChange(userAlmacenIdStr);
-          } else {
-            console.log(`¡Almacén no encontrado! ID buscado: ${userAlmacenIdStr}`);
-            console.log('IDs disponibles:', almacenes.map(a => a.id.toString()));
-          }
+        if (userAlmacen) {
+          console.log(`Precargando almacén del usuario: ${userAlmacen.nombre} (ID: ${userAlmacen.id})`);
+          almacenIdToUse = userAlmacen.id.toString();
         } else {
-          console.log('Sin almacén predeterminado: user.almacen_id =', userAlmacenId, 'almacenes.length =', almacenes.length);
+          console.log(`¡Almacén no encontrado! ID buscado: ${userAlmacenIdStr}`);
+          console.log('IDs disponibles:', almacenes.map(a => a.id.toString()));
         }
-        
-        // Marcar como cargado
-        opcionesCargadas.current = true;
-      } catch (error) {
-        console.error('Error al cargar datos iniciales:', error);
+      } 
+      
+      // Si no se encontró el almacén del usuario, usar el primer almacén disponible
+      if (!almacenIdToUse && almacenes.length > 0) {
+        console.log('Usando el primer almacén disponible como alternativa');
+        almacenIdToUse = almacenes[0].id.toString();
       }
-    };
+      
+      // Si tenemos un almacén para usar, configurarlo
+      if (almacenIdToUse) {
+        console.log(`Configurando almacén ID: ${almacenIdToUse}`);
+        
+        // Actualizar el formulario con el ID del almacén
+        form.handleChange('almacen_id', almacenIdToUse);
+        
+        // Importante: Llamar a handleAlmacenChange DESPUÉS de haber configurado el ID
+        // y esperar a que complete antes de marcar como cargado
+        await handleAlmacenChange(almacenIdToUse);
+      } else {
+        console.log('No hay almacenes disponibles para precargar');
+      }
+      
+      // Marcar como cargado
+      opcionesCargadas.current = true;
+    } catch (error) {
+      console.error('Error al cargar datos iniciales:', error);
+    }
+  };
 
-    loadInitialData();
-  }, [user, almacenes.length, loadOptions, handleAlmacenChange, form]);
+  loadInitialData();
+}, [loadOptions, handleAlmacenChange, form, almacenes, user]);
   
   // Filtrar clientes basado en el texto de búsqueda
   const filtrarClientes = useCallback((texto: string) => {
@@ -294,7 +339,19 @@ export default function CreateVentaScreen() {
         </ThemedView>
         {/* Sección de cliente con buscador */}
         <ThemedView style={styles.clienteSection}>
-          <ThemedText type="subtitle" style={styles.primaryLabel}>Cliente</ThemedText>
+          <ThemedView style={styles.clienteSectionHeader}>
+            <ThemedText type="subtitle" style={styles.primaryLabel}>
+              <IconSymbol name="person.fill" size={18} color="#0a7ea4" style={{marginRight: 6}} />
+              Cliente
+            </ThemedText>
+            <TouchableOpacity
+              style={styles.newClienteButton}
+              onPress={() => setShowClienteFormModal(true)}
+            >
+              <IconSymbol name="plus.circle" size={16} color="#FFFFFF" />
+              <ThemedText style={styles.newClienteButtonText}>Nuevo Cliente</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
           
           {form.formData.cliente_id && clienteSearch ? (
             <View style={styles.selectedClienteContainer}>
@@ -317,10 +374,11 @@ export default function CreateVentaScreen() {
             </View>
           ) : (
             <View style={styles.searchContainer}>
-              <RNTextInput
+              <IconSymbol name="magnifyingglass" size={18} color="#9BA1A6" style={styles.searchIcon} />
+              <TextInput
                 style={[
                   styles.searchInput,
-                  { color: themeColors?.text },
+                  { color: isDark ? '#FFFFFF' : '#000000' },
                   form.errors.cliente_id && styles.inputError
                 ]}
                 placeholder="Buscar cliente por nombre..."
@@ -349,34 +407,51 @@ export default function CreateVentaScreen() {
             </View>
           )}
           
-          {showClientesDropdown && (
+          {showClientesDropdown && clientesFiltrados.length > 0 && (
             <View style={[
               styles.dropdownContainer, 
               { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
             ]}>
-              {clientesFiltrados.length > 0 ? (
-                <ScrollView style={styles.clientesList} nestedScrollEnabled={true}>
-                  {clientesFiltrados.map(cliente => (
-                    <TouchableOpacity
-                      key={cliente.id}
-                      style={[
-                        styles.clienteItem,
-                        { backgroundColor: form.formData.cliente_id === cliente.id.toString() ? '#e6f7ff' : 'transparent' }
-                      ]}
-                      onPress={() => seleccionarCliente(cliente)}
-                    >
-                      <ThemedText style={styles.clienteNombre}>{cliente.nombre}</ThemedText>
-                      {cliente.telefono && (
-                        <ThemedText style={styles.clienteInfo}>{cliente.telefono}</ThemedText>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              ) : (
+              <ScrollView style={styles.clientesList} nestedScrollEnabled={true}>
+                {clientesFiltrados.map(cliente => (
+                  <TouchableOpacity
+                    key={cliente.id}
+                    style={[
+                      styles.clienteItem,
+                      { backgroundColor: form.formData.cliente_id === cliente.id.toString() ? '#e6f7ff' : 'transparent' }
+                    ]}
+                    onPress={() => seleccionarCliente(cliente)}
+                  >
+                    <ThemedText style={styles.clienteNombre}>{cliente.nombre}</ThemedText>
+                    {cliente.telefono && (
+                      <ThemedText style={styles.clienteInfo}>{cliente.telefono}</ThemedText>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+          
+          {showClientesDropdown && clientesFiltrados.length === 0 && clienteSearch.length > 0 && (
+            <View style={[
+              styles.dropdownContainer,
+              { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
+            ]}>
+              <ThemedView style={styles.noResultsContainer}>
                 <ThemedText style={styles.emptyResults}>
-                  {clienteSearch.length > 0 ? "No se encontraron clientes" : "Ingrese el nombre para buscar"}
+                  No se encontraron clientes con "{clienteSearch}"
                 </ThemedText>
-              )}
+                <TouchableOpacity
+                  style={styles.createFromSearchButton}
+                  onPress={() => {
+                    setShowClientesDropdown(false);
+                    setShowClienteFormModal(true);
+                  }}
+                >
+                  <IconSymbol name="plus.circle" size={14} color="#FFFFFF" />
+                  <ThemedText style={styles.createFromSearchText}>Crear nuevo cliente</ThemedText>
+                </TouchableOpacity>
+              </ThemedView>
             </View>
           )}
           
@@ -384,7 +459,7 @@ export default function CreateVentaScreen() {
             <ThemedText style={styles.errorText}>{form.errors.cliente_id}</ThemedText>
           )}
         </ThemedView>
-        
+
         {/* Sección de productos (destacada) */}
         <ThemedView style={styles.section}>
           <ThemedView style={styles.sectionHeaderRow}>
@@ -499,6 +574,12 @@ export default function CreateVentaScreen() {
         </TouchableOpacity>
       </ScrollView>
       
+      {/* Modal para crear cliente */}
+        <ClienteFormModal
+          visible={showClienteFormModal}
+          onClose={() => setShowClienteFormModal(false)}
+          onClienteCreated={handleClienteCreated}
+        />
       {/* Modal para seleccionar productos */}
       {showProductModal && (
         <ProductPicker
@@ -863,4 +944,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  clienteSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  newClienteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 4,
+  },
+  newClienteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 10,
+    zIndex: 1,
+  },
+  noResultsContainer: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  createFromSearchButton: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 6,
+  },
+  createFromSearchText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
 });
