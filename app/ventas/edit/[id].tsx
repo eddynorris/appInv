@@ -1,586 +1,276 @@
-// app/ventas/edit/[id].tsx - Versión optimizada
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, ScrollView } from 'react-native';
+import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { FormField } from '@/components/form/FormField';
+import { FormSelect } from '@/components/form/FormSelect';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { useVentas } from '@/hooks/crud/useVentas';
-import { formatCurrency } from '@/utils/formatters';
-import { Venta } from '@/models';
-import { ProductPicker } from '@/components/ProductPicker';
-import { DetalleVentaRow } from '@/components/DetalleVentaRow';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import ProductDetailsList from '@/components/ProductDetailsList';
+import DateField from '@/components/form/DateField';
 
 export default function EditVentaScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   
-  // Estados locales para controlar visibilidad
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
+  // Referencia para controlar la carga inicial
+  const hasLoadedRef = useRef(false);
   
   // Usar el hook de ventas
   const {
     form,
-    validationRules,
     isLoading,
-    venta,
+    error,
     clientes,
     almacenes,
-    presentacionesFiltradas,
+    venta,
     loadVentaForEdit,
     updateVenta,
-    calcularTotal,
-    agregarProducto,
-    actualizarProducto,
-    eliminarProducto,
-    handleAlmacenChange,
+    loadOptions
   } = useVentas();
-  
-  // Control para cargar la venta una sola vez
-  const ventaCargada = useRef(false);
-  
-  // Cargar datos de la venta al iniciar (una sola vez)
+
+  // Cargar datos de la venta SOLO UNA VEZ
   useEffect(() => {
-    // Función para cargar la venta
-    const cargarVenta = async () => {
-      // Evitar múltiples cargas
-      if (!id || ventaCargada.current) return;
+    // Solo ejecutar si no se ha cargado ya
+    if (!hasLoadedRef.current && id) {
+      console.log(`⭐ Cargando datos para edición de venta ID: ${id}`);
       
-      console.log(`Iniciando carga de venta #${id} para edición...`);
+      const fetchData = async () => {
+        // Primero cargar las opciones (una sola vez)
+        await loadOptions();
+        
+        // Luego cargar la venta específica
+        await loadVentaForEdit(parseInt(id));
+        
+        // Marcar como cargado para evitar múltiples cargas
+        hasLoadedRef.current = true;
+      };
       
-      // Establecer flag para evitar cargas duplicadas
-      ventaCargada.current = true;
-      
-      try {
-        const ventaData = await loadVentaForEdit(parseInt(id));
-        if (ventaData) {
-          setIsInitialized(true);
-        }
-      } catch (error) {
-        console.error('Error al cargar venta:', error);
-        Alert.alert(
-          'Error', 
-          'No se pudo cargar los datos de la venta. Intente nuevamente.'
-        );
-      }
-    };
-    
-    cargarVenta();
-    
-    // Limpieza al desmontar el componente
-    return () => {
-      ventaCargada.current = false;
-    };
-  }, [id]); // Solo id como dependencia
-  
-  // Manejar el cambio de fecha
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      form.handleChange('fecha', formattedDate);
+      fetchData();
     }
-  };
-  
-  // Manejar la selección de producto
-  const handleProductSelect = (presentacionId: string, cantidad: string, precio: string) => {
-    agregarProducto(presentacionId, cantidad, precio);
-    setShowProductModal(false);
-  };
-  
-  // Manejar la actualización de la venta
-  const handleUpdate = async () => {
-    if (!id) return;
-    await updateVenta();
-  };
-  
-  // Verificar estado de carga inicial
-  if (!isInitialized) {
+    
+    // Limpieza cuando el componente se desmonta
+    return () => {
+      console.log("Limpiando componente de edición");
+      hasLoadedRef.current = false;
+    };
+  }, [id]); // Solo dependemos del ID, ninguna función que cambie en cada renderizado
+
+  if (error) {
     return (
       <>
-        <Stack.Screen options={{ 
-          title: 'Editar Venta',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={isDark ? Colors.dark.tint : Colors.light.tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos de la venta...</ThemedText>
+        <Stack.Screen options={{ title: 'Error' }} />
+        <ThemedView style={styles.container}>
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <ActionButtons 
+            onCancel={() => router.back()}
+            cancelText="Volver"
+          />
         </ThemedView>
       </>
     );
   }
+
+  // Crear opciones para los selectores
+  const clienteOptions = clientes.map(cliente => ({
+    label: cliente.nombre,
+    value: cliente.id.toString(),
+  }));
+
+  const almacenOptions = almacenes.map(almacen => ({
+    label: almacen.nombre,
+    value: almacen.id.toString(),
+  }));
   
-  // Fecha actual formateada para mostrar
-  const currentDate = form.formData.fecha 
-    ? new Date(form.formData.fecha).toLocaleDateString() 
-    : new Date().toLocaleDateString();
+  // Opciones para estado de pago
+  const estadoPagoOptions = [
+    { label: 'Pendiente', value: 'pendiente' },
+    { label: 'Parcial', value: 'parcial' },
+    { label: 'Pagado', value: 'pagado' },
+  ];
   
-  // Calcular el total de la venta
-  const total = calcularTotal();
-  
+  // Opciones para tipo de pago
+  const tipoPagoOptions = [
+    { label: 'Contado', value: 'contado' },
+    { label: 'Crédito', value: 'credito' },
+  ];
+
   return (
     <>
-      <Stack.Screen options={{ 
-        title: `Editar Venta #${id}`,
-        headerShown: true 
-      }} />
+      <Stack.Screen options={{ title: `Editar Venta #${id}` }} />
       
       <ScrollView style={styles.container}>
         <ThemedText type="title" style={styles.title}>Editar Venta #{id}</ThemedText>
         
-        {/* Sección de datos generales */}
-        <ThemedView style={styles.section}>
-          <ThemedText type="subtitle">Datos Generales</ThemedText>
-          
-          {/* Selector de Cliente */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Cliente *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
-              form.errors.cliente_id && styles.inputError
-            ]}>
-              <Picker
-                selectedValue={form.formData.cliente_id}
-                onValueChange={(value) => form.handleChange('cliente_id', value)}
-                style={[styles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={!isLoading}
-              >
-                <Picker.Item label="Seleccionar cliente..." value="" />
-                {Array.isArray(clientes) ? clientes.map(cliente => (
-                  <Picker.Item 
-                    key={cliente.id} 
-                    label={cliente.nombre} 
-                    value={cliente.id.toString()} 
-                  />
-                )) : (
-                  <Picker.Item label="Cargando clientes..." value="" />
-                )}
-              </Picker>
-            </View>
-            {form.errors.cliente_id && (
-              <ThemedText style={styles.errorText}>{form.errors.cliente_id}</ThemedText>
-            )}
-          </ThemedView>
-          
-          {/* Selector de Almacén */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Almacén *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
-              form.errors.almacen_id && styles.inputError
-            ]}>
-              <Picker
-                selectedValue={form.formData.almacen_id}
-                onValueChange={(value) => handleAlmacenChange(value)}
-                style={[styles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={!isLoading}
-              >
-                <Picker.Item label="Seleccionar almacén..." value="" />
-                {Array.isArray(almacenes) ? almacenes.map(almacen => (
-                  <Picker.Item 
-                    key={almacen.id} 
-                    label={almacen.nombre} 
-                    value={almacen.id.toString()} 
-                  />
-                )) : (
-                  <Picker.Item label="Cargando almacenes..." value="" />
-                )}
-              </Picker>
-            </View>
-            {form.errors.almacen_id && (
-              <ThemedText style={styles.errorText}>{form.errors.almacen_id}</ThemedText>
-            )}
-          </ThemedView>
-          
-          {/* Fecha de Venta */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Fecha *</ThemedText>
-            <TouchableOpacity
-              style={[
-                styles.dateSelector,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
-                form.errors.fecha && styles.inputError
-              ]}
-              onPress={() => setShowDatePicker(true)}
-              disabled={isLoading}
-            >
-              <ThemedText>{currentDate}</ThemedText>
-              <IconSymbol name="calendar" size={20} color={isDark ? '#FFFFFF' : '#666666'} />
-            </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={form.formData.fecha ? new Date(form.formData.fecha) : new Date()}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-              />
-            )}
-            {form.errors.fecha && (
-              <ThemedText style={styles.errorText}>{form.errors.fecha}</ThemedText>
-            )}
-          </ThemedView>
-          
-          {/* Tipo de Pago */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Tipo de Pago *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-            ]}>
-              <Picker
-                selectedValue={form.formData.tipo_pago}
-                onValueChange={(value) => form.handleChange('tipo_pago', value)}
-                style={[styles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={!isLoading}
-              >
-                <Picker.Item label="Contado" value="contado" />
-                <Picker.Item label="Crédito" value="credito" />
-              </Picker>
-            </View>
-          </ThemedView>
-          
-          {/* Consumo Diario */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Consumo Diario (KG)</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                { color: isDark ? Colors.dark.text : Colors.light.text },
-                form.errors.consumo_diario_kg && styles.inputError
-              ]}
-              placeholder="Ej.: 25"
-              placeholderTextColor="#9BA1A6"
-              keyboardType="decimal-pad"
-              value={form.formData.consumo_diario_kg}
-              onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
-              editable={!isLoading}
-            />
-            {form.errors.consumo_diario_kg && (
-              <ThemedText style={styles.errorText}>{form.errors.consumo_diario_kg}</ThemedText>
-            )}
-          </ThemedView>
-          
-          {/* Estado de Pago (solo mostrar, no editar) */}
-          {venta && (
-            <ThemedView style={styles.formGroup}>
-              <ThemedText style={styles.label}>Estado de Pago</ThemedText>
-              <ThemedView style={[
-                styles.estadoContainer,
-                { backgroundColor: getEstadoColor(venta.estado_pago, 0.1) }
-              ]}>
-                <ThemedText style={[
-                  styles.estadoText,
-                  { color: getEstadoColor(venta.estado_pago, 1) }
-                ]}>
-                  {getEstadoText(venta.estado_pago)}
-                </ThemedText>
-              </ThemedView>
-            </ThemedView>
-          )}
+        {/* Notificación de inmutabilidad de detalles */}
+        <ThemedView style={styles.infoBox}>
+          <IconSymbol name="info.circle.fill" size={24} color="#2196F3" />
+          <ThemedText style={styles.infoText}>
+            Los productos de la venta no se pueden modificar. Solo puedes cambiar la información general.
+          </ThemedText>
         </ThemedView>
         
-        {/* Sección de productos */}
-        <ThemedView style={styles.section}>
-          <ThemedView style={styles.sectionHeaderRow}>
-            <ThemedText type="subtitle">Productos</ThemedText>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => {
-                if (!form.formData.almacen_id) {
-                  Alert.alert('Error', 'Selecciona un almacén antes de agregar productos');
-                  return;
-                }
-                setShowProductModal(true);
-              }}
-              disabled={isLoading || !form.formData.almacen_id}
-            >
-              <IconSymbol name="plus.circle" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.addButtonText}>Agregar</ThemedText>
-            </TouchableOpacity>
+        {/* Formulario de edición */}
+        <FormSelect
+          label="Cliente"
+          value={form.formData.cliente_id}
+          options={clienteOptions}
+          onChange={(value) => form.handleChange('cliente_id', value)}
+          error={form.errors.cliente_id}
+          required
+        />
+        
+        <FormSelect
+          label="Almacén"
+          value={form.formData.almacen_id}
+          options={almacenOptions}
+          onChange={(value) => form.handleChange('almacen_id', value)}
+          error={form.errors.almacen_id}
+          required
+        />
+        
+        <DateField
+          label="Fecha"
+          value={form.formData.fecha}
+          onChange={(value) => form.handleChange('fecha', value)}
+          error={form.errors.fecha}
+          required
+        />
+        
+        <FormSelect
+          label="Tipo de Pago"
+          value={form.formData.tipo_pago}
+          options={tipoPagoOptions}
+          onChange={(value) => form.handleChange('tipo_pago', value)}
+          error={form.errors.tipo_pago}
+          required
+        />
+        
+        <FormSelect
+          label="Estado de Pago"
+          value={form.formData.estado_pago || 'pendiente'}
+          options={estadoPagoOptions}
+          onChange={(value) => form.handleChange('estado_pago', value)}
+          error={form.errors.estado_pago}
+        />
+        
+        <FormField
+          label="Consumo Diario (kg)"
+          value={form.formData.consumo_diario_kg}
+          onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
+          keyboardType="numeric"
+          error={form.errors.consumo_diario_kg}
+        />
+        
+        {/* Sección de detalles (sólo lectura) */}
+        {venta?.detalles && venta.detalles.length > 0 && (
+          <ThemedView style={styles.detailsSection}>
+            <ThemedText type="subtitle">Productos (solo lectura)</ThemedText>
+            <ProductDetailsList 
+              details={venta.detalles} 
+              title="" 
+            />
+          </ThemedView>
+        )}
+        
+        {/* Resumen financiero */}
+        <ThemedView style={styles.summarySection}>
+          <ThemedText type="subtitle">Resumen Financiero</ThemedText>
+          
+          <ThemedView style={styles.summaryRow}>
+            <ThemedText style={styles.summaryLabel}>Total:</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              ${parseFloat(venta?.total || '0').toFixed(2)}
+            </ThemedText>
           </ThemedView>
           
-          {/* Lista de productos agregados */}
-          {form.formData.detalles.length === 0 ? (
-            <ThemedView style={styles.emptyProducts}>
-              <IconSymbol name="cart" size={40} color="#9BA1A6" />
-              <ThemedText style={styles.emptyText}>
-                No hay productos agregados
-              </ThemedText>
-              <ThemedText style={styles.emptySubtext}>
-                Agrega productos usando el botón "Agregar"
+          {venta?.estado_pago !== 'pagado' && (
+            <ThemedView style={styles.summaryInfo}>
+              <IconSymbol name="info.circle.fill" size={16} color="#FF9800" />
+              <ThemedText style={styles.summaryInfoText}>
+                Puedes registrar nuevos pagos desde la vista de detalle de venta.
               </ThemedText>
             </ThemedView>
-          ) : (
-            <ThemedView style={styles.productsList}>
-              {form.formData.detalles.map((detalle, index) => (
-                <DetalleVentaRow
-                  key={`${detalle.presentacion_id}_${index}`}
-                  detalle={detalle}
-                  index={index}
-                  presentaciones={presentacionesFiltradas}
-                  onUpdate={actualizarProducto}
-                  onDelete={eliminarProducto}
-                  disabled={isLoading}
-                />
-              ))}
-              
-              <ThemedView style={styles.totalRow}>
-                <ThemedText style={styles.totalLabel}>Total:</ThemedText>
-                <ThemedText style={styles.totalValue}>{formatCurrency(total)}</ThemedText>
-              </ThemedView>
-            </ThemedView>
-          )}
-          
-          {form.errors.detalles && (
-            <ThemedText style={styles.errorText}>{form.errors.detalles}</ThemedText>
           )}
         </ThemedView>
         
         {/* Botones de acción */}
-        <ThemedView style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[
-              styles.buttonCancel
-            ]}
-            onPress={() => router.back()}
-            disabled={isLoading}
-          >
-            <ThemedText style={styles.buttonCancelText}>Cancelar</ThemedText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.buttonSave, 
-              isLoading && styles.buttonDisabled
-            ]}
-            onPress={handleUpdate}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <IconSymbol name="checkmark.circle" size={20} color="#FFFFFF" />
-                <ThemedText style={styles.buttonSaveText}>Actualizar</ThemedText>
-              </>
-            )}
-          </TouchableOpacity>
-        </ThemedView>
-      </ScrollView>
-      
-      {/* Modal para seleccionar productos */}
-      {showProductModal && (
-        <ProductPicker
-          visible={showProductModal}
-          onClose={() => setShowProductModal(false)}
-          onSelectProduct={handleProductSelect}
-          presentaciones={presentacionesFiltradas}
-      isLoading={isLoading}
+        <ActionButtons
+          onSave={updateVenta}
+          onCancel={() => router.back()}
+          isSubmitting={isLoading}
+          saveText="Guardar Cambios"
         />
-      )}
+      </ScrollView>
     </>
   );
 }
-
-// Función para obtener el color según el estado de pago
-const getEstadoColor = (estado: string, opacity: number = 1): string => {
-  const colors = {
-    'pagado': `rgba(76, 175, 80, ${opacity})`,
-    'parcial': `rgba(255, 193, 7, ${opacity})`,
-    'pendiente': `rgba(244, 67, 54, ${opacity})`
-  };
-  
-  return colors[estado as keyof typeof colors] || `rgba(117, 117, 117, ${opacity})`;
-};
-
-// Función para obtener el texto del estado de pago
-const getEstadoText = (estado: string): string => {
-  switch (estado) {
-    case 'pagado': return 'Pagado';
-    case 'parcial': return 'Pago Parcial';
-    case 'pendiente': return 'Pendiente';
-    default: return estado.charAt(0).toUpperCase() + estado.slice(1);
-  }
-};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-  },
   title: {
-    marginBottom: 20,
-  },
-  section: {
-    marginBottom: 24,
-    gap: 12,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  formGroup: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 6,
-    fontWeight: '500',
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  dateSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-  },
-  inputError: {
-    borderColor: '#E53935',
+    marginBottom: 16,
   },
   errorText: {
-    color: '#E53935',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  estadoContainer: {
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  estadoText: {
-    fontWeight: 'bold',
-  },
-  addButton: {
-    flexDirection: 'row',
-    backgroundColor: '#0a7ea4',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  emptyProducts: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderStyle: 'dashed',
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#9BA1A6',
-    marginTop: 4,
+    color: '#F44336',
     textAlign: 'center',
+    marginVertical: 20,
   },
-  productsList: {
-    marginTop: 8,
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignItems: 'center',
   },
-  totalRow: {
+  infoText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 14,
+  },
+  detailsSection: {
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  summarySection: {
+    marginTop: 16,
+    marginBottom: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    padding: 16,
+    borderRadius: 8,
+  },
+  summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#E1E3E5',
-    paddingTop: 12,
-    marginTop: 12,
+    marginTop: 8,
   },
-  totalLabel: {
+  summaryLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  summaryValue: {
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  totalValue: {
-    fontSize: 20,
     fontWeight: 'bold',
     color: '#0a7ea4',
   },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-    marginVertical: 16,
-  },
-  buttonCancel: {
-    flex: 1,
-    backgroundColor: '#EEEEEE',
+  summaryInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 8,
+    marginTop: 12,
+    padding: 8,
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    borderRadius: 4,
   },
-  buttonCancelText: {
-    color: '#424242',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  buttonSave: {
-    flex: 2,
-    backgroundColor: '#0a7ea4',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 8,
-  },
-  buttonSaveText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  summaryInfoText: {
     marginLeft: 8,
-  },
-  buttonDisabled: {
-    backgroundColor: '#90CAF9',
+    fontSize: 14,
+    color: '#FF9800',
   },
 });

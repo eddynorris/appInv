@@ -112,13 +112,7 @@ export const useVentas = () => {
 
   // Columnas para la tabla de ventas (memoizadas)
   const columns = useMemo(() => [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-      sortable: true,
-      render: (item: Venta) => <ThemedText>{item.id}</ThemedText>,
-    },
+
     {
       id: 'fecha',
       label: 'Fecha',
@@ -394,57 +388,64 @@ export const useVentas = () => {
   }, [venta]);
 
   // Cargar venta para edición
-  const loadVentaForEdit = useCallback(async (id: number) => {
-    if (isLoading) return null;
+  // Función loadVentaForEdit corregida para evitar bucles infinitos
+const loadVentaForEdit = useCallback(async (id: number) => {
+  // Evitar cargar si ya está cargando
+  if (isLoading) {
+    console.log('Ya hay una carga en progreso, evitando doble carga');
+    return null;
+  }
+  
+  // Evitar cargar si ya tenemos la venta cargada con el mismo ID
+  if (ventaIdRef.current === id && venta !== null) {
+    console.log(`Venta ${id} ya está cargada, evitando recarga innecesaria`);
+    return venta;
+  }
+  
+  try {
+    setIsLoading(true);
+    ventaIdRef.current = id;
     
-    try {
-      setIsLoading(true);
-      ventaIdRef.current = id;
-      
-      // Cargar datos maestros si no existen
-      if (!optionsLoadedRef.current) {
-        await loadOptions();
-      }
-      
-      // Cargar venta
-      const ventaData = await ventaApi.getVenta(id);
-      if (!ventaData) {
-        setError('No se pudo cargar la venta');
-        return null;
-      }
-      
-      // Cargar productos por almacén si hay detalles
-      if (ventaData.almacen_id && ventaData.detalles?.length) {
-        await filtrarPorAlmacenId(ventaData.almacen_id);
-      }
-      
-      // Formatear fecha
-      const fecha = ventaData.fecha?.split('T')[0] || new Date().toISOString().split('T')[0];
-      
-      // Actualizar formulario
-      form.setFormData({
-        cliente_id: ventaData.cliente_id?.toString() || '',
-        almacen_id: ventaData.almacen_id?.toString() || '',
-        fecha,
-        tipo_pago: ventaData.tipo_pago || 'contado',
-        consumo_diario_kg: ventaData.consumo_diario_kg?.toString() || '0',
-        detalles: ventaData.detalles?.map(d => ({
-          id: d.id,
-          presentacion_id: d.presentacion_id?.toString() || '',
-          cantidad: d.cantidad?.toString() || '',
-          precio_unitario: d.precio_unitario || ''
-        })) || []
-      });
-      
-      return ventaData;
-    } catch (error) {
-      console.error(`Error al cargar venta ${id} para edición:`, error);
-      setError(`Error al cargar venta: ${error}`);
+    console.log(`Cargando venta ${id} para edición...`);
+    
+    // Cargar venta
+    const ventaData = await ventaApi.getVenta(id);
+    if (!ventaData) {
+      setError('No se pudo cargar la venta');
       return null;
-    } finally {
-      setIsLoading(false);
     }
-  }, [loadOptions, filtrarPorAlmacenId, form, isLoading]);
+    
+    console.log('Venta cargada correctamente:', ventaData.id);
+    setVenta(ventaData);
+    
+    // Formatear fecha
+    const fecha = ventaData.fecha?.split('T')[0] || new Date().toISOString().split('T')[0];
+    
+    // Actualizar formulario
+    form.setFormData({
+      cliente_id: ventaData.cliente_id?.toString() || '',
+      almacen_id: ventaData.almacen_id?.toString() || '',
+      fecha,
+      tipo_pago: ventaData.tipo_pago || 'contado',
+      estado_pago: ventaData.estado_pago || 'pendiente',
+      consumo_diario_kg: ventaData.consumo_diario_kg?.toString() || '0',
+      detalles: ventaData.detalles?.map(d => ({
+        id: d.id,
+        presentacion_id: d.presentacion_id?.toString() || '',
+        cantidad: d.cantidad?.toString() || '',
+        precio_unitario: d.precio_unitario || ''
+      })) || []
+    });
+    
+    return ventaData;
+  } catch (error) {
+    console.error(`Error al cargar venta ${id} para edición:`, error);
+    setError(`Error al cargar venta: ${error}`);
+    return null;
+  } finally {
+    setIsLoading(false);
+  }
+}, [isLoading, venta, form]);
 
   // Crear venta
   const createVenta = useCallback(async () => {
@@ -508,15 +509,7 @@ export const useVentas = () => {
         tipo_pago: form.formData.tipo_pago,
         consumo_diario_kg: form.formData.consumo_diario_kg,
         fecha: `${form.formData.fecha}T00:00:00Z`,
-        detalles: form.formData.detalles.map(d => {
-          const detalle: any = {
-            presentacion_id: parseInt(d.presentacion_id),
-            cantidad: parseInt(d.cantidad),
-            precio_unitario: d.precio_unitario
-          };
-          if (d.id) detalle.id = d.id;
-          return detalle;
-        })
+
       };
       
       console.log(`Actualizando venta ${ventaIdRef.current}:`, ventaData);

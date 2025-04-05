@@ -1,5 +1,5 @@
 // app/ventas/index.tsx - Versión optimizada
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, Pressable } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
@@ -23,6 +23,8 @@ export default function VentasScreen() {
   const [showFechaInicioPicker, setShowFechaInicioPicker] = useState(false);
   const [showFechaFinPicker, setShowFechaFinPicker] = useState(false);
   
+  // Bandera para controlar la inicialización
+  const isInitialized = useRef(false);
   // Usar el hook especializado para ventas
   const { 
     ventas, 
@@ -62,13 +64,22 @@ export default function VentasScreen() {
     return Promise.resolve();
   }, [hookFetchData, loadVentas, pagination.currentPage, pagination.itemsPerPage]);
   
-  // Cargar datos al iniciar
+  // Cargar datos solo al iniciar la aplicación
   useEffect(() => {
-    console.log('Cargando ventas iniciales...');
-    loadVentas(1, 10);
-    loadOptions();
-  }, [loadVentas, loadOptions]);
+    // Controlar la inicialización para que solo ocurra una vez
+    if (!isInitialized.current) {
+      console.log('Inicialización: Cargando datos de ventas y opciones...');
+      
+      // Cargar primero las opciones (antes de las ventas)
+      loadOptions().then(() => {
+        // Una vez cargadas las opciones, cargar las ventas
+        loadVentas(1, 10);
+        isInitialized.current = true;
+      });
+    }
+  }, []); 
 
+  
   // Navegar a la pantalla de creación de venta
   const handleAddVenta = () => {
     router.push('/ventas/create');

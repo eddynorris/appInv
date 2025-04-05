@@ -56,7 +56,6 @@ export default function CreateVentaScreen() {
   const opcionesCargadas = useRef(false);
 
   const handleClienteCreated = (cliente: Cliente) => {
-    console.log('Nuevo cliente creado:', cliente);
     
     // Verificar si clientes y setClientes existen
     if (!setClientes) {
@@ -261,32 +260,32 @@ useEffect(() => {
                 />
               )}
             </ThemedView>
-            
-            {/* Tipo de Pago - Compacto */}
-            <ThemedView style={[styles.compactField, styles.tipoField]}>
-              <ThemedText style={styles.smallLabel}>Tipo de Pago</ThemedText>
-              <View style={[
-                styles.uniformField,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }
-              ]}>
-                <Picker
-                  selectedValue={form.formData.tipo_pago}
-                  onValueChange={(value) => form.handleChange('tipo_pago', value)}
-                  style={[styles.uniformPicker, { color: themeColors?.text }]}
-                  enabled={!isLoading}
-                  dropdownIconColor={isDark ? '#FFFFFF' : '#666666'}
-                >
-                  <Picker.Item label="Contado" value="contado" />
-                  <Picker.Item label="Crédito" value="credito" />
-                </Picker>
-              </View>
+            {/* Consumo Diario - Compacto */}
+            <ThemedView style={[styles.compactField]}>
+              <ThemedText style={styles.smallLabel}>Consumo/Dia (KG)</ThemedText>
+              <RNTextInput
+                style={[
+                  styles.uniformInput,
+                  { color: themeColors?.text },
+                  form.errors.consumo_diario_kg && styles.inputError
+                ]}
+                placeholder="Ej.: 25"
+                placeholderTextColor="#9BA1A6"
+                keyboardType="decimal-pad"
+                value={form.formData.consumo_diario_kg}
+                onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
+                editable={!isLoading}
+              />
+              {form.errors.consumo_diario_kg && (
+                <ThemedText style={styles.errorText}>{form.errors.consumo_diario_kg}</ThemedText>
+              )}
             </ThemedView>
           </ThemedView>
           
           <ThemedView style={styles.compactRow}>
             {/* Almacén - Compacto y Preseleccionado */}
             <ThemedView style={[styles.compactField, { flex: 1 }]}>
-              <ThemedText style={styles.smallLabel}>Almacén</ThemedText>
+              <ThemedText>Almacén</ThemedText>
               <View style={[
                 styles.uniformField,
                 { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' },
@@ -315,33 +314,32 @@ useEffect(() => {
               )}
             </ThemedView>
             
-            {/* Consumo Diario - Compacto */}
-            <ThemedView style={[styles.compactField]}>
-              <ThemedText style={styles.smallLabel}>Consumo/Dia (KG)</ThemedText>
-              <RNTextInput
-                style={[
-                  styles.uniformInput,
-                  { color: themeColors?.text },
-                  form.errors.consumo_diario_kg && styles.inputError
-                ]}
-                placeholder="Ej.: 25"
-                placeholderTextColor="#9BA1A6"
-                keyboardType="decimal-pad"
-                value={form.formData.consumo_diario_kg}
-                onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
-                editable={!isLoading}
-              />
-              {form.errors.consumo_diario_kg && (
-                <ThemedText style={styles.errorText}>{form.errors.consumo_diario_kg}</ThemedText>
-              )}
+            {/* Tipo de Pago - Compacto */}
+            <ThemedView style={[styles.tipoField]}>
+              <ThemedText>Tipo de Pago</ThemedText>
+              <View style={[
+                styles.uniformField,
+                { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }
+              ]}>
+                <Picker
+                  selectedValue={form.formData.tipo_pago}
+                  onValueChange={(value) => form.handleChange('tipo_pago', value)}
+                  style={[styles.uniformPicker, { color: themeColors?.text }]}
+                  enabled={!isLoading}
+                  dropdownIconColor={isDark ? '#FFFFFF' : '#666666'}
+                >
+                  <Picker.Item label="Contado" value="contado" />
+                  <Picker.Item label="Crédito" value="credito" />
+                </Picker>
+              </View>
             </ThemedView>
+            
           </ThemedView>
         </ThemedView>
         {/* Sección de cliente con buscador */}
         <ThemedView style={styles.clienteSection}>
           <ThemedView style={styles.clienteSectionHeader}>
             <ThemedText type="subtitle" style={styles.primaryLabel}>
-              <IconSymbol name="person.fill" size={18} color="#0a7ea4" style={{marginRight: 6}} />
               Cliente
             </ThemedText>
             <TouchableOpacity
@@ -374,7 +372,6 @@ useEffect(() => {
             </View>
           ) : (
             <View style={styles.searchContainer}>
-              <IconSymbol name="magnifyingglass" size={18} color="#9BA1A6" style={styles.searchIcon} />
               <TextInput
                 style={[
                   styles.searchInput,
@@ -615,9 +612,8 @@ const styles = StyleSheet.create({
   secondarySection: {
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: 10,
     marginBottom: 24,
-    gap: 8,
   },
   compactRow: {
     flexDirection: 'row',
@@ -648,14 +644,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E1E3E5',
     borderRadius: 8,
-    height: 40,
+    minHeight: 48,  // Cambiar de height fijo a minHeight
     justifyContent: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',  // Cambiar de hidden a visible para iOS
     backgroundColor: '#FFFFFF',
   },
   uniformPicker: {
-    height: 40,
-    fontSize: 14,
     marginTop: Platform.OS === 'ios' ? 0 : -6,
     marginBottom: Platform.OS === 'ios' ? 0 : -6,
   },
@@ -963,11 +957,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
-  },
-  searchIcon: {
-    position: 'absolute',
-    left: 10,
-    zIndex: 1,
   },
   noResultsContainer: {
     padding: 12,
