@@ -1,132 +1,67 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch, Image } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+// app/presentaciones/edit/[id].tsx - Versión refactorizada
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, Image, Switch } from 'react-native';
+import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { presentacionApi, productoApi, API_CONFIG } from '@/services/api';
-import { Producto, Presentacion } from '@/models';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { usePresentaciones } from '@/hooks/crud/usePresentaciones';
+import { API_CONFIG } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-
-// Tipos de presentación disponibles
-const TIPOS_PRESENTACION = [
-  'bruto', 
-  'procesado', 
-  'merma', 
-  'briqueta', 
-  'detalle'
-];
-
 export default function EditPresentacionScreen() {
-  const params = useLocalSearchParams();
-  const presentacionId = Number(params.id);
-  
+  const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   
-  // Datos de productos para selector
-  const [productos, setProductos] = useState<Producto[]>([]);
+  // Usar el hook personalizado para presentaciones
+  const {
+    formData,
+    errors,
+    isSubmitting,
+    isLoading,
+    productos,
+    TIPOS_PRESENTACION,
+    selectedImage,
+    existingImage,
+    removeExistingImage,
+    handleChange,
+    setSelectedImage,
+    setRemoveExistingImage,
+    loadProductos,
+    loadPresentacionForEdit,
+    updatePresentacion
+  } = usePresentaciones();
   
-  // Estado para la imagen seleccionada
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
-  // Estado para indicar si se está eliminando la imagen existente
-  const [removeExistingImage, setRemoveExistingImage] = useState(false);
-  
-  // Form state
-  const [formData, setFormData] = useState<Partial<Presentacion>>({
-    producto_id: 0,
-    nombre: '',
-    capacidad_kg: '',
-    tipo: 'bruto',
-    precio_venta: '',
-    activo: true,
-  });
-
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Cargar productos y datos de la presentación
+  // Cargar productos y datos de la presentación al iniciar
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Cargar productos
-        const productosResponse = await productoApi.getProductos(1, 100);
-        
-        if (productosResponse && productosResponse.data) {
-          setProductos(productosResponse.data);
-        }
-        
-        // Cargar datos de la presentación
-        const presentacionResponse = await presentacionApi.getPresentacion(presentacionId);
-        
-        if (presentacionResponse) {
-          setFormData({
-            producto_id: presentacionResponse.producto_id,
-            nombre: presentacionResponse.nombre,
-            capacidad_kg: presentacionResponse.capacidad_kg,
-            tipo: presentacionResponse.tipo,
-            precio_venta: presentacionResponse.precio_venta,
-            activo: presentacionResponse.activo,
-          });
-          
-          // Si la presentación tiene una imagen, establecer la URL
-          if (presentacionResponse.url_foto) {
-            setSelectedImage(`${API_CONFIG.baseUrl}/uploads/${presentacionResponse.url_foto}`);
-          }
-        } else {
-          Alert.alert('Error', 'No se pudo cargar la información de la presentación');
-          router.back();
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
-        router.back();
-      } finally {
-        setIsLoading(false);
+    const initialize = async () => {
+      await loadProductos();
+      if (id) {
+        await loadPresentacionForEdit(parseInt(id));
       }
     };
-
-    fetchData();
-  }, [presentacionId]);
-
-  // Solicitar permisos para acceder a la cámara y galería
+    
+    initialize();
+  }, [id, loadProductos, loadPresentacionForEdit]);
+  
+  // Solicitar permisos para cámara y galería
   useEffect(() => {
-    (async () => {
+    const requestPermissions = async () => {
       const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
       const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
-      }
-    })();
-  }, []);
-
-  const handleChange = (field: string, value: string | boolean | number) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    };
     
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  };
-
-  // Función para seleccionar una imagen desde la galería
+    requestPermissions();
+  }, []);
+  
+  // Seleccionar imagen de la galería
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -137,15 +72,14 @@ export default function EditPresentacionScreen() {
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setSelectedImage(result.assets[0].uri);
-        setRemoveExistingImage(false); // Si seleccionamos una nueva imagen, no estamos eliminando
+        setRemoveExistingImage(false);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+      console.error('Error al seleccionar imagen:', error);
     }
   };
-
-  // Función para tomar una foto con la cámara
+  
+  // Tomar foto con la cámara
   const takePhoto = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
@@ -156,129 +90,43 @@ export default function EditPresentacionScreen() {
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setSelectedImage(result.assets[0].uri);
-        setRemoveExistingImage(false); // Si tomamos una nueva foto, no estamos eliminando
+        setRemoveExistingImage(false);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
+      console.error('Error al tomar foto:', error);
     }
   };
-
-  // Función para eliminar la imagen
+  
+  // Eliminar imagen
   const removeImage = () => {
     setSelectedImage(null);
-    setRemoveExistingImage(true); // Marcamos que queremos eliminar la imagen existente
+    setRemoveExistingImage(true);
   };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.producto_id) {
-      newErrors.producto_id = 'El producto es requerido';
-    }
-    
-    if (!formData.nombre?.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
-    }
-    
-    if (!formData.capacidad_kg?.trim()) {
-      newErrors.capacidad_kg = 'La capacidad es requerida';
-    } else if (isNaN(parseFloat(formData.capacidad_kg)) || parseFloat(formData.capacidad_kg) <= 0) {
-      newErrors.capacidad_kg = 'Ingrese una capacidad válida';
-    }
-    
-    if (!formData.precio_venta?.trim()) {
-      newErrors.precio_venta = 'El precio es requerido';
-    } else if (isNaN(parseFloat(formData.precio_venta)) || parseFloat(formData.precio_venta) < 0) {
-      newErrors.precio_venta = 'Ingrese un precio válido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
+  
+  // Guardar cambios
   const handleSubmit = async () => {
-    if (!validate()) {
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      const presentacionData = {
-        ...formData,
-        capacidad_kg: formData.capacidad_kg?.replace(',', '.'),
-        precio_venta: formData.precio_venta?.replace(',', '.')
-      };
-      
-      // Si estamos eliminando la imagen existente, agregar el parámetro
-      if (removeExistingImage) {
-        presentacionData.eliminar_foto = true;
-      }
-      
-      // Usar diferentes métodos dependiendo de si hay una nueva imagen
-      let response;
-      
-      if (selectedImage && !selectedImage.startsWith(API_CONFIG.baseUrl)) {
-        // Es una nueva imagen local seleccionada
-        response = await presentacionApi.updatePresentacionWithImage(
-          presentacionId,
-          presentacionData,
-          selectedImage
-        );
-      } else {
-        // No hay nueva imagen o la imagen es la URL del servidor (no cambió)
-        response = await presentacionApi.updatePresentacion(
-          presentacionId,
-          presentacionData
-        );
-      }
-      
-      if (response) {
-        Alert.alert(
-          'Presentación Actualizada',
-          'La presentación ha sido actualizada exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar la presentación');
-      }
-    } catch (err) {
-      console.error('Error updating presentacion:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar la presentación';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+    if (id) {
+      await updatePresentacion(parseInt(id));
     }
   };
-
-  if (isLoading) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Editar Presentación',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando datos...</ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
+  
+  // Cancelar edición
+  const handleCancel = () => {
+    router.back();
+  };
+  
+  // Obtener URL de la imagen existente
+  const getExistingImageUrl = () => {
+    if (!existingImage) return null;
+    return API_CONFIG.getImageUrl(existingImage);
+  };
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: 'Editar Presentación',
-        headerShown: true 
-      }} />
-      
+    <ScreenContainer
+      title="Editar Presentación"
+      isLoading={isLoading}
+      loadingMessage="Cargando datos de la presentación..."
+    >
       <ScrollView style={styles.container}>
         <ThemedText type="title" style={styles.heading}>Editar Presentación</ThemedText>
 
@@ -289,6 +137,8 @@ export default function EditPresentacionScreen() {
             <ThemedView style={styles.imageContainer}>
               {selectedImage ? (
                 <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+              ) : existingImage && !removeExistingImage ? (
+                <Image source={{ uri: getExistingImageUrl() }} style={styles.previewImage} />
               ) : (
                 <ThemedView style={styles.imagePlaceholder}>
                   <ThemedText style={styles.placeholderText}>Sin imagen</ThemedText>
@@ -308,7 +158,7 @@ export default function EditPresentacionScreen() {
               >
                 <ThemedText style={styles.buttonText}>Cámara</ThemedText>
               </TouchableOpacity>
-              {selectedImage && (
+              {(selectedImage || (existingImage && !removeExistingImage)) && (
                 <TouchableOpacity 
                   style={[styles.imageButton, { backgroundColor: '#F44336' }]}
                   onPress={removeImage}
@@ -327,8 +177,8 @@ export default function EditPresentacionScreen() {
               { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
             ]}>
               <Picker
-                selectedValue={formData.producto_id?.toString()}
-                onValueChange={(value) => handleChange('producto_id', parseInt(value))}
+                selectedValue={formData.producto_id.toString()}
+                onValueChange={(value) => handleChange('producto_id', value)}
                 style={[
                   styles.picker,
                   { color: Colors[colorScheme].text }
@@ -447,23 +297,16 @@ export default function EditPresentacionScreen() {
             </View>
           </ThemedView>
 
-          <TouchableOpacity 
-            style={[
-              styles.submitButton,
-              isSubmitting && styles.submitButtonDisabled
-            ]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <ThemedText style={styles.submitButtonText}>Actualizar Presentación</ThemedText>
-            )}
-          </TouchableOpacity>
+          {/* Botones de acción */}
+          <ActionButtons
+            onSave={handleSubmit}
+            onCancel={handleCancel}
+            isSubmitting={isSubmitting}
+            saveText="Actualizar Presentación"
+          />
         </ThemedView>
       </ScrollView>
-    </>
+    </ScreenContainer>
   );
 }
 
@@ -471,11 +314,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   heading: {
     marginBottom: 20,
@@ -521,23 +359,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
   },
-  submitButton: {
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Nuevos estilos para la sección de imagen
+  // Estilos para la sección de imagen
   imageContainer: {
     width: '100%',
     height: 200,

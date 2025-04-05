@@ -1,110 +1,62 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, View, Switch, Image } from 'react-native';
+// app/presentaciones/create.tsx - Versión refactorizada
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, Image, Switch } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { presentacionApi, productoApi } from '@/services/api';
-import { Producto } from '@/models';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { usePresentaciones } from '@/hooks/crud/usePresentaciones';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Tipos de presentación disponibles
-const TIPOS_PRESENTACION = [
-  'bruto', 
-  'procesado', 
-  'merma', 
-  'briqueta', 
-  'detalle'
-];
+import { FormStyles } from '@/styles/Theme';
 
 export default function CreatePresentacionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingProductos, setIsLoadingProductos] = useState(true);
   
-  // Datos de productos para selector
-  const [productos, setProductos] = useState<Producto[]>([]);
+  // Usar el hook personalizado para presentaciones
+  const {
+    formData,
+    errors,
+    isSubmitting,
+    isLoading,
+    isLoadingProductos,
+    productos,
+    TIPOS_PRESENTACION,
+    selectedImage,
+    handleChange,
+    setSelectedImage,
+    loadProductos,
+    createPresentacion
+  } = usePresentaciones();
   
-  // Estado para la imagen seleccionada
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  
-  // Form state
-  const [formData, setFormData] = useState({
-    producto_id: '',
-    nombre: '',
-    capacidad_kg: '',
-    tipo: TIPOS_PRESENTACION[0],
-    precio_venta: '',
-    activo: true,
-  });
-
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Cargar productos para selector
+  // Solicitar permisos de cámara y galería al montar el componente
   useEffect(() => {
-    const fetchProductos = async () => {
-      try {
-        setIsLoadingProductos(true);
-        const response = await productoApi.getProductos(1, 100); // Cargar hasta 100 productos
-        
-        if (response && response.data && response.data.length > 0) {
-          setProductos(response.data);
-          setFormData(prev => ({
-            ...prev,
-            producto_id: response.data[0].id.toString()
-          }));
-        } else {
-          Alert.alert('Error', 'No hay productos disponibles para crear una presentación');
-        }
-      } catch (error) {
-        console.error('Error fetching productos:', error);
-        Alert.alert('Error', 'No se pudieron cargar los productos');
-      } finally {
-        setIsLoadingProductos(false);
-      }
-    };
-
-    fetchProductos();
-  }, []);
-
-  // Solicitar permisos para acceder a la cámara y galería
-  useEffect(() => {
-    (async () => {
+    const requestPermissions = async () => {
       const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
       const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        Alert.alert('Permisos necesarios', 'Se requieren permisos de cámara y galería para subir fotos.');
+        console.log('Permisos no concedidos para cámara o galería');
       }
-    })();
-  }, []);
-
-  const handleChange = (field: string, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    };
     
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  };
-
-  // Función para seleccionar una imagen desde la galería
-  // Función para seleccionar una imagen desde la galería - Fixed
+    requestPermissions();
+  }, []);
+  
+  // Cargar productos al iniciar
+  useEffect(() => {
+    loadProductos();
+  }, [loadProductos]);
+  
+  // Seleccionar imagen de la galería
   const pickImage = async () => {
     try {
-      // No usar MediaTypeOptions ni MediaType, simplemente configuración básica
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: true,
         aspect: [4, 3],
@@ -116,14 +68,12 @@ export default function CreatePresentacionScreen() {
       }
     } catch (error) {
       console.error('Error al seleccionar imagen:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
     }
   };
-
-  // Función para tomar una foto con la cámara - Fixed
+  
+  // Tomar foto con la cámara
   const takePhoto = async () => {
     try {
-      // No usar MediaTypeOptions ni MediaType, simplemente configuración básica
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
@@ -135,93 +85,22 @@ export default function CreatePresentacionScreen() {
       }
     } catch (error) {
       console.error('Error al tomar foto:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
     }
   };
-
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.producto_id) {
-      newErrors.producto_id = 'El producto es requerido';
-    }
-    
-    if (!formData.nombre.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
-    }
-    
-    if (!formData.capacidad_kg.trim()) {
-      newErrors.capacidad_kg = 'La capacidad es requerida';
-    } else if (isNaN(parseFloat(formData.capacidad_kg)) || parseFloat(formData.capacidad_kg) <= 0) {
-      newErrors.capacidad_kg = 'Ingrese una capacidad válida';
-    }
-    
-    if (!formData.precio_venta.trim()) {
-      newErrors.precio_venta = 'El precio es requerido';
-    } else if (isNaN(parseFloat(formData.precio_venta)) || parseFloat(formData.precio_venta) < 0) {
-      newErrors.precio_venta = 'Ingrese un precio válido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  
+  // Cancelar la creación
+  const handleCancel = () => {
+    router.back();
   };
-
-  const handleSubmit = async () => {
-    if (!validate()) {
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      const presentacionData = {
-        ...formData,
-        producto_id: parseInt(formData.producto_id),
-        capacidad_kg: formData.capacidad_kg.replace(',', '.'),
-        precio_venta: formData.precio_venta.replace(',', '.')
-      };
-      
-      // Usar el nuevo método para crear con imagen
-      const response = await presentacionApi.createPresentacionWithImage(
-        presentacionData, 
-        selectedImage
-      );
-      
-      if (response) {
-        Alert.alert(
-          'Presentación Creada',
-          'La presentación ha sido creada exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace('/presentaciones') 
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'No se pudo crear la presentación');
-      }
-    } catch (err) {
-      console.error('Error creating presentacion:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al crear la presentación';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+  
+  // Renderizar pantalla de carga mientras se cargan los productos
   if (isLoadingProductos) {
     return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Nueva Presentación',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando productos...</ThemedText>
-        </ThemedView>
-      </>
+      <ScreenContainer 
+        title="Nueva Presentación"
+        isLoading={true}
+        loadingMessage="Cargando datos..."
+      />
     );
   }
 
@@ -400,20 +279,13 @@ export default function CreatePresentacionScreen() {
             </View>
           </ThemedView>
 
-          <TouchableOpacity 
-            style={[
-              styles.submitButton,
-              isSubmitting && styles.submitButtonDisabled
-            ]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <ThemedText style={styles.submitButtonText}>Crear Presentación</ThemedText>
-            )}
-          </TouchableOpacity>
+          {/* Botones de acción */}
+          <ActionButtons
+            onSave={createPresentacion}
+            onCancel={handleCancel}
+            isSubmitting={isSubmitting}
+            saveText="Crear Presentación"
+          />
         </ThemedView>
       </ScrollView>
     </>
@@ -424,11 +296,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   heading: {
     marginBottom: 20,
@@ -474,23 +341,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
   },
-  submitButton: {
-    backgroundColor: '#0a7ea4',
-    padding: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#88c8d8',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Nuevos estilos para la sección de imagen
+  // Estilos para la sección de imagen
   imageContainer: {
     width: '100%',
     height: 200,

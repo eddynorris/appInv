@@ -1,273 +1,249 @@
-// app/presentaciones/[id].tsx
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+// app/presentaciones/[id].tsx - Versión mejorada
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, TouchableOpacity, Image, Linking } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
+import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { Badge } from '@/components/ui/Badge';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { presentacionApi, productoApi } from '@/services/api';
-import { Presentacion, Producto } from '@/models';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { TouchableOpacity } from 'react-native-gesture-handler';
+import { usePresentaciones } from '@/hooks/crud/usePresentaciones';
+import { API_CONFIG } from '@/services/api';
+import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 
 export default function PresentacionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [presentacion, setPresentacion] = useState<Presentacion | null>(null);
-  const [producto, setProducto] = useState<Producto | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  
+  // Usar el hook personalizado para presentaciones con todas sus funcionalidades
+  const { 
+    getTipoColor, 
+    deletePresentacion,
+    getItem,
+    isLoading: isLoadingFromHook,
+    error: errorFromHook,
+  } = usePresentaciones();
+  
+  // Asignar getItem a getPresentacion para mantener compatibilidad
+  const getPresentacion = getItem;
+  
+  // Estado local para la presentación específica
+  const [presentacion, setPresentacion] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const colorScheme = useColorScheme() ?? 'light';
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!id) return;
-      
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const presentacionData = await presentacionApi.getPresentacion(parseInt(id));
-        
-        if (presentacionData) {
-          setPresentacion(presentacionData);
-          
-          // Cargar datos del producto relacionado
-          if (presentacionData.producto_id) {
-            const productoData = await productoApi.getProducto(presentacionData.producto_id);
-            setProducto(productoData);
-          }
-        } else {
-          setError('Error al cargar los datos de la presentación');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [id]);
-
-  const handleEdit = () => {
-    router.push(`/presentaciones/edit/${id}`);
-  };
-
-  const handleDelete = async () => {
+  // Cargar datos de la presentación
+  const loadPresentacion = useCallback(async () => {
     if (!id) return;
     
     try {
       setIsLoading(true);
-      await presentacionApi.deletePresentacion(parseInt(id));
-      router.replace('/presentaciones');
-    } catch (error) {
-      setError('Error al eliminar la presentación');
+      setError(null);
+      
+      const data = await getPresentacion(parseInt(id));
+      if (data) {
+        setPresentacion(data);
+      } else {
+        setError('No se pudo cargar la presentación');
+      }
+    } catch (err) {
+      console.error('Error al cargar presentación:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar los datos');
+    } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, getPresentacion]);
 
-  // Obtener un color asociado al tipo de presentación
-  const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'bruto':
-        return '#2196F3'; // Azul
-      case 'procesado':
-        return '#4CAF50'; // Verde
-      case 'merma':
-        return '#FFC107'; // Amarillo
-      case 'briqueta':
-        return '#9C27B0'; // Púrpura
-      case 'detalle':
-        return '#FF5722'; // Naranja
-      default:
-        return '#757575'; // Gris
+  // Cargar datos al montar
+  useEffect(() => {
+    loadPresentacion();
+  }, [loadPresentacion]);
+
+  // Navegar a pantalla de edición
+  const handleEdit = useCallback(() => {
+    router.push(`/presentaciones/edit/${id}`);
+  }, [id]);
+
+  // Mostrar diálogo de confirmación para eliminar
+  const handleDeleteClick = useCallback(() => {
+    setShowDeleteDialog(true);
+  }, []);
+
+  // Ejecutar eliminación utilizando directamente el método deletePresentacion
+  const handleDelete = useCallback(async () => {
+    if (!id) return;
+    
+    try {
+      setIsLoading(true);
+      // Llamar directamente al método del hook sin gestionar alertas adicionales
+      const success = await deletePresentacion(parseInt(id));
+      
+      if (success) {
+        router.replace('/presentaciones');
+      } else {
+        setError('No se pudo eliminar la presentación');
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error al eliminar presentación:', error);
+      setError('Error al eliminar la presentación');
+      setIsLoading(false);
+    } finally {
+      setShowDeleteDialog(false);
     }
-  };
+  }, [id, deletePresentacion]);
 
-  if (isLoading) {
+  // Ver imagen a tamaño completo
+  const viewFullImage = useCallback(() => {
+    if (presentacion?.url_foto) {
+      const imageUrl = API_CONFIG.getImageUrl(presentacion.url_foto);
+      Linking.openURL(imageUrl).catch(err => {
+        console.error('Error al abrir la imagen:', err);
+      });
+    }
+  }, [presentacion?.url_foto]);
+
+  // Renderizar imagen de la presentación
+  const renderImage = useCallback(() => {
+    if (presentacion?.url_foto) {
+      const imageUrl = API_CONFIG.getImageUrl(presentacion.url_foto);
+      return (
+        <TouchableOpacity onPress={viewFullImage} style={styles.imageContainer}>
+          <Image 
+            source={{ uri: imageUrl }} 
+            style={styles.image}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+      );
+    }
+    
     return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Detalles de Presentación',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos...</ThemedText>
-        </ThemedView>
-      </>
+      <ThemedView style={styles.imagePlaceholder}>
+        <IconSymbol name="photo" size={48} color="#9BA1A6" />
+        <ThemedText style={styles.placeholderText}>Sin imagen</ThemedText>
+      </ThemedView>
     );
-  }
+  }, [presentacion?.url_foto, viewFullImage]);
 
-  if (error || !presentacion) {
-    return (
-      <>
-        <Stack.Screen options={{ 
-          title: 'Error',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.errorContainer}>
-          <IconSymbol name="paperplane.fill" size={48} color={Colors[colorScheme].icon} />
-          <ThemedText style={styles.errorText}>
-            {error || 'Presentación no encontrada'}
-          </ThemedText>
-        </ThemedView>
-      </>
-    );
-  }
-
-  const tipoColor = getTipoColor(presentacion.tipo);
+  // Determinar loading y error combinando el estado local y el del hook
+  const combinedLoading = isLoading || isLoadingFromHook;
+  const combinedError = error || errorFromHook;
 
   return (
-    <>
-      <Stack.Screen options={{ 
-        title: presentacion.nombre,
-        headerShown: true 
-      }} />
-      
-      <ScrollView>
-        <ThemedView style={styles.container}>
-          <ThemedView style={styles.card}>
-            <ThemedText type="title">{presentacion.nombre}</ThemedText>
-            
-            <ThemedView 
-              style={[
-                styles.tipoBadge, 
-                { backgroundColor: `${tipoColor}20` }
-              ]}
-            >
-              <ThemedText style={[styles.tipoText, { color: tipoColor }]}>
-                {presentacion.tipo.toUpperCase()}
-              </ThemedText>
-            </ThemedView>
-            
-            <ThemedView style={styles.section}>
-              <ThemedText type="subtitle">Información General</ThemedText>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Producto:</ThemedText>
-                <ThemedText>{producto?.nombre || 'No especificado'}</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Capacidad:</ThemedText>
-                <ThemedText>{parseFloat(presentacion.capacidad_kg).toFixed(2)} KG</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Precio de Venta:</ThemedText>
-                <ThemedText>${parseFloat(presentacion.precio_venta).toFixed(2)}</ThemedText>
-              </ThemedView>
-              
-              <ThemedView style={styles.infoRow}>
-                <ThemedText type="defaultSemiBold">Estado:</ThemedText>
-                <ThemedText style={{ color: presentacion.activo ? '#4CAF50' : '#F44336' }}>
-                  {presentacion.activo ? 'Activo' : 'Inactivo'}
-                </ThemedText>
-              </ThemedView>
-            </ThemedView>
-
-            <ThemedView style={styles.actions}>
-              <TouchableOpacity 
-                style={[styles.button, styles.editButton]} 
-                onPress={handleEdit}
-              >
-                <ThemedText style={styles.buttonText}>Editar</ThemedText>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.button, styles.deleteButton]} 
-                onPress={handleDelete}
-              >
-                <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
-              </TouchableOpacity>
-            </ThemedView>
+    <ScreenContainer
+      title={presentacion ? presentacion.nombre : 'Detalles de Presentación'}
+      isLoading={combinedLoading}
+      error={combinedError}
+      loadingMessage="Cargando datos de la presentación..."
+      onRefresh={loadPresentacion}
+    >
+      {presentacion && (
+        <DetailCard>
+          {/* Sección de imagen */}
+          <ThemedView style={styles.imageContainer}>
+            {renderImage()}
           </ThemedView>
-        </ThemedView>
-      </ScrollView>
-    </>
+          
+          {/* Badge de tipo */}
+          <ThemedView style={styles.badgeContainer}>
+            <Badge 
+              text={presentacion.tipo.toUpperCase()} 
+              color={getTipoColor(presentacion.tipo)}
+              size="medium"
+            />
+            
+            {/* Badge de estado */}
+            <Badge 
+              text={presentacion.activo ? 'ACTIVO' : 'INACTIVO'} 
+              color={presentacion.activo ? '#4CAF50' : '#F44336'}
+              size="medium"
+            />
+          </ThemedView>
+          
+          {/* Información general */}
+          <DetailSection title="Información General">
+            <DetailRow 
+              label="Producto" 
+              value={
+                <TouchableOpacity 
+                  onPress={() => presentacion.producto_id && router.push(`/productos/${presentacion.producto_id}`)}
+                >
+                  <ThemedText style={styles.linkText}>
+                    {presentacion.producto?.nombre || 'No especificado'}
+                  </ThemedText>
+                </TouchableOpacity>
+              } 
+            />
+            <DetailRow 
+              label="Capacidad" 
+              value={`${parseFloat(presentacion.capacidad_kg).toFixed(2)} KG`} 
+            />
+            <DetailRow 
+              label="Precio de Venta" 
+              value={`$${parseFloat(presentacion.precio_venta).toFixed(2)}`} 
+            />
+          </DetailSection>
+          
+          {/* Botones de acción */}
+          <ActionButtons
+            onSave={handleEdit}
+            saveText="Editar"
+            onDelete={handleDeleteClick}
+            showDelete={true}
+          />
+        </DetailCard>
+      )}
+      
+      {/* Diálogo de confirmación para eliminar */}
+      <ConfirmationDialog
+        visible={showDeleteDialog}
+        title="Eliminar Presentación"
+        message="¿Está seguro que desea eliminar esta presentación? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  errorText: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#E53935',
-  },
-  card: {
-    borderRadius: 8,
-    padding: 16,
+  imageContainer: {
+    width: '100%',
+    height: 200,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  tipoBadge: {
-    alignSelf: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    marginVertical: 16,
-  },
-  tipoText: {
-    fontWeight: '600',
-  },
-  section: {
-    marginTop: 16,
-    gap: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 8,
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 24,
-    gap: 16,
-  },
-  button: {
-    flex: 1,
-    padding: 12,
     borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f9f9f9',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f5f5f5',
   },
-  editButton: {
-    backgroundColor: '#2196F3',
+  placeholderText: {
+    marginTop: 8,
+    color: '#9BA1A6',
   },
-  deleteButton: {
-    backgroundColor: '#F44336',
+  badgeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 20,
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
+  linkText: {
+    color: '#0a7ea4',
+    textDecorationLine: 'underline',
+  }
 });
