@@ -118,6 +118,13 @@ export default function LoteDetailScreen() {
                   {lote.peso_seco_kg ? parseFloat(lote.peso_seco_kg).toFixed(2) + ' kg' : 'No registrado'}
                 </ThemedText>
               </View>
+
+              <View style={styles.infoRow}>
+                <ThemedText style={styles.label}>Diponible:</ThemedText>
+                <ThemedText style={styles.value}>
+                  {lote.cantidad_disponible_kg ? parseFloat(lote.cantidad_disponible_kg).toFixed(2) + ' kg' : 'No registrado'}
+                </ThemedText>
+              </View>
               
               <View style={styles.infoRow}>
                 <ThemedText style={styles.label}>Rendimiento:</ThemedText>

@@ -1,6 +1,6 @@
-// app/inventario/ajustar.tsx - Versión optimizada usando useInventarios
+// app/inventarios/ajustar.tsx - Versión optimizada y simplificada
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -10,20 +10,18 @@ import { useInventarios } from '@/hooks/crud/useInventarios';
 import { Colors } from '@/constants/Colors';
 import { Lote } from '@/models';
 
-export default function AjusteStockScreen() {
+export default function AjusteSimplificadoScreen() {
   const { id, accion = 'aumentar' } = useLocalSearchParams<{ 
     id: string; 
     accion?: 'aumentar' | 'disminuir';
   }>();
   
   // Estados
-  const [currentStock, setCurrentStock] = useState(0);
-  const [minStock, setMinStock] = useState(0);
   const [cantidad, setCantidad] = useState('1');
   const [motivo, setMotivo] = useState('');
-  const [selectedLote, setSelectedLote] = useState<string | null>(null);
-  const [selectedLoteText, setSelectedLoteText] = useState('');
   const [inventarioData, setInventarioData] = useState<any>(null);
+  const [selectedLote, setSelectedLote] = useState<string | null>(null);
+  const [selectedLoteInfo, setSelectedLoteInfo] = useState<Lote | null>(null);
   const [showLotePicker, setShowLotePicker] = useState(false);
   
   // Usar custom hook de inventarios
@@ -31,9 +29,10 @@ export default function AjusteStockScreen() {
     isLoading, 
     isSubmitting,
     error, 
-    lotes,
     getItem,
-    ajustarInventario
+    ajustarInventarioSimplificado,
+    lotes,
+    formatLoteForDisplay
   } = useInventarios();
   
   // Filtrar lotes compatibles con la presentación actual
@@ -51,29 +50,32 @@ export default function AjusteStockScreen() {
         const data = await getItem(parseInt(id));
         if (data) {
           setInventarioData(data);
-          setCurrentStock(data.cantidad);
-          setMinStock(data.stock_minimo);
-          
-          // Si ya tiene un lote asociado, seleccionarlo
+          // Si el inventario tiene un lote asociado, seleccionarlo por defecto
           if (data.lote_id) {
             setSelectedLote(data.lote_id.toString());
             
-            // Buscar el texto del lote
-            const lote = lotes.find(l => l.id === data.lote_id);
-            if (lote) {
-              setSelectedLoteText(`Lote #${lote.id} (${lote.fecha_ingreso.split('T')[0]})`);
-            } else {
-              setSelectedLoteText(`Lote #${data.lote_id}`);
+            // Buscar la información del lote
+            const loteInfo = lotes.find(l => l.id === data.lote_id);
+            if (loteInfo) {
+              setSelectedLoteInfo(loteInfo);
             }
           }
         }
       } catch (error) {
         console.error('Error al cargar inventario:', error);
+        Alert.alert('Error', 'No se pudo cargar los datos del inventario');
       }
     };
     
     loadInventario();
   }, [id, getItem, lotes]);
+  
+  // Manejar selección de lote
+  const handleLoteSelect = (lote: Lote) => {
+    setSelectedLote(lote.id.toString());
+    setSelectedLoteInfo(lote);
+    setShowLotePicker(false);
+  };
   
   // Manejar cambio de cantidad
   const handleCantidadChange = (value: string) => {
@@ -97,38 +99,43 @@ export default function AjusteStockScreen() {
     }
   };
   
-  // Registrar movimiento
-  const registrarMovimiento = async () => {
+  // Registrar ajuste
+  const registrarAjuste = async () => {
     if (!id) return;
     
     // Validaciones
     if (!cantidad || parseInt(cantidad) <= 0) {
-      alert('Ingrese una cantidad válida.');
+      Alert.alert('Error', 'Ingrese una cantidad válida.');
       return;
     }
     
     if (!motivo.trim()) {
-      alert('Ingrese un motivo para el movimiento.');
+      Alert.alert('Error', 'Ingrese un motivo para el ajuste.');
       return;
     }
     
     try {
-      // Realizar el ajuste usando la función del hook
-      const success = await ajustarInventario(
-        parseInt(id),
+      // Realizar el ajuste usando la función simplificada
+      const success = await ajustarInventarioSimplificado({
+        inventarioId: parseInt(id),
         accion,
-        parseInt(cantidad),
+        cantidad: parseInt(cantidad),
         motivo,
-        selectedLote ? parseInt(selectedLote) : undefined
-      );
+        // Usar el lote seleccionado si es diferente al actual
+        ...(selectedLote && selectedLote !== inventarioData.lote_id?.toString() && 
+            { loteId: parseInt(selectedLote) })
+      });
       
       if (success) {
-        alert(`Stock ${accion === 'aumentar' ? 'aumentado' : 'disminuido'} correctamente.`);
-        router.back();
+        Alert.alert(
+          'Éxito', 
+          `Stock ${accion === 'aumentar' ? 'aumentado' : 'disminuido'} correctamente.`,
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       }
     } catch (error) {
-      console.error('Error al registrar movimiento:', error);
-      alert('Error al registrar el movimiento.');
+      console.error('Error al registrar ajuste:', error);
+      Alert.alert('Error', 'No se pudo realizar el ajuste.');
     }
   };
 
@@ -146,9 +153,9 @@ export default function AjusteStockScreen() {
     <View style={styles.container}>
       <Stack.Screen 
         options={{ 
-          title: 'Ajuste de Stock',
+          title: accion === 'aumentar' ? 'Aumentar Stock' : 'Disminuir Stock',
           headerStyle: {
-            backgroundColor: '#4CAF50',
+            backgroundColor: accion === 'aumentar' ? '#4CAF50' : '#F44336',
           },
           headerTintColor: '#fff',
           headerLeft: () => (
@@ -174,84 +181,61 @@ export default function AjusteStockScreen() {
           <Text style={styles.almacenText}>
             Almacén: {inventarioData.almacen?.nombre || 'No especificado'}
           </Text>
-        </View>
-        
-        {/* Ajuste manual */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Ajuste manual</Text>
           
-          <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>Stock actual:</Text>
-            <TextInput
-              style={styles.stockInput}
-              value={currentStock.toString()}
-              editable={false}
-            />
-          </View>
-          
-          <View style={styles.inputRow}>
-            <Text style={styles.inputLabel}>Stock mínimo:</Text>
-            <TextInput
-              style={styles.stockInput}
-              value={minStock.toString()}
-              editable={false}
-            />
-          </View>
-        </View>
-        
-        {/* Registrar movimiento */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Registrar movimiento</Text>
-          
-          <Text style={styles.inputLabel}>Tipo:</Text>
-          <View style={styles.toggleContainer}>
-            <View style={[
-              styles.toggleButton, 
-              {backgroundColor: accion === 'aumentar' ? '#4CAF50' : '#E0E0E0'}
-            ]}>
-              <Text style={[
-                styles.toggleText,
-                {color: accion === 'aumentar' ? '#FFFFFF' : '#666666'}
-              ]}>
-                Entrada
+          {/* Lote actual */}
+          {inventarioData.lote_id && (
+            <View style={styles.loteActualContainer}>
+              <Text style={styles.loteActualLabel}>Lote actual:</Text>
+              <Text style={styles.loteActualValue}>
+                #{inventarioData.lote_id}
               </Text>
             </View>
+          )}
+          
+          {/* Stock actual */}
+          <View style={styles.stockInfoContainer}>
+            <View style={styles.stockInfoItem}>
+              <Text style={styles.stockInfoLabel}>Stock actual:</Text>
+              <Text style={styles.stockInfoValue}>{inventarioData.cantidad}</Text>
+            </View>
             
-            <View style={[
-              styles.toggleButton, 
-              {backgroundColor: accion === 'disminuir' ? '#F44336' : '#E0E0E0'}
-            ]}>
-              <Text style={[
-                styles.toggleText,
-                {color: accion === 'disminuir' ? '#FFFFFF' : '#666666'}
-              ]}>
-                Salida
-              </Text>
+            <View style={styles.stockInfoItem}>
+              <Text style={styles.stockInfoLabel}>Stock mínimo:</Text>
+              <Text style={styles.stockInfoValue}>{inventarioData.stock_minimo}</Text>
             </View>
           </View>
+        </View>
+        
+        {/* Ajuste simplificado */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>
+            {accion === 'aumentar' ? 'Aumentar Stock' : 'Disminuir Stock'}
+          </Text>
           
-          <Text style={styles.inputLabel}>Actualizar stock:</Text>
-          <View style={styles.stockAdjustRow}>
-            <TouchableOpacity 
-              style={styles.stockButton}
-              onPress={decrementCantidad}
-            >
-              <Text style={styles.stockButtonText}>-</Text>
-            </TouchableOpacity>
-            
-            <TextInput
-              style={styles.newStockInput}
-              value={cantidad}
-              onChangeText={handleCantidadChange}
-              keyboardType="numeric"
-            />
-            
-            <TouchableOpacity 
-              style={styles.stockButton}
-              onPress={incrementCantidad}
-            >
-              <Text style={styles.stockButtonText}>+</Text>
-            </TouchableOpacity>
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Cantidad a {accion === 'aumentar' ? 'agregar' : 'restar'}:</Text>
+            <View style={styles.quantityControl}>
+              <TouchableOpacity 
+                style={styles.quantityButton}
+                onPress={decrementCantidad}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+              
+              <TextInput
+                style={styles.quantityInput}
+                value={cantidad}
+                onChangeText={handleCantidadChange}
+                keyboardType="numeric"
+              />
+              
+              <TouchableOpacity 
+                style={styles.quantityButton}
+                onPress={incrementCantidad}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
           
           <View style={styles.inputContainer}>
@@ -260,23 +244,57 @@ export default function AjusteStockScreen() {
               style={styles.motivoInput}
               value={motivo}
               onChangeText={setMotivo}
-              placeholder="Ej: Ingreso de nuevo lote"
+              placeholder={accion === 'aumentar' ? 'Ej: Compra de inventario' : 'Ej: Consumo interno'}
+              multiline
             />
           </View>
           
-          {/* Solo mostrar selector de lote si hay lotes disponibles */}
-          {lotesFiltrados.length > 0 && (
+          {/* Selector de lote - Solo en operaciones de aumento */}
+          {accion === 'aumentar' && (
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Lote:</Text>
               <TouchableOpacity 
-                style={styles.loteInputContainer}
+                style={styles.loteSelector}
                 onPress={() => setShowLotePicker(true)}
               >
-                <Text style={[styles.loteInput, !selectedLoteText && styles.placeholderText]}>
-                  {selectedLoteText || "Seleccionar lote"}
+                <Text style={styles.loteSelectorText}>
+                  {selectedLote 
+                    ? `Lote #${selectedLote}${inventarioData?.lote_id?.toString() === selectedLote 
+                        ? ' (Actual)' 
+                        : ''}`
+                    : 'Seleccionar lote (opcional)'}
                 </Text>
-                <IconSymbol name="chevron.down" size={20} color="#666666" style={styles.loteIcon} />
+                <IconSymbol name="chevron.down" size={20} color="#666666" />
               </TouchableOpacity>
+              
+              {/* Información del lote seleccionado */}
+              {selectedLoteInfo && selectedLote !== inventarioData?.lote_id?.toString() && (
+                <View style={styles.loteInfoCard}>
+                  <View style={styles.loteInfoHeader}>
+                    <Text style={styles.loteInfoTitle}>Lote seleccionado: #{selectedLoteInfo.id}</Text>
+                  </View>
+                  
+                  <View style={styles.loteInfoRow}>
+                    <Text style={styles.loteInfoLabel}>Fecha de Ingreso:</Text>
+                    <Text style={styles.loteInfoValue}>
+                      {new Date(selectedLoteInfo.fecha_ingreso).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  
+                  {selectedLoteInfo.proveedor && (
+                    <View style={styles.loteInfoRow}>
+                      <Text style={styles.loteInfoLabel}>Proveedor:</Text>
+                      <Text style={styles.loteInfoValue}>{selectedLoteInfo.proveedor.nombre}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+              
+              <Text style={styles.helperText}>
+                {inventarioData.lote_id 
+                  ? 'Puedes seleccionar un lote diferente si estás agregando productos de otro lote'
+                  : 'Selecciona el lote de donde provienen los productos'}
+              </Text>
             </View>
           )}
           
@@ -285,29 +303,36 @@ export default function AjusteStockScreen() {
             visible={showLotePicker}
             lotes={lotesFiltrados}
             selectedLote={selectedLote}
-            onSelect={(lote) => {
-              setSelectedLote(lote.id.toString());
-              setSelectedLoteText(`Lote #${lote.id} (${lote.fecha_ingreso.split('T')[0]})`);
-              setShowLotePicker(false);
-            }}
+            onSelect={handleLoteSelect}
             onCancel={() => setShowLotePicker(false)}
           />
+          
+          {/* Resultado esperado */}
+          <View style={styles.resultContainer}>
+            <Text style={styles.resultLabel}>Nuevo stock esperado:</Text>
+            <Text style={styles.resultValue}>
+              {accion === 'aumentar' 
+                ? inventarioData.cantidad + parseInt(cantidad || '0')
+                : inventarioData.cantidad - parseInt(cantidad || '0')}
+            </Text>
+          </View>
         </View>
         
-        {/* Opciones de actualización */}
-        <View style={styles.sectionCard}>
+        {/* Botones de acción */}
+        <View style={styles.buttonsContainer}>
           <TouchableOpacity 
             style={[
-              styles.movimientoButton,
+              styles.actionButton,
+              { backgroundColor: accion === 'aumentar' ? '#4CAF50' : '#F44336' },
               isSubmitting && styles.disabledButton
             ]}
-            onPress={registrarMovimiento}
+            onPress={registrarAjuste}
             disabled={isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.movimientoButtonText}>
+              <Text style={styles.actionButtonText}>
                 {accion === 'aumentar' ? 'Registrar Entrada' : 'Registrar Salida'}
               </Text>
             )}
@@ -318,9 +343,7 @@ export default function AjusteStockScreen() {
             onPress={() => router.back()}
             disabled={isSubmitting}
           >
-            <Text style={styles.cancelButtonText}>
-              Cancelar
-            </Text>
+            <Text style={styles.cancelButtonText}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -370,6 +393,47 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
   },
+  loteActualContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  loteActualLabel: {
+    fontSize: 13,
+    color: '#4CAF50',
+    marginRight: 4,
+  },
+  loteActualValue: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  stockInfoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+  },
+  stockInfoItem: {
+    alignItems: 'center',
+  },
+  stockInfoLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  stockInfoValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0a7ea4',
+  },
   sectionCard: {
     backgroundColor: '#FFFFFF',
     padding: 16,
@@ -386,187 +450,145 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 12,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   inputContainer: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   inputLabel: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  stockInput: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#333',
-    width: '50%',
-    textAlign: 'center',
-  },
-  stockAdjustRow: {
+  quantityControl: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
-    marginBottom: 16,
   },
-  stockButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f5f5f5',
+  quantityButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stockButtonText: {
+  quantityButtonText: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
   },
-  newStockInput: {
-    width: 100,
+  quantityInput: {
+    width: 80,
+    height: 50,
     textAlign: 'center',
-    fontSize: 18,
-    paddingVertical: 8,
-    marginHorizontal: 12,
+    fontSize: 20,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 4,
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  toggleText: {
-    fontWeight: '500',
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    marginHorizontal: 12,
   },
   motivoInput: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#333',
-  },
-  loteInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-    paddingHorizontal: 12,
-  },
-  loteInput: {
-    flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#333',
-  },
-  placeholderText: {
-    color: '#9E9E9E',
-  },
-  loteIcon: {
-    padding: 4,
-  },
-  lotePickerContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#f9f9f9',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginTop: 8,
-    marginBottom: 16,
+    borderColor: '#e0e0e0',
     padding: 12,
-  },
-  lotePickerTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    textAlign: 'center',
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
-  lotePickerScrollView: {
-    maxHeight: 200,
-  },
-  lotePickerItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  lotePickerItemSelected: {
-    backgroundColor: '#E8F5E9',
-  },
-  lotePickerItemText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  lotePickerItemSubtext: {
-    fontSize: 12,
-    color: '#757575',
-    marginTop: 4,
-  },
-  lotePickerButtonsRow: {
+  loteSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  lotePickerCancelButton: {
-    flex: 1,
-    padding: 10,
-    marginRight: 8,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
     alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    padding: 12,
   },
-  lotePickerCancelText: {
-    color: '#424242',
+  loteSelectorText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  loteInfoCard: {
+    marginTop: 8,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+  },
+  loteInfoHeader: {
+    marginBottom: 8,
+  },
+  loteInfoTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  loteInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  loteInfoLabel: {
+    fontSize: 13,
+    color: '#555555',
+  },
+  loteInfoValue: {
+    fontSize: 13,
     fontWeight: '500',
+    color: '#333333',
   },
-  lotePickerConfirmButton: {
-    flex: 1,
-    padding: 10,
-    marginLeft: 8,
-    backgroundColor: '#4CAF50',
-    borderRadius: 4,
+  resultContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#e8f4f8',
+    borderRadius: 8,
   },
-  lotePickerConfirmText: {
+  resultLabel: {
+    fontSize: 16,
+    color: '#333',
+  },
+  resultValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#0a7ea4',
+  },
+  buttonsContainer: {
+    padding: 12,
+    marginBottom: 24,
+  },
+  actionButton: {
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonText: {
     color: '#FFFFFF',
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   cancelButton: {
+    padding: 16,
+    borderRadius: 8,
     backgroundColor: '#E0E0E0',
-    paddingVertical: 12,
-    borderRadius: 4,
     alignItems: 'center',
-    marginTop: 12,
   },
   cancelButtonText: {
-    color: '#424242',
-    fontWeight: 'bold',
+    color: '#333',
     fontSize: 16,
-  },
-  movimientoButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-  movimientoButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+    fontWeight: '500',
   },
   disabledButton: {
     opacity: 0.7,

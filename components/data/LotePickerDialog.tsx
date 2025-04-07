@@ -62,7 +62,7 @@ const LotePickerDialog: React.FC<LotePickerDialogProps> = ({
         <View style={styles.itemContent}>
           <Text style={styles.itemTitle}>Lote #{item.id}</Text>
           <Text style={styles.itemSubtitle}>
-            Fecha: {fechaIngreso} • {item.peso_humedo_kg}kg
+            Fecha: {fechaIngreso} • {item.cantidad_disponible_kg}kg Disponibles
           </Text>
           {item.proveedor && (
             <Text style={styles.itemSubtitle}>

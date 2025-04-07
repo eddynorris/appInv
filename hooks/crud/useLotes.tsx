@@ -45,6 +45,7 @@ interface LoteSubmitData {
   descripcion: string;
   peso_humedo_kg: number;
   peso_seco_kg?: number;
+  cantidad_disponible_kg?: number;
   fecha_ingreso: string;
   almacen_id?: number;
 }
@@ -56,6 +57,7 @@ const initialFormData = {
   descripcion: '',
   peso_humedo_kg: '',
   peso_seco_kg: '',
+  cantidad_disponible_kg: '',
   fecha_ingreso: new Date().toISOString().split('T')[0],
 };
 
@@ -106,6 +108,14 @@ export const useLotes = () => {
         return 'El peso seco no puede ser mayor que el peso húmedo';
       }
       return null;
+    },
+    cantidad_disponible_kg: (value: string) => {
+      if (!value.trim()) return null; // No es requerido
+      if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un peso válido';
+      if (form.formData.peso_seco_kg && parseFloat(value) > parseFloat(form.formData.peso_seco_kg)) {
+        return 'El peso seco no puede ser mayor que el peso húmedo';
+      }
+      return null;
     }
   };
   
@@ -114,7 +124,8 @@ export const useLotes = () => {
     { key: 'id', label: 'ID', sortable: true },
     { key: 'producto.nombre', label: 'Producto', sortable: true },
     { key: 'peso_humedo_kg', label: 'Peso Húmedo (kg)', sortable: true },
-    { key: 'peso_seco_kg', label: 'Peso Seco (kg)', sortable: true },
+    { key: 'cantidad_disponible_kg', label: 'Peso Seco (kg)', sortable: true },
+    { key: 'cantidad', label: 'Peso Seco (kg)', sortable: true },
     { key: 'rendimiento', label: 'Rendimiento', sortable: true },
     { key: 'fecha_ingreso', label: 'Fecha de Ingreso', sortable: true },
     { key: 'acciones', label: 'Acciones', sortable: false },
@@ -237,6 +248,7 @@ export const useLotes = () => {
           descripcion: loteData.descripcion ? loteData.descripcion.toString() : '',
           peso_humedo_kg: loteData.peso_humedo_kg.toString(),
           peso_seco_kg: loteData.peso_seco_kg ? loteData.peso_seco_kg.toString() : '',
+          cantidad_disponible_kg: loteData.cantidad_disponible_kg ? loteData.cantidad_disponible_kg.toString() : '',
           fecha_ingreso: loteData.fecha_ingreso.split('T')[0],
         });
         
@@ -264,6 +276,9 @@ export const useLotes = () => {
         descripcion: formData.descripcion,
         peso_seco_kg: formData.peso_seco_kg.trim() 
           ? parseFloat(formData.peso_seco_kg.replace(',', '.')) 
+          : undefined,
+        cantidad_disponible_kg: formData.cantidad_disponible_kg.trim() 
+          ? parseFloat(formData.cantidad_disponible_kg.replace(',', '.')) 
           : undefined,
         fecha_ingreso: `${formData.fecha_ingreso}T00:00:00Z`,
         almacen_id: user?.almacen_id,
@@ -311,6 +326,9 @@ export const useLotes = () => {
         descripcion: formData.descripcion,
         peso_seco_kg: formData.peso_seco_kg.trim() 
           ? parseFloat(formData.peso_seco_kg.replace(',', '.')) 
+          : undefined,
+        cantidad_disponible_kg: formData.cantidad_disponible_kg.trim() 
+          ? parseFloat(formData.cantidad_disponible_kg.replace(',', '.')) 
           : undefined,
         fecha_ingreso: `${formData.fecha_ingreso}T00:00:00Z`,
       };

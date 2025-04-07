@@ -1,3 +1,4 @@
+// hooks/crud/useInventarios.tsx - Versión optimizada
 import { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
@@ -7,7 +8,7 @@ import { Inventario, Almacen, Presentacion, Lote } from '@/models';
 import { inventarioApi, almacenApi, presentacionApi, loteApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 
-// Interface for inventory form data
+// Interface para los datos del formulario de inventario
 interface InventarioFormData {
   presentacion_id: string;
   almacen_id: string;
@@ -16,16 +17,16 @@ interface InventarioFormData {
   lote_id?: string;
 }
 
-// Interface for inventory movement data
-interface MovimientoData {
-  inventario_id: number;
-  tipo: 'entrada' | 'salida';
+// Interface para los parámetros de ajuste simplificado
+interface AjusteSimplificadoParams {
+  inventarioId: number;
+  accion: 'aumentar' | 'disminuir';
   cantidad: number;
   motivo: string;
-  lote_id?: number;
+  loteId?: number;
 }
 
-// Initial form state
+// Estado inicial del formulario
 const initialFormData: InventarioFormData = {
   presentacion_id: '',
   almacen_id: '',
@@ -37,7 +38,7 @@ const initialFormData: InventarioFormData = {
 export function useInventarios() {
   const { user } = useAuth();
   
-  // Use the generic API resource hook for CRUD operations
+  // Usar el hook genérico para operaciones CRUD
   const {
     data: inventarios,
     isLoading,
@@ -55,13 +56,13 @@ export function useInventarios() {
     getFn: inventarioApi.getInventario
   });
 
-  // States for form and related data
+  // Estados para formulario y datos relacionados
   const [formData, setFormData] = useState<InventarioFormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   
-  // States for related data
+  // Estados para datos relacionados
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
   const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
@@ -69,17 +70,17 @@ export function useInventarios() {
   const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
   const [searchText, setSearchText] = useState('');
 
-  // Load options (warehouses and presentations)
+  // Cargar opciones (almacenes y presentaciones)
   const loadOptions = useCallback(async () => {
     try {
       setIsLoadingOptions(true);
       
-      // Load warehouses
+      // Cargar almacenes
       const almacenesResponse = await almacenApi.getAlmacenes();
-      if (almacenesResponse && almacenesResponse.data) {
+      if (almacenesResponse?.data) {
         setAlmacenes(almacenesResponse.data);
         
-        // If user has an assigned warehouse, select it automatically
+        // Si el usuario tiene un almacén asignado, seleccionarlo automáticamente
         if (user?.almacen_id) {
           setSelectedAlmacen(user.almacen_id.toString());
           setFormData(prev => ({
@@ -89,15 +90,15 @@ export function useInventarios() {
         }
       }
       
-      // Load presentations
+      // Cargar presentaciones
       const presentacionesResponse = await presentacionApi.getPresentaciones();
-      if (presentacionesResponse && presentacionesResponse.data) {
+      if (presentacionesResponse?.data) {
         setPresentaciones(presentacionesResponse.data);
       }
       
-      // Load lotes for dropdown selection
+      // Cargar lotes
       const lotesResponse = await loteApi.getLotes();
-      if (lotesResponse && lotesResponse.data) {
+      if (lotesResponse?.data) {
         setLotes(lotesResponse.data);
       }
     } catch (error) {
@@ -108,20 +109,26 @@ export function useInventarios() {
     }
   }, [user?.almacen_id]);
 
-  // Effect to load options on mount
+  // Efecto para cargar opciones al montar
   useEffect(() => {
     loadOptions();
   }, [loadOptions]);
 
-  // Filter inventory by warehouse
+  // Formatear lote para mostrar
+  const formatLoteForDisplay = useCallback((lote: Lote) => {
+    if (!lote) return '';
+    const fechaIngreso = new Date(lote.fecha_ingreso).toLocaleDateString();
+    return `Lote #${lote.id} (${fechaIngreso})${lote.proveedor ? ` - ${lote.proveedor.nombre}` : ''}`;
+  }, []);
+
+  // Filtrar inventario por almacén
   const filtrarPorAlmacen = useCallback(async (almacenId: string) => {
     try {
       setSelectedAlmacen(almacenId);
       
-      // Convert to number or use undefined if empty
+      // Convertir a número o usar undefined si está vacío
       const almacenIdParam = almacenId ? parseInt(almacenId) : undefined;
       
-      // Fetch data with the proper almacen_id parameter
       await fetchData({
         page: 1,
         perPage: pagination.perPage,
@@ -132,17 +139,17 @@ export function useInventarios() {
     }
   }, [fetchData, pagination.perPage]);
 
-  // Filter inventory by search text
+  // Filtrar inventario por texto
   const filtrarPorTexto = useCallback((texto: string) => {
     setSearchText(texto);
   }, []);
 
-  // Toggle low stock filter
+  // Alternar filtro de stock bajo
   const toggleStockBajo = useCallback(() => {
     setShowOnlyLowStock(prev => !prev);
   }, []);
 
-  // Get filtered inventory based on search, warehouse and low stock
+  // Obtener inventario filtrado
   const getInventariosFiltrados = useCallback(() => {
     if (!inventarios) return [];
     
@@ -160,15 +167,33 @@ export function useInventarios() {
       return matchesSearch && matchesAlmacen && matchesLowStock;
     });
   }, [inventarios, searchText, selectedAlmacen, showOnlyLowStock]);
+  
+  // Obtener presentaciones que no están en el inventario para el almacén seleccionado
+  const getAvailablePresentaciones = useCallback(() => {
+    if (!presentaciones.length || !inventarios.length) return presentaciones;
+    
+    // Si no hay almacén seleccionado, devolver todas las presentaciones
+    if (!selectedAlmacen) return presentaciones;
+    
+    // Obtener todos los presentacion_id que ya están en el almacén seleccionado
+    const existingPresentacionIds = inventarios
+      .filter(inv => inv.almacen_id.toString() === selectedAlmacen)
+      .map(inv => inv.presentacion_id);
+    
+    // Devolver solo las presentaciones que no están en el almacén
+    return presentaciones.filter(
+      presentacion => !existingPresentacionIds.includes(presentacion.id)
+    );
+  }, [presentaciones, inventarios, selectedAlmacen]);
 
-  // Handle form field changes
+  // Manejar cambio de campo de formulario
   const handleChange = useCallback((field: keyof InventarioFormData, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
     
-    // Clear error when field is changed
+    // Limpiar error cuando se cambia el campo
     if (errors[field]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -178,7 +203,7 @@ export function useInventarios() {
     }
   }, [errors]);
 
-  // Form validation
+  // Validar formulario
   const validate = useCallback(() => {
     const newErrors: Record<string, string> = {};
     
@@ -206,7 +231,7 @@ export function useInventarios() {
     return Object.keys(newErrors).length === 0;
   }, [formData]);
 
-  // Create new inventory item
+  // Crear nuevo registro de inventario
   const createInventario = useCallback(async () => {
     if (!validate()) {
       return false;
@@ -215,13 +240,19 @@ export function useInventarios() {
     try {
       setIsSubmitting(true);
       
+      // Asegurar que todos los valores se convierten correctamente a sus tipos esperados
       const inventarioData = {
         presentacion_id: parseInt(formData.presentacion_id),
         almacen_id: parseInt(formData.almacen_id),
         cantidad: parseInt(formData.cantidad),
         stock_minimo: parseInt(formData.stock_minimo),
-        lote_id: formData.lote_id ? parseInt(formData.lote_id) : undefined
+        // Solo incluir lote_id si tiene un valor
+        ...(formData.lote_id && formData.lote_id.trim() !== '' 
+           ? { lote_id: parseInt(formData.lote_id) } 
+           : {})
       };
+      
+      console.log("Sending inventory data:", JSON.stringify(inventarioData, null, 2));
       
       const response = await inventarioApi.createInventario(inventarioData);
       
@@ -237,7 +268,7 @@ export function useInventarios() {
           ]
         );
         
-        // Refresh the list
+        // Actualizar la lista
         await fetchData();
         
         return true;
@@ -255,7 +286,7 @@ export function useInventarios() {
     }
   }, [formData, validate, fetchData]);
 
-  // Update existing inventory item
+  // Actualizar registro de inventario existente
   const updateInventario = useCallback(async (id: number) => {
     if (!validate()) {
       return false;
@@ -264,13 +295,19 @@ export function useInventarios() {
     try {
       setIsSubmitting(true);
       
+      // Asegurar que todos los valores se convierten correctamente
       const inventarioData = {
         presentacion_id: parseInt(formData.presentacion_id),
         almacen_id: parseInt(formData.almacen_id),
         cantidad: parseInt(formData.cantidad),
         stock_minimo: parseInt(formData.stock_minimo),
-        lote_id: formData.lote_id ? parseInt(formData.lote_id) : undefined
+        // Solo incluir lote_id si tiene un valor
+        ...(formData.lote_id && formData.lote_id.trim() !== '' 
+           ? { lote_id: parseInt(formData.lote_id) } 
+           : {})
       };
+      
+      console.log("Updating inventory with data:", JSON.stringify(inventarioData, null, 2));
       
       const response = await inventarioApi.updateInventario(id, inventarioData);
       
@@ -286,7 +323,7 @@ export function useInventarios() {
           ]
         );
         
-        // Refresh the list
+        // Actualizar la lista
         await fetchData();
         
         return true;
@@ -304,12 +341,12 @@ export function useInventarios() {
     }
   }, [formData, validate, fetchData]);
 
-  // Load inventory item for editing
+  // Cargar registro de inventario para editar
   const loadInventarioForEdit = useCallback(async (id: number) => {
     try {
       setIsSubmitting(true);
       
-      // Ensure options are loaded
+      // Asegurar que las opciones están cargadas
       await loadOptions();
       
       const inventario = await getItem(id);
@@ -337,7 +374,79 @@ export function useInventarios() {
     }
   }, [getItem, loadOptions]);
 
-  // Adjust inventory (increase or decrease stock)
+// Versión optimizada de la función de ajuste de inventario que considera los lotes
+const ajustarInventarioSimplificado = useCallback(async ({ 
+  inventarioId, 
+  accion, 
+  cantidad, 
+  motivo,
+  loteId
+}: AjusteSimplificadoParams) => {
+  try {
+    setIsSubmitting(true);
+    
+    // Validar cantidad
+    if (cantidad <= 0) {
+      throw new Error('La cantidad debe ser mayor a cero');
+    }
+    
+    // Obtener inventario actual para validación
+    const inventario = await getItem(inventarioId);
+    
+    if (!inventario) {
+      throw new Error('No se pudo cargar el inventario. No se encontró el registro.');
+    }
+    
+    // Validación adicional para operación de disminución
+    if (accion === 'disminuir' && cantidad > inventario.cantidad) {
+      throw new Error('No puede restar más unidades de las disponibles');
+    }
+    
+    // Calcular nueva cantidad según la acción
+    const nuevaCantidad = accion === 'aumentar' 
+      ? inventario.cantidad + cantidad
+      : inventario.cantidad - cantidad;
+    
+    // Preparar datos para la actualización
+    const updatedData: any = {
+      cantidad: nuevaCantidad,
+      motivo: motivo || 'Ajuste de inventario'
+    };
+    
+    // Solo incluir lote_id si se está aumentando stock y se especificó un lote diferente
+    if (accion === 'aumentar' && loteId && loteId !== inventario.lote_id) {
+      console.log(`Cambiando lote de ${inventario.lote_id} a ${loteId} para aumento de inventario`);
+      updatedData.lote_id = loteId;
+    }
+    
+    console.log("Enviando datos de ajuste:", JSON.stringify(updatedData, null, 2));
+    
+    // Llamar al método de actualización
+    const response = await inventarioApi.updateInventario(inventarioId, updatedData);
+    
+    if (response) {
+      // Actualizar los datos
+      await fetchData({
+        page: pagination.page,
+        perPage: pagination.perPage,
+        almacenId: selectedAlmacen ? parseInt(selectedAlmacen) : undefined
+      });
+      
+      return true;
+    }
+    
+    throw new Error('No se pudo actualizar el inventario');
+  } catch (error) {
+    console.error('Error ajustando inventario:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al ajustar el inventario';
+    Alert.alert('Error', errorMessage);
+    return false;
+  } finally {
+    setIsSubmitting(false);
+  }
+}, [getItem, fetchData, pagination, selectedAlmacen, inventarioApi]);
+
+  // Versión compatible con el código existente (pero delegando a la versión simplificada)
   const ajustarInventario = useCallback(async (
     id: number, 
     accion: 'aumentar' | 'disminuir', 
@@ -345,73 +454,22 @@ export function useInventarios() {
     motivo: string,
     loteId?: number
   ) => {
-    try {
-      setIsSubmitting(true);
-      
-      // Validate quantity
-      if (cantidad <= 0) {
-        throw new Error('La cantidad debe ser mayor a cero');
-      }
-      
-      // Get current inventory
-      const inventario = await getItem(id);
-      if (!inventario) {
-        throw new Error('No se pudo cargar el inventario');
-      }
-      
-      // Calculate new quantity based on action
-      let nuevaCantidad = inventario.cantidad;
-      if (accion === 'aumentar') {
-        nuevaCantidad += cantidad;
-      } else {
-        // Validate that we don't subtract more than available
-        if (cantidad > inventario.cantidad) {
-          throw new Error('No puede restar más unidades de las disponibles');
-        }
-        nuevaCantidad -= cantidad;
-      }
-      
-      // Create movement object
-      const movimientoData: MovimientoData = {
-        inventario_id: id,
-        tipo: accion === 'aumentar' ? 'entrada' : 'salida',
-        cantidad: cantidad,
-        motivo: motivo,
-        lote_id: loteId
-      };
-      
-      // Call API to register movement
-      const response = await inventarioApi.registrarMovimiento(movimientoData);
-      
-      if (response) {
-        // Refresh the list
-        await fetchData({
-          page: pagination.page,
-          perPage: pagination.perPage,
-          almacenId: selectedAlmacen ? parseInt(selectedAlmacen) : undefined
-        });
-        
-        return true;
-      } else {
-        throw new Error('No se pudo registrar el movimiento');
-      }
-    } catch (error) {
-      console.error('Error adjusting inventory:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al ajustar el inventario';
-      Alert.alert('Error', errorMessage);
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [getItem, fetchData, pagination.page, pagination.perPage, selectedAlmacen]);
+    return ajustarInventarioSimplificado({
+      inventarioId: id,
+      accion,
+      cantidad,
+      motivo,
+      loteId
+    });
+  }, [ajustarInventarioSimplificado]);
 
-  // Reset form to initial state
+  // Resetear formulario
   const resetForm = useCallback(() => {
     setFormData(initialFormData);
     setErrors({});
   }, []);
 
-  // Get inventory statistics
+  // Obtener estadísticas de inventario
   const getEstadisticas = useCallback(() => {
     if (!inventarios || inventarios.length === 0) {
       return {
@@ -426,7 +484,7 @@ export function useInventarios() {
     const stockBajo = inventarios.filter(inv => inv.cantidad <= inv.stock_minimo && inv.cantidad > 0).length;
     const sinStock = inventarios.filter(inv => inv.cantidad === 0).length;
     
-    // Calculate total inventory value (if products have price)
+    // Calcular valor total del inventario (si los productos tienen precio)
     const valorTotal = inventarios.reduce((sum, inv) => {
       const precio = inv.presentacion?.precio_venta || 0;
       return sum + (precio * inv.cantidad);
@@ -440,10 +498,10 @@ export function useInventarios() {
     };
   }, [inventarios]);
 
-  // Refresh inventory data
+  // Actualizar datos de inventario
   const refresh = useCallback(async () => {
     try {
-      // Convert to number or use undefined if empty
+      // Convertir a número o usar undefined si está vacío
       const almacenIdParam = selectedAlmacen ? parseInt(selectedAlmacen) : undefined;
       
       await fetchData({
@@ -456,7 +514,7 @@ export function useInventarios() {
     }
   }, [fetchData, pagination.page, pagination.perPage, selectedAlmacen]);
 
-  // Delete inventory item with confirmation
+  // Confirmar eliminación de inventario
   const confirmDelete = useCallback((id: number) => {
     Alert.alert(
       'Confirmar eliminación',
@@ -482,7 +540,7 @@ export function useInventarios() {
   }, [deleteItem, refresh]);
 
   return {
-    // States
+    // Estados
     inventarios,
     almacenes,
     presentaciones,
@@ -498,13 +556,13 @@ export function useInventarios() {
     searchText,
     showOnlyLowStock,
     
-    // Form actions
+    // Acciones de formulario
     handleChange,
     setFormData,
     setErrors,
     validate,
     
-    // CRUD operations
+    // Operaciones CRUD
     loadOptions,
     filtrarPorAlmacen,
     filtrarPorTexto,
@@ -512,19 +570,22 @@ export function useInventarios() {
     createInventario,
     updateInventario,
     ajustarInventario,
+    ajustarInventarioSimplificado, // Nueva función simplificada
     deleteInventario: deleteItem,
     confirmDelete,
     loadInventarioForEdit,
     getItem,
     
-    // Pagination operations
+    // Operaciones de paginación
     handlePageChange,
     handleItemsPerPageChange,
     refresh,
     
-    // Utilities
+    // Utilidades
     getInventariosFiltrados,
     getEstadisticas,
-    resetForm
+    resetForm,
+    getAvailablePresentaciones,
+    formatLoteForDisplay
   };
 }

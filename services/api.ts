@@ -395,7 +395,7 @@ export const ventaApi = {
   },
 };
 
-// API methods for Inventario
+// Fixed Inventory API methods in services/api.ts
 export const inventarioApi = {
   getInventarios: async (page = 1, perPage = 10, almacenId?: number): Promise<ApiResponse<any>> => {
     let endpoint = `/inventarios?page=${page}&per_page=${perPage}`;
@@ -410,20 +410,48 @@ export const inventarioApi = {
   },
   
   getInventario: async (id: number): Promise<any> => {
+    console.log(`Obteniendo inventario ID: ${id}`);
     return fetchApi<any>(`/inventarios/${id}`);
   },
 
-  createInventario: async (inventario: any): Promise<any> => {
+  createInventario: async (inventario: {
+    presentacion_id: number;
+    almacen_id: number;
+    cantidad: number;
+    stock_minimo: number;
+    lote_id?: number;
+  }): Promise<any> => {
+    // Clean the object to ensure no undefined values are sent
+    const cleanedData = {
+      presentacion_id: inventario.presentacion_id,
+      almacen_id: inventario.almacen_id,
+      cantidad: inventario.cantidad,
+      stock_minimo: inventario.stock_minimo,
+      ...(inventario.lote_id ? { lote_id: inventario.lote_id } : {})
+    };
+    
+    console.log('Creating inventory with data:', JSON.stringify(cleanedData, null, 2));
+    
     return fetchApi<any>('/inventarios', {
       method: 'POST',
-      body: JSON.stringify(inventario),
+      body: JSON.stringify(cleanedData),
     });
   },
 
   updateInventario: async (id: number, inventario: any): Promise<any> => {
+    // Clean the object to ensure no undefined values are sent
+    const cleanedData = Object.entries(inventario).reduce((acc, [key, value]) => {
+      if (value !== undefined && value !== null) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as Record<string, any>);
+    
+    console.log('Updating inventory with data:', JSON.stringify(cleanedData, null, 2));
+    
     return fetchApi<any>(`/inventarios/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(inventario),
+      body: JSON.stringify(cleanedData),
     });
   },
 
@@ -432,14 +460,6 @@ export const inventarioApi = {
       method: 'DELETE',
     });
   },
-  
-  // Nuevo método para registrar movimientos de inventario
-  registrarMovimiento: async (data: any): Promise<any> => {
-    return fetchApi<any>('/movimientos', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
 
 };
 

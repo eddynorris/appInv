@@ -47,15 +47,20 @@ export default function LotesScreen() {
   }, [loadLotes]);
   
   // Calcular estadísticas
-  const totalLotes = pagination.total;
   const totalPesoHumedo = lotes.reduce((sum, lote) => sum + parseFloat(lote.peso_humedo_kg.toString()), 0);
   const totalPesoSeco = lotes.reduce((sum, lote) => {
     if (lote.peso_seco_kg) {
       return sum + parseFloat(lote.peso_seco_kg.toString());
     }
     return sum;
+    
   }, 0);
-  
+  const totalPesoDisponible = lotes.reduce((sum, lote) => {
+    if (lote.cantidad_disponible_kg) {
+      return sum + parseFloat(lote.cantidad_disponible_kg.toString());
+    }
+    return sum;
+  }, 0);
   // Definimos columnas para la tabla con renderers y usamos useMemo para optimizar
   const tableColumns = useMemo(() => [
     {
@@ -126,16 +131,16 @@ export default function LotesScreen() {
           <Divider style={{ marginVertical: 8 }} />
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <View>
-              <ThemedText style={{ fontWeight: 'bold' }}>{totalLotes}</ThemedText>
-              <ThemedText style={{ fontSize: 12 }}>Total de Lotes</ThemedText>
-            </View>
-            <View>
               <ThemedText style={{ fontWeight: 'bold' }}>{totalPesoHumedo.toFixed(2)} kg</ThemedText>
               <ThemedText style={{ fontSize: 12 }}>Peso Húmedo Total</ThemedText>
             </View>
             <View>
               <ThemedText style={{ fontWeight: 'bold' }}>{totalPesoSeco.toFixed(2)} kg</ThemedText>
               <ThemedText style={{ fontSize: 12 }}>Peso Seco Total</ThemedText>
+            </View>
+            <View>
+              <ThemedText style={{ fontWeight: 'bold' }}>{totalPesoDisponible.toFixed(2)} kg</ThemedText>
+              <ThemedText style={{ fontSize: 12 }}>Total Disponible</ThemedText>
             </View>
           </View>
         </ThemedView>

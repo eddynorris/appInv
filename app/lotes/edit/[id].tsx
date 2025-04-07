@@ -155,6 +155,15 @@ export default function EditLoteScreen() {
         error={errors.peso_seco_kg}
         keyboardType="numeric"
       />
+      
+      <FormField
+        label="Cantidad disponible (kg)"
+        value={formData.cantidad_disponible_kg}
+        onChangeText={(value) => handleChange('cantidad_disponible_kg', value)}
+        placeholder="0.00"
+        error={errors.cantidad_disponible_kg}
+        keyboardType="numeric"
+      />
 
       {/* Reemplazamos el FormField por DateField */}
       <DateField

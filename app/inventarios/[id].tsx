@@ -1,6 +1,6 @@
-// app/inventario/[id].tsx
+// app/inventario/[id].tsx - Versión mejorada
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Alert } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -11,19 +11,22 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useInventarios } from '@/hooks/crud/useInventarios';
-import { Inventario } from '@/models';
+import { Inventario, Lote } from '@/models';
 
 export default function InventarioDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [inventario, setInventario] = useState<Inventario | null>(null);
+  const [loteInfo, setLoteInfo] = useState<Lote | null>(null);
   
   // Hook de inventario
   const { 
     isLoading, 
     error, 
     getItem,
-    deleteInventario
+    deleteInventario,
+    lotes,
+    formatLoteForDisplay
   } = useInventarios();
   
   // Cargar datos del inventario
@@ -35,6 +38,14 @@ export default function InventarioDetailScreen() {
         const data = await getItem(parseInt(id));
         if (data) {
           setInventario(data);
+          
+          // Si el inventario tiene lote_id, buscar su información detallada
+          if (data.lote_id && lotes.length > 0) {
+            const loteEncontrado = lotes.find(lote => lote.id === data.lote_id);
+            if (loteEncontrado) {
+              setLoteInfo(loteEncontrado);
+            }
+          }
         }
       } catch (err) {
         console.error('Error al cargar inventario:', err);
@@ -42,7 +53,7 @@ export default function InventarioDetailScreen() {
     };
     
     loadInventario();
-  }, [id, getItem]);
+  }, [id, getItem, lotes]);
   
   // Ver historial de movimientos
   const verHistorial = () => {
@@ -59,7 +70,7 @@ export default function InventarioDetailScreen() {
   // Navegar a pantalla de ajuste (aumentar)
   const handleAumentar = () => {
     router.push({
-      pathname: '/inventario/ajustar',
+      pathname: '/inventarios/ajustar',
       params: { id, accion: 'aumentar' }
     });
   };
@@ -67,7 +78,7 @@ export default function InventarioDetailScreen() {
   // Navegar a pantalla de ajuste (disminuir)
   const handleDisminuir = () => {
     router.push({
-      pathname: '/inventario/ajustar',
+      pathname: '/inventarios/ajustar',
       params: { id, accion: 'disminuir' }
     });
   };
@@ -78,7 +89,7 @@ export default function InventarioDetailScreen() {
     
     try {
       await deleteInventario(parseInt(id));
-      router.replace('/inventario');
+      router.replace('/inventarios');
     } catch (error) {
       console.error('Error al eliminar inventario:', error);
     } finally {
@@ -145,17 +156,39 @@ export default function InventarioDetailScreen() {
               label="Almacén" 
               value={inventario.almacen?.nombre || 'No especificado'} 
             />
-            {inventario.lote_id && (
-              <DetailRow 
-                label="Lote ID" 
-                value={inventario.lote_id.toString()} 
-              />
-            )}
             <DetailRow 
               label="Última actualización" 
               value={new Date(inventario.ultima_actualizacion).toLocaleString()} 
             />
           </DetailSection>
+          
+          {/* Información de lote si existe */}
+          {inventario.lote_id && (
+            <DetailSection title="Información de Lote">
+              <DetailRow 
+                label="ID de Lote" 
+                value={inventario.lote_id.toString()} 
+              />
+              {loteInfo && (
+                <>
+                  <DetailRow 
+                    label="Fecha de Ingreso" 
+                    value={new Date(loteInfo.fecha_ingreso).toLocaleDateString()} 
+                  />
+                  {loteInfo.proveedor && (
+                    <DetailRow 
+                      label="Proveedor" 
+                      value={loteInfo.proveedor.nombre} 
+                    />
+                  )}
+                  <DetailRow 
+                    label="Cantidad disponible" 
+                    value={`${loteInfo.cantidad_disponible_kg} kg`} 
+                  />
+                </>
+              )}
+            </DetailSection>
+          )}
           
           {/* Botones de acción rápida */}
           <ThemedView style={styles.quickActions}>
@@ -164,15 +197,7 @@ export default function InventarioDetailScreen() {
               onPress={handleAumentar}
             >
               <IconSymbol name="plus.circle.fill" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.actionText}>Aumentar</ThemedText>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: '#F44336' }]}
-              onPress={handleDisminuir}
-            >
-              <IconSymbol name="minus.circle.fill" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.actionText}>Disminuir</ThemedText>
+              <ThemedText style={styles.actionText}>Ajustar Stock</ThemedText>
             </TouchableOpacity>
             
             <TouchableOpacity 
@@ -186,8 +211,6 @@ export default function InventarioDetailScreen() {
           
           {/* Botones principales */}
           <ActionButtons
-            onSave={() => router.push(`/inventario/edit/${id}`)}
-            saveText="Editar"
             onDelete={() => setShowDeleteDialog(true)}
             showDelete={true}
           />

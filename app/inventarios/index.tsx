@@ -1,6 +1,6 @@
-// app/inventario/index.tsx - Versión optimizada usando useInventarios
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Text, FlatList } from 'react-native';
+// app/inventarios/index.tsx - Versión actualizada
+import React, { useEffect } from 'react';
+import { StyleSheet, View, TextInput, TouchableOpacity, Text, FlatList, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -8,12 +8,13 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import AlmacenPickerDialog from '@/components/data/AlmacenPickerDialog';
 import { useInventarios } from '@/hooks/crud/useInventarios';
-import { Almacen, Inventario } from '@/models';
+import { Inventario } from '@/models';
+import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { Colors } from '@/constants/Colors';
 
 export default function InventarioScreen() {
-  // Estados locales UI
-  const [showAlmacenPicker, setShowAlmacenPicker] = useState(false);
+  // Estados locales de UI
+  const [showAlmacenPicker, setShowAlmacenPicker] = React.useState(false);
   
   // Usar el hook personalizado
   const {
@@ -49,7 +50,10 @@ export default function InventarioScreen() {
     const isLowStock = item.cantidad <= item.stock_minimo;
     
     return (
-      <View style={[styles.itemCard, isLowStock && styles.lowStockCard]}>
+      <TouchableOpacity 
+        style={[styles.itemCard, isLowStock && styles.lowStockCard]}
+        onPress={() => router.push(`/inventarios/${item.id}`)}
+      >
         <View style={styles.itemHeader}>
           <Text style={styles.itemName}>
             {item.presentacion?.nombre || 'Producto sin nombre'}
@@ -64,47 +68,55 @@ export default function InventarioScreen() {
             Almacén: {item.almacen?.nombre || 'No especificado'}
           </Text>
           
-          <View style={styles.stockControls}>
-            <TouchableOpacity 
-              style={styles.decreaseButton}
-              onPress={() => router.push({
-                pathname: '/inventarios/ajustar',
-                params: { id: item.id, accion: 'disminuir' }
-              })}
-            >
-              <Text style={styles.buttonText}>-</Text>
-            </TouchableOpacity>
+          <View style={styles.stockInfo}>
+            <View style={styles.stockValue}>
+              <Text style={styles.stockLabel}>Stock:</Text>
+              <Text style={[
+                styles.stockNumber,
+                item.cantidad <= item.stock_minimo && styles.lowStockText
+              ]}>
+                {item.cantidad}
+              </Text>
+            </View>
             
-            <Text style={styles.stockText}>{item.cantidad}</Text>
+            <View style={styles.stockValue}>
+              <Text style={styles.stockLabel}>Mínimo:</Text>
+              <Text style={styles.stockNumber}>{item.stock_minimo}</Text>
+            </View>
             
-            <TouchableOpacity 
-              style={styles.increaseButton}
-              onPress={() => router.push({
-                pathname: '/inventarios/ajustar',
-                params: { id: item.id, accion: 'aumentar' }
-              })}
-            >
-              <Text style={styles.buttonText}>+</Text>
-            </TouchableOpacity>
-            
-            <Text style={styles.minStockText}>
-              Mín: {item.stock_minimo}
-            </Text>
-            
-            <TouchableOpacity 
-              style={styles.editButton}
-              onPress={() => router.push(`/inventarios/${item.id}`)}
-            >
-              <Text style={styles.editButtonText}>Editar</Text>
-            </TouchableOpacity>
+            <View style={styles.actions}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.decreaseButton]}
+                onPress={() => router.push({
+                  pathname: '/inventarios/ajustar',
+                  params: { id: item.id, accion: 'disminuir' }
+                })}
+              >
+                <Text style={styles.actionButtonText}>-</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.increaseButton]}
+                onPress={() => router.push({
+                  pathname: '/inventarios/ajustar',
+                  params: { id: item.id, accion: 'aumentar' }
+                })}
+              >
+                <Text style={styles.actionButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
   return (
-    <ScreenContainer title="MANNGOInventario" scrollable={false}>
+    <ScreenContainer 
+      title="Inventario" 
+      scrollable={false}
+      error={error}
+    >
       <View style={styles.container}>
         {/* Búsqueda */}
         <View style={styles.searchContainer}>
@@ -127,15 +139,6 @@ export default function InventarioScreen() {
             >
               <Text style={styles.filterButtonText}>
                 Almacén {selectedAlmacen ? `✓ ${almacenes.find(a => a.id.toString() === selectedAlmacen)?.nombre || ''}` : '▼'}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.filterButton}
-              onPress={() => {/* Implementar filtro por categoría */}}
-            >
-              <Text style={styles.filterButtonText}>
-                Categoría ▼
               </Text>
             </TouchableOpacity>
             
@@ -168,17 +171,25 @@ export default function InventarioScreen() {
           renderItem={renderInventarioItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
-          refreshing={isLoading}
-          onRefresh={refresh}
+          refreshControl={
+            <RefreshControl refreshing={isLoading} onRefresh={refresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {isLoading 
+                  ? 'Cargando inventario...' 
+                  : 'No hay productos en este almacén'}
+              </Text>
+            </View>
+          }
         />
         
         {/* Botón flotante para agregar */}
-        <TouchableOpacity 
-          style={styles.addButton}
+        <FloatingActionButton 
+          icon="plus"
           onPress={() => router.push('/inventarios/create')}
-        >
-          <Text style={styles.addButtonText}>+</Text>
-        </TouchableOpacity>
+        />
       </View>
       
       {/* Selector de almacén */}
@@ -190,9 +201,6 @@ export default function InventarioScreen() {
           setShowAlmacenPicker(false);
         }}
         onCancel={() => {
-          if (selectedAlmacen) {
-            filtrarPorAlmacen('');
-          }
           setShowAlmacenPicker(false);
         }}
       />
@@ -235,6 +243,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    flex: 1,
+    marginHorizontal: 4,
   },
   activeFilterButton: {
     backgroundColor: '#E8F5E9',
@@ -293,75 +303,56 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginBottom: 8,
   },
-  stockControls: {
+  stockInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  decreaseButton: {
-    width: 28,
-    height: 28,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
+  stockValue: {
+    marginRight: 16,
   },
-  stockText: {
+  stockLabel: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  stockNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginHorizontal: 12,
     color: '#333333',
-    minWidth: 30,
-    textAlign: 'center',
   },
-  increaseButton: {
-    width: 28,
-    height: 28,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
+  lowStockText: {
+    color: '#F44336',
+  },
+  actions: {
+    flexDirection: 'row',
+    marginLeft: 'auto',
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 8,
   },
-  buttonText: {
+  actionButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#666666',
-  },
-  minStockText: {
-    fontSize: 14,
-    color: '#666666',
-    marginLeft: 12,
-  },
-  editButton: {
-    marginLeft: 'auto',
-    backgroundColor: '#00BCD4',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  editButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
   },
-  addButton: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  decreaseButton: {
+    backgroundColor: '#F44336',
+  },
+  increaseButton: {
     backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.27,
-    shadowRadius: 4.65,
   },
-  addButtonText: {
-    fontSize: 30,
-    color: '#FFFFFF',
-    lineHeight: 50,
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
   },
 });
