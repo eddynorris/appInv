@@ -10,7 +10,7 @@ import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useInventario } from '@/hooks/crud/useInventario';
+import { useInventarios } from '@/hooks/crud/useInventarios';
 import { Inventario } from '@/models';
 
 export default function InventarioDetailScreen() {
@@ -24,7 +24,7 @@ export default function InventarioDetailScreen() {
     error, 
     getItem,
     deleteInventario
-  } = useInventario();
+  } = useInventarios();
   
   // Cargar datos del inventario
   useEffect(() => {

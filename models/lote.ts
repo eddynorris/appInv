@@ -6,6 +6,7 @@ export interface Lote {
     id: number;
     producto_id: number;
     proveedor_id?: number;
+    descripcion?: string;
     peso_humedo_kg: string;
     peso_seco_kg?: string;
     fecha_ingreso: string;

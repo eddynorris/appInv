@@ -128,7 +128,15 @@ export default function EditLoteScreen() {
           </Picker>
         </View>
       </ThemedView>
-
+      
+      <FormField
+        label="Descripcion"
+        value={formData.descripcion}
+        onChangeText={(value) => handleChange('descripcion', value)}
+        placeholder="Descripción del lote"
+        error={errors.descripcion}
+        required
+      />
       <FormField
         label="Peso Húmedo (kg)"
         value={formData.peso_humedo_kg}

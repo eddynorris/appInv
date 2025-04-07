@@ -42,6 +42,7 @@ interface Column {
 interface LoteSubmitData {
   producto_id: number;
   proveedor_id?: number;
+  descripcion: string;
   peso_humedo_kg: number;
   peso_seco_kg?: number;
   fecha_ingreso: string;
@@ -52,6 +53,7 @@ interface LoteSubmitData {
 const initialFormData = {
   producto_id: '',
   proveedor_id: '',
+  descripcion: '',
   peso_humedo_kg: '',
   peso_seco_kg: '',
   fecha_ingreso: new Date().toISOString().split('T')[0],
@@ -232,6 +234,7 @@ export const useLotes = () => {
         form.setFormData({
           producto_id: loteData.producto_id.toString(),
           proveedor_id: loteData.proveedor_id ? loteData.proveedor_id.toString() : '',
+          descripcion: loteData.descripcion ? loteData.descripcion.toString() : '',
           peso_humedo_kg: loteData.peso_humedo_kg.toString(),
           peso_seco_kg: loteData.peso_seco_kg ? loteData.peso_seco_kg.toString() : '',
           fecha_ingreso: loteData.fecha_ingreso.split('T')[0],
@@ -258,6 +261,7 @@ export const useLotes = () => {
         producto_id: parseInt(formData.producto_id),
         proveedor_id: formData.proveedor_id ? parseInt(formData.proveedor_id) : undefined,
         peso_humedo_kg: parseFloat(formData.peso_humedo_kg.replace(',', '.')),
+        descripcion: formData.descripcion,
         peso_seco_kg: formData.peso_seco_kg.trim() 
           ? parseFloat(formData.peso_seco_kg.replace(',', '.')) 
           : undefined,
@@ -304,6 +308,7 @@ export const useLotes = () => {
         producto_id: parseInt(formData.producto_id),
         proveedor_id: formData.proveedor_id ? parseInt(formData.proveedor_id) : undefined,
         peso_humedo_kg: parseFloat(formData.peso_humedo_kg.replace(',', '.')),
+        descripcion: formData.descripcion,
         peso_seco_kg: formData.peso_seco_kg.trim() 
           ? parseFloat(formData.peso_seco_kg.replace(',', '.')) 
           : undefined,

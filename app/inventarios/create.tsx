@@ -8,7 +8,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { useInventario } from '@/hooks/crud/useInventario';
+import { useInventarios } from '@/hooks/crud/useInventarios';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -24,10 +24,11 @@ export default function CreateInventarioScreen() {
     isLoadingOptions,
     almacenes,
     presentaciones,
+    lotes,
     handleChange,
     createInventario,
     loadOptions
-  } = useInventario();
+  } = useInventarios();
   
   // Cargar opciones al iniciar
   useEffect(() => {
@@ -170,6 +171,37 @@ export default function CreateInventarioScreen() {
             placeholderTextColor="#9BA1A6"
             keyboardType="numeric"
           />
+          {errors.lote_id && (
+            <ThemedText style={styles.errorText}>{errors.lote_id}</ThemedText>
+          )}
+        </ThemedView>
+
+        {/* Lote Selector */}
+        <ThemedView style={styles.formGroup}>
+          <ThemedText style={styles.label}>Lote</ThemedText>
+          <View style={[
+            styles.pickerContainer,
+            { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
+            errors.lote_id && styles.inputError
+          ]}>
+            <Picker
+              selectedValue={formData.lote_id}
+              onValueChange={(value) => handleChange('lote_id', value)}
+              style={[
+                styles.picker,
+                { color: Colors[colorScheme].text }
+              ]}
+            >
+              <Picker.Item label="Seleccionar lote (opcional)" value="" />
+              {lotes.map(lote => (
+                <Picker.Item 
+                  key={lote.id} 
+                  label={`${lote.descripcion} (${new Date(lote.fecha_vencimiento).toLocaleDateString()})`} 
+                  value={lote.id.toString()} 
+                />
+              ))}
+            </Picker>
+          </View>
           {errors.lote_id && (
             <ThemedText style={styles.errorText}>{errors.lote_id}</ThemedText>
           )}

@@ -111,6 +111,15 @@ export default function CreateLoteScreen() {
       </ThemedView>
 
       <FormField
+        label="Descripcion"
+        value={formData.descripcion}
+        onChangeText={(value) => handleChange('descripcion', value)}
+        placeholder="Descripción del lote"
+        error={errors.descripcion}
+        required
+      />
+
+      <FormField
         label="Peso Húmedo (kg)"
         value={formData.peso_humedo_kg}
         onChangeText={(value) => handleChange('peso_humedo_kg', value)}

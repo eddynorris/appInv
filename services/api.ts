@@ -399,9 +399,13 @@ export const ventaApi = {
 export const inventarioApi = {
   getInventarios: async (page = 1, perPage = 10, almacenId?: number): Promise<ApiResponse<any>> => {
     let endpoint = `/inventarios?page=${page}&per_page=${perPage}`;
-    if (almacenId) {
+    
+    // Only add almacenId parameter if it's a valid number
+    if (almacenId !== undefined && !isNaN(almacenId)) {
       endpoint += `&almacen_id=${almacenId}`;
     }
+    
+    console.log('Fetching inventarios with endpoint:', endpoint);
     return fetchApi<ApiResponse<any>>(endpoint);
   },
   
@@ -428,6 +432,15 @@ export const inventarioApi = {
       method: 'DELETE',
     });
   },
+  
+  // Nuevo método para registrar movimientos de inventario
+  registrarMovimiento: async (data: any): Promise<any> => {
+    return fetchApi<any>('/movimientos', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
 };
 
 // API methods for Presentaciones

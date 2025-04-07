@@ -91,6 +91,11 @@ export default function MoreScreen() {
               icon="arrow.left.arrow.right" 
               route="/lotes" 
             />
+            <MenuItem 
+              title="Inventarios" 
+              icon="list.clipboard.fill" 
+              route="/inventarios" 
+            />
           </ThemedView>
           
           <ThemedView style={styles.section}>

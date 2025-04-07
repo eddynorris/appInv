@@ -92,14 +92,15 @@ export default function LoteDetailScreen() {
               </View>
               
               <View style={styles.infoRow}>
+                <ThemedText style={styles.label}>Descripcion:</ThemedText>
+                <ThemedText style={styles.value}>{lote.descripcion}</ThemedText>
+              </View>
+
+              <View style={styles.infoRow}>
                 <ThemedText style={styles.label}>Fecha de Ingreso:</ThemedText>
                 <ThemedText style={styles.value}>{formatDate(lote.fecha_ingreso)}</ThemedText>
               </View>
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Fecha de Actualización:</ThemedText>
-                <ThemedText style={styles.value}>{formatDate(lote.updated_at)}</ThemedText>
-              </View>
+
             </ThemedView>
             
             <ThemedView style={styles.card}>

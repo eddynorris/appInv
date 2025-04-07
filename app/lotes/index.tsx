@@ -59,12 +59,6 @@ export default function LotesScreen() {
   // Definimos columnas para la tabla con renderers y usamos useMemo para optimizar
   const tableColumns = useMemo(() => [
     {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-      sortable: true,
-    },
-    {
       id: 'producto',
       label: 'Producto',
       width: 1.5,
@@ -73,21 +67,21 @@ export default function LotesScreen() {
     },
     {
       id: 'peso_humedo_kg',
-      label: 'Peso Húmedo (kg)',
+      label: 'P. Húmedo',
       width: 1,
       sortable: true,
       render: (item: Lote) => <ThemedText>{parseFloat(item.peso_humedo_kg).toFixed(2)}</ThemedText>,
     },
     {
       id: 'peso_seco_kg',
-      label: 'Peso Seco (kg)',
+      label: 'P. Seco (kg)',
       width: 1,
       sortable: true,
       render: (item: Lote) => <ThemedText>{item.peso_seco_kg ? parseFloat(item.peso_seco_kg).toFixed(2) : '-'}</ThemedText>,
     },
     {
       id: 'rendimiento',
-      label: 'Rendimiento',
+      label: '%R',
       width: 1,
       sortable: true,
       render: (item: Lote) => (
@@ -101,7 +95,7 @@ export default function LotesScreen() {
     },
     {
       id: 'fecha_ingreso',
-      label: 'Fecha Ingreso',
+      label: 'F. Ingreso',
       width: 1,
       sortable: true,
       render: (item: Lote) => <ThemedText>{new Date(item.fecha_ingreso).toLocaleDateString()}</ThemedText>,
