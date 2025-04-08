@@ -1,4 +1,4 @@
-// hooks/crud/useVentas.tsx - Versión optimizada
+// hooks/crud/useVentas.tsx - Versión optimizada para reducir peticiones API
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { useForm } from '../useForm';
 import { useAuth } from '@/context/AuthContext';
 import { Venta, VentaDetalle, Cliente, Almacen, Presentacion, Pago } from '@/models';
-import { ventaApi, clienteApi, almacenApi, pagoApi, inventarioApi } from '@/services/api';
+import { ventaApi, clienteApi, almacenApi, pagoApi } from '@/services/api';
 import { useProductos } from '@/hooks/crud/useProductos';
 import { ThemedText } from '@/components/ThemedText';
 
@@ -17,23 +17,15 @@ interface VentaForm {
   tipo_pago: 'contado' | 'credito';
   consumo_diario_kg: string;
   fecha: string;
-  detalles: {
-    id?: number;
-    presentacion_id: string;
-    cantidad: string;
-    precio_unitario: string;
-  }[];
+  detalles: DetalleVentaForm[];
 }
 
-// Tipo para respuesta de la API
-interface ApiResponse<T> {
-  data: T[];
-  pagination: {
-    total: number;
-    page: number;
-    per_page: number;
-    pages: number;
-  }
+// Tipo para detalles de venta
+export interface DetalleVentaForm {
+  id?: number;
+  presentacion_id: string;
+  cantidad: string;
+  precio_unitario: string;
 }
 
 // Estado inicial del formulario
@@ -49,8 +41,7 @@ const initialFormData: VentaForm = {
 // Hook principal para gestión de ventas
 export const useVentas = () => {
   const { user } = useAuth();
-  
-  // Estados principales (reducidos y agrupados semánticamente)
+  // Estados principales
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +52,6 @@ export const useVentas = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
   const [pagos, setPagos] = useState<Pago[]>([]);
-  
-  // Caché y productos
-  const [productsByAlmacen, setProductsByAlmacen] = useState<Record<number, any[]>>({});
-  const [isLoadingPresentaciones, setIsLoadingPresentaciones] = useState(false);
   
   // Paginación y filtros
   const [pagination, setPagination] = useState({
@@ -88,13 +75,23 @@ export const useVentas = () => {
   const ventaCargadaRef = useRef(false);
   const ventaIdRef = useRef<number | null>(null);
   const optionsLoadedRef = useRef(false);
+  const loadingPresentacionesRef = useRef(false);
+  const almacenIdRef = useRef<string | null>(null);
   
-  // Hook de productos
+  // Cache de presentaciones por almacén
+  const [presentacionesCache, setPresentacionesCache] = useState<Record<string, Presentacion[]>>({});
+  
+  // Hook de productos optimizado con opciones
   const { 
     presentacionesFiltradas, 
-    isLoading: isLoadingProductos, 
-    filtrarPorAlmacenId: originalFiltrarPorAlmacenId 
-  } = useProductos({ filtrarPorAlmacen: true, soloConStock: true });
+    isLoading: isLoadingProductos,
+    filtrarPorAlmacenId,
+    cargarPresentaciones
+  } = useProductos({ 
+    filtrarPorAlmacen: true, 
+    soloConStock: true,
+    cargarAlInicio: false // No cargar automáticamente
+  });
   
   // Formulario
   const form = useForm<VentaForm>(initialFormData);
@@ -111,7 +108,6 @@ export const useVentas = () => {
 
   // Columnas para la tabla de ventas (memoizadas)
   const columns = useMemo(() => [
-
     {
       id: 'fecha',
       label: 'Fecha',
@@ -184,136 +180,82 @@ export const useVentas = () => {
 
   // Cargar opciones (clientes, almacenes) - Optimizado
   const loadOptions = useCallback(async () => {
+    // Si ya hemos cargado opciones y tenemos datos, no es necesario volver a cargar
+    if (optionsLoadedRef.current && clientes.length > 0 && almacenes.length > 0) {
+      return { clientes, almacenes };
+    }
+    
     try {
       setIsLoadingOptions(true);
-      // Cargar primero los almacenes y verificar la respuesta
-      const almacenesRes = await almacenApi.getAlmacenes();
       
-      // Verificar si la respuesta tiene la estructura esperada
-      if (!almacenesRes || !Array.isArray(almacenesRes.data)) {
-        // Establecer un array vacío como fallback
-        setAlmacenes([]);
-      } else {
-        const almacenesData = almacenesRes.data;
-        setAlmacenes(almacenesData);
+      // Cargar datos en paralelo para mayor eficiencia
+      const [clientesRes, almacenesRes] = await Promise.all([
+        clienteApi.getClientes(1, 100),
+        almacenApi.getAlmacenes()
+      ]);
+      
+      // Verificar y establecer datos
+      if (clientesRes?.data) {
+        setClientes(clientesRes.data);
       }
       
-      // Cargar clientes después
-      const clientesRes = await clienteApi.getClientes(1, 100);
-      
-      // Verificar si la respuesta tiene la estructura esperada
-      if (!clientesRes || !Array.isArray(clientesRes.data)) {
-        // Establecer un array vacío como fallback
-        setClientes([]);
-      } else {
-        const clientesData = clientesRes.data;
-        setClientes(clientesData);
+      if (almacenesRes?.data) {
+        setAlmacenes(almacenesRes.data);
       }
+      
+      // Marcar como cargado
+      optionsLoadedRef.current = true;
       
       return {
         clientes: clientesRes?.data || [],
         almacenes: almacenesRes?.data || []
       };
     } catch (error) {
-      console.error('Error detallado al cargar opciones:', error);
-      // Mostrar más detalles del error
-      if (error instanceof Error) {
-        console.error('Mensaje:', error.message);
-        console.error('Stack:', error.stack);
-      }
+      console.error('Error al cargar opciones:', error);
       setError(error instanceof Error ? error.message : 'Error al cargar opciones');
       return { clientes: [], almacenes: [] };
     } finally {
       setIsLoadingOptions(false);
     }
-  }, []);
+  }, [clientes, almacenes]);
 
-  // Filtrar productos por almacén - Optimizado
-  const filtrarPorAlmacenId = useCallback(async (almacenId: number) => {
-    // Validar parámetro
-    if (!almacenId) {
-      console.warn('ID de almacén no válido');
-      return [];
-    }
-    
-    // Evitar llamadas duplicadas
-    if (isLoadingPresentaciones) {
-      return productsByAlmacen[almacenId] || [];
-    }
-    
-    // Usar caché si existe
-    if (productsByAlmacen[almacenId]?.length > 0) {
-      return productsByAlmacen[almacenId];
-    }
-    
-    try {
-      setIsLoadingPresentaciones(true);
-      
-      const response = await inventarioApi.getInventarios(1, 100, almacenId);
-      const productos = response?.data || [];
-      
-      // Guardar en caché
-      setProductsByAlmacen(prev => ({
-      ...prev,
-        [almacenId]: productos
-      }));
-      
-      return productos;
-    } catch (error) {
-      return [];
-    } finally {
-      setIsLoadingPresentaciones(false);
-    }
-  }, [productsByAlmacen, isLoadingPresentaciones]);
-
-  // Cargar ventas - Optimizado y corregido para evitar llamadas redundantes
+  // Cargar ventas (optimizado para reducir llamadas)
   const loadVentas = useCallback(async (page = pagination.page, perPage = pagination.perPage) => {
     try {
-      // Evitar cargas innecesarias si ya estamos en esa página y ya tenemos datos
+      // Evitar cargas redundantes si ya estamos en la página y tenemos datos
       if (page === pagination.page && ventas.length > 0 && !isLoading) {
-        console.log(`Ya estamos en la página ${page} con ${ventas.length} registros, evitando recarga`);
         return ventas;
       }
       
       setIsLoading(true);
       console.log(`Cargando ventas (página ${page}, por página ${perPage})...`);
       
-      // Preparar parámetros
+      // Construir parámetros de filtro
       const params = new URLSearchParams();
       if (filters.cliente_id) params.append('cliente_id', filters.cliente_id);
       if (filters.almacen_id) params.append('almacen_id', filters.almacen_id);
       if (filters.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
       if (filters.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
       
-      // Verificar el rol de usuario y filtrar por vendedor_id si no es admin
+      // Filtrar por vendedor si no es admin
       if (user && user.rol !== 'admin' && user.id) {
-        console.log(`Usuario no es admin, filtrando ventas por vendedor_id: ${user.id}`);
         params.append('vendedor_id', user.id.toString());
       }
       
-      // Construir URL con parámetros
-      const queryString = params.toString();
-      const url = queryString ? `/ventas?${queryString}&page=${page}&per_page=${perPage}` : `/ventas?page=${page}&per_page=${perPage}`;
+      // Llamar a la API
+      const response = await ventaApi.getVentas(page, perPage, params.toString());
       
-      // Llamar API
-      const response = await ventaApi.getVentas(page, perPage, queryString);
-      
-      // Procesar respuesta
       if (response?.data && response?.pagination) {
         setVentas(response.data);
         setPagination({
-          page: response.pagination.page || 1,
-          perPage: response.pagination.per_page || 10,
-          lastPage: response.pagination.pages || 1,
-          total: response.pagination.total || 0
+          page: response.pagination.page,
+          perPage: response.pagination.per_page,
+          lastPage: response.pagination.pages,
+          total: response.pagination.total
         });
-        
-        console.log(`Cargadas ${response.data.length} ventas. Total: ${response.pagination.total}`);
         return response.data;
       } else {
-        console.error('Formato de respuesta inválido:', response);
-        setError('Error al procesar respuesta del servidor');
-        return [];
+        throw new Error('Formato de respuesta inválido');
       }
     } catch (error) {
       console.error('Error al cargar ventas:', error);
@@ -322,30 +264,26 @@ export const useVentas = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [pagination.page, pagination.perPage, filters, ventas.length, isLoading, user]);
+  }, [pagination.page, pagination.perPage, ventas.length, filters, user, isLoading]);
 
-  // Manejar cambio de página - Corregido para evitar recargas automáticas
+  // Manejar cambio de página y filtros
   const handlePageChange = useCallback((page: number) => {
-    // Actualizar estado de paginación solo si es necesario
     if (page !== pagination.page) {
       setPagination(prev => ({ ...prev, page }));
       loadVentas(page, pagination.perPage);
     }
   }, [loadVentas, pagination.page, pagination.perPage]);
 
-  // Manejar cambio de elementos por página
   const handlePerPageChange = useCallback((perPage: number) => {
     setPagination(prev => ({ ...prev, perPage, page: 1 }));
     loadVentas(1, perPage);
   }, [loadVentas]);
 
-  // Aplicar filtros
   const applyFilters = useCallback((newFilters: typeof filters) => {
     setFilters(newFilters);
     loadVentas(1, pagination.perPage);
   }, [loadVentas, pagination.perPage]);
   
-  // Limpiar filtros
   const clearFilters = useCallback(() => {
     setFilters({
       cliente_id: '',
@@ -356,22 +294,24 @@ export const useVentas = () => {
     loadVentas(1, pagination.perPage);
   }, [loadVentas, pagination.perPage]);
 
-  // Cargar venta individual
+  // Cargar venta individual (optimizado)
   const loadVenta = useCallback(async (id: number) => {
+    // Si ya tenemos la venta cargada, no la cargamos de nuevo
     if (venta?.id === id && ventaCargadaRef.current) {
       return venta;
     }
     
     try {
       setIsLoading(true);
+      console.log(`Cargando detalle de venta ${id}...`);
       
       const ventaData = await ventaApi.getVenta(id);
       if (ventaData) {
         setVenta(ventaData);
         ventaCargadaRef.current = true;
         
-        // Cargar pagos si existen - corregido para evitar error con undefined
-        if (ventaData.pagos && Array.isArray(ventaData.pagos) && ventaData.pagos.length > 0) {
+        // Solo cargar pagos si existen y no están cargados
+        if (ventaData.pagos && ventaData.pagos.length > 0 && (!pagos.length || pagos[0].venta_id !== id)) {
           const pagosData = await pagoApi.getPagosByVenta(id);
           if (pagosData) setPagos(pagosData);
         }
@@ -387,63 +327,145 @@ export const useVentas = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [venta]);
+  }, [venta, pagos]);
 
-  // Cargar venta para edición
-  // Función loadVentaForEdit corregida para evitar bucles infinitos
-const loadVentaForEdit = useCallback(async (id: number) => {
-  // Evitar cargar si ya está cargando
-  if (isLoading) {
-    return null;
-  }
-  
-  // Evitar cargar si ya tenemos la venta cargada con el mismo ID
-  if (ventaIdRef.current === id && venta !== null) {
-    return venta;
-  }
-  
-  try {
-    setIsLoading(true);
-    ventaIdRef.current = id;
-    
-    
-    // Cargar venta
-    const ventaData = await ventaApi.getVenta(id);
-    if (!ventaData) {
-      setError('No se pudo cargar la venta');
-      return null;
+  // Cargar venta para edición (optimizado)
+  const loadVentaForEdit = useCallback(async (id: number) => {
+    // Evitar cargas duplicadas
+    if (isLoading || (ventaIdRef.current === id && venta !== null)) {
+      return venta;
     }
     
-    setVenta(ventaData);
+    try {
+      setIsLoading(true);
+      ventaIdRef.current = id;
+      
+      // Cargar opciones primero si no están cargadas
+      if (!optionsLoadedRef.current) {
+        await loadOptions();
+      }
+      
+      // Cargar venta
+      const ventaData = await ventaApi.getVenta(id);
+      if (!ventaData) {
+        setError('No se pudo cargar la venta');
+        return null;
+      }
+      
+      setVenta(ventaData);
+      
+      // Formatear fecha
+      const fecha = ventaData.fecha?.split('T')[0] || new Date().toISOString().split('T')[0];
+      
+      // Actualizar formulario
+      form.setFormData({
+        cliente_id: ventaData.cliente_id?.toString() || '',
+        almacen_id: ventaData.almacen_id?.toString() || '',
+        fecha,
+        tipo_pago: ventaData.tipo_pago || 'contado',
+        consumo_diario_kg: ventaData.consumo_diario_kg?.toString() || '0',
+        detalles: ventaData.detalles?.map(d => ({
+          id: d.id,
+          presentacion_id: d.presentacion_id?.toString() || '',
+          cantidad: d.cantidad?.toString() || '',
+          precio_unitario: d.precio_unitario || ''
+        })) || []
+      });
+      
+      return ventaData;
+    } catch (error) {
+      console.error(`Error al cargar venta ${id} para edición:`, error);
+      setError(`Error al cargar venta: ${error}`);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadOptions, form, venta, isLoading]);
+
+  // Cambio de almacén - Versión optimizada
+  const handleAlmacenChange = useCallback(async (almacenId: string) => {
+    // Validación básica
+    if (!almacenId) return;
     
-    // Formatear fecha
-    const fecha = ventaData.fecha?.split('T')[0] || new Date().toISOString().split('T')[0];
+    // Evitar cambios innecesarios si es el mismo almacén
+    if (almacenId === almacenIdRef.current && presentacionesFiltradas.length > 0) {
+      console.log(`Almacén ${almacenId} ya seleccionado y con productos cargados`);
+      return;
+    }
     
-    // Actualizar formulario
-    form.setFormData({
-      cliente_id: ventaData.cliente_id?.toString() || '',
-      almacen_id: ventaData.almacen_id?.toString() || '',
-      fecha,
-      tipo_pago: ventaData.tipo_pago || 'contado',
-      estado_pago: ventaData.estado_pago || 'pendiente',
-      consumo_diario_kg: ventaData.consumo_diario_kg?.toString() || '0',
-      detalles: ventaData.detalles?.map(d => ({
-        id: d.id,
-        presentacion_id: d.presentacion_id?.toString() || '',
-        cantidad: d.cantidad?.toString() || '',
-        precio_unitario: d.precio_unitario || ''
-      })) || []
-    });
+    // Verificar si hay productos ya agregados antes de cambiar el almacén
+    if (form.formData.detalles.length > 0) {
+      Alert.alert(
+        "Cambiar almacén",
+        "Cambiar de almacén eliminará los productos seleccionados. ¿Desea continuar?",
+        [
+          {
+            text: "Cancelar",
+            style: "cancel"
+          },
+          {
+            text: "Confirmar",
+            onPress: async () => {
+              // Actualizar el almacén y limpiar productos
+              form.handleChange('almacen_id', almacenId);
+              form.handleChange('detalles', []);
+              
+              // Actualizar referencia y cargar presentaciones
+              almacenIdRef.current = almacenId;
+              await _loadPresentacionesPorAlmacen(almacenId);
+            }
+          }
+        ]
+      );
+      return;
+    }
     
-    return ventaData;
-  } catch (error) {
-    console.error(`Error al cargar venta ${id} para edición:`, error);
-    setError(`Error al cargar venta: ${error}`);
-    return null;
-  } finally {
-    setIsLoading(false);
-  }
-}, [isLoading, venta, form]);
+    // Actualizar formulario y referencia
+    form.handleChange('almacen_id', almacenId);
+    almacenIdRef.current = almacenId;
+    
+    // Cargar presentaciones
+    await _loadPresentacionesPorAlmacen(almacenId);
+  }, [form, presentacionesFiltradas.length]);
+
+  // Función interna para cargar presentaciones por almacén (con caché)
+  const _loadPresentacionesPorAlmacen = useCallback(async (almacenId: string) => {
+    // Evitar cargas duplicadas
+    if (loadingPresentacionesRef.current) {
+      console.log('Ya hay una carga de presentaciones en progreso');
+      return;
+    }
+    
+    // Verificar si tenemos en caché
+    if (presentacionesCache[almacenId]?.length > 0) {
+      console.log(`Usando caché para almacén ${almacenId}: ${presentacionesCache[almacenId].length} presentaciones`);
+      // TODO: Aplicar presentaciones de caché
+      return presentacionesCache[almacenId];
+    }
+    
+    try {
+      loadingPresentacionesRef.current = true;
+      console.log(`Cargando presentaciones para almacén ${almacenId}...`);
+      
+      // Usar el método del hook de productos
+      const result = await filtrarPorAlmacenId(almacenId);
+      
+      // Guardar en caché
+      if (result && result.length > 0) {
+        setPresentacionesCache(prev => ({
+          ...prev,
+          [almacenId]: result
+        }));
+      }
+      
+      return result;
+    } catch (error) {
+      console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
+      return [];
+    } finally {
+      loadingPresentacionesRef.current = false;
+    }
+  }, [filtrarPorAlmacenId, presentacionesCache]);
 
   // Crear venta
   const createVenta = useCallback(async () => {
@@ -451,6 +473,7 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     
     try {
       setIsLoading(true);
+      console.log('Enviando solicitud para crear venta...');
       
       // Preparar datos
       const ventaData = {
@@ -498,15 +521,15 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     
     try {
       setIsLoading(true);
+      console.log(`Actualizando venta ${ventaIdRef.current}...`);
       
-      // Preparar datos
+      // Preparar datos - solo enviar campos editables
       const ventaData = {
         cliente_id: parseInt(form.formData.cliente_id),
         almacen_id: parseInt(form.formData.almacen_id),
         tipo_pago: form.formData.tipo_pago,
         consumo_diario_kg: form.formData.consumo_diario_kg,
         fecha: `${form.formData.fecha}T00:00:00Z`,
-
       };
       
       const response = await ventaApi.updateVenta(ventaIdRef.current, ventaData);
@@ -534,14 +557,16 @@ const loadVentaForEdit = useCallback(async (id: number) => {
   const deleteVenta = useCallback(async (id: number) => {
     try {
       setIsLoading(true);
+      console.log(`Eliminando venta ${id}...`);
       
       await ventaApi.deleteVenta(id);
       
-      // Recalcular página si necesario
+      // Recalcular página si es necesario
       const page = ventas.length === 1 && pagination.page > 1 
         ? pagination.page - 1 
         : pagination.page;
       
+      // Recargar lista después de eliminar
       await loadVentas(page, pagination.perPage);
       
       Alert.alert('Éxito', 'Venta eliminada correctamente');
@@ -555,8 +580,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     }
   }, [loadVentas, pagination.page, pagination.perPage, ventas.length]);
 
-  // Funciones auxiliares simplificadas
-  
   // Confirmar eliminación
   const confirmDelete = useCallback((id: number) => {
     Alert.alert(
@@ -569,83 +592,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     );
   }, [deleteVenta]);
 
-  // Cambio de almacén - Optimizado
-  const handleAlmacenChange = useCallback(async (almacenId: string) => {
-    // Validación básica
-    if (!almacenId) {
-      return;
-    }
-
-    // Si el almacén no cambió y no es una llamada forzada, no hacer nada
-    if (form.formData.almacen_id === almacenId) {
-      return;
-    }
-    
-    // Verificar si hay productos ya agregados antes de cambiar el almacén
-    if (form.formData.detalles.length > 0) {
-      // Usar Alert.alert para mostrar diálogo de confirmación
-      Alert.alert(
-        "Cambiar almacén",
-        "Cambiar de almacén eliminará los productos seleccionados. ¿Desea continuar?",
-        [
-          {
-            text: "Cancelar",
-            style: "cancel",
-            onPress: () => {
-              // No hacer nada, mantener el almacén actual
-              console.log("Cambio de almacén cancelado por el usuario");
-            }
-          },
-          {
-            text: "Confirmar",
-            onPress: async () => {
-              // Actualizar el almacén y limpiar productos
-              form.handleChange('almacen_id', almacenId);
-              form.handleChange('detalles', []);
-              
-              // Cargar presentaciones del nuevo almacén
-              try {
-                setIsLoadingPresentaciones(true);
-                
-                // Limpiar caché local primero para evitar resultados mezclados
-                // Llamar solo a originalFiltrarPorAlmacenId que maneja el estado global
-                await originalFiltrarPorAlmacenId(almacenId);
-                
-              } catch (error) {
-                console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
-                Alert.alert("Error", "No se pudieron cargar los productos para este almacén");
-              } finally {
-                setIsLoadingPresentaciones(false);
-              }
-            }
-          }
-        ]
-      );
-      return;
-    }
-    
-    // Si no hay productos, cambiar directamente
-    form.handleChange('almacen_id', almacenId);
-    
-    try {
-      // Cargar presentaciones asociadas al almacén
-      console.log(`Cargando presentaciones para almacén ID: ${almacenId}`);
-      
-      setIsLoadingPresentaciones(true);
-      
-      // Limpiar caché local primero para evitar resultados mezclados
-      // Llamar solo a originalFiltrarPorAlmacenId que maneja el estado global
-      const result = await originalFiltrarPorAlmacenId(almacenId);
-      
-      console.log(`Presentaciones cargadas para almacén ${almacenId}, total: ${result?.length || 0}`);
-    } catch (error) {
-      console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
-      Alert.alert("Error", "No se pudieron cargar los productos para este almacén");
-    } finally {
-      setIsLoadingPresentaciones(false);
-    }
-  }, [form, originalFiltrarPorAlmacenId]);
-
   // Calcular total
   const calcularTotal = useCallback(() => {
     return form.formData.detalles.reduce((total, detalle) => {
@@ -655,7 +601,7 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     }, 0).toFixed(2);
   }, [form.formData.detalles]);
 
-  // Manejar productos
+  // Gestión de productos
   const agregarProducto = useCallback((presentacionId: string, cantidad: string = '1', precioUnitario?: string) => {
     // Verificar si el producto ya existe
     const existeIndex = form.formData.detalles.findIndex(d => d.presentacion_id === presentacionId);
@@ -704,17 +650,10 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     form.handleChange('detalles', detallesActualizados);
   }, [form]);
 
-  // Cargar presentaciones por almacén
-  const loadPresentaciones = useCallback(async (almacenId?: number) => {
-    const idAlmacen = almacenId || parseInt(form.formData.almacen_id);
-    if (!idAlmacen) return [];
-    
-    return await filtrarPorAlmacenId(idAlmacen);
-  }, [form.formData.almacen_id, filtrarPorAlmacenId]);
-
   // Cargar pagos
   const loadPagos = useCallback(async (ventaId: number) => {
     try {
+      console.log(`Cargando pagos para venta ${ventaId}...`);
       const pagosData = await pagoApi.getPagosByVenta(ventaId);
       if (pagosData) {
         setPagos(pagosData);
@@ -725,13 +664,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
       console.error('Error al cargar pagos:', error);
       return [];
     }
-  }, []);
-
-  // Calcular estado de pago
-  const calcularEstadoPago = useCallback((total: number, pagosRealizados: number): 'pendiente' | 'parcial' | 'pagado' => {
-    if (pagosRealizados <= 0) return 'pendiente';
-    if (pagosRealizados >= total) return 'pagado';
-    return 'parcial';
   }, []);
 
   // Resetear formulario
@@ -819,7 +751,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     loadVenta,
     loadVentaForEdit,
     loadOptions,
-    handleSort: () => {}, // Simplificado, no implementado en el servidor
     createVenta,
     updateVenta,
     deleteVenta,
@@ -831,9 +762,7 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     actualizarProducto,
     eliminarProducto,
     handleAlmacenChange,
-    loadPresentaciones,
     loadPagos,
-    calcularEstadoPago,
     getEstadisticas,
     resetForm,
 

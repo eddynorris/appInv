@@ -14,6 +14,15 @@ export const Colors = {
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    // Added theme-specific colors
+    placeholder: '#9BA1A6', // A standard placeholder gray
+    card: '#FFFFFF',       // Standard white card for light mode
+    border: '#E1E3E5',     // Light gray border
+    inputBackground: '#F9F9F9', // Slightly off-white input background
+    backgroundSubtle: '#F0F8FF', // Alice blue for subtle backgrounds
+    textSecondary: '#687076', // Secondary text color
+    error: '#F44336',       // Use existing danger color
+    successMuted: '#A5D6A7', // Muted green
   },
   dark: {
     text: '#ECEDEE',
@@ -22,8 +31,18 @@ export const Colors = {
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+    // Added theme-specific colors
+    placeholder: '#687076', // Darker placeholder for dark mode
+    card: '#1C1C1E',       // Slightly off-black card for dark mode
+    border: '#3A3A3C',     // Darker gray border
+    inputBackground: '#2C2C2E', // Dark input background
+    backgroundSubtle: '#2C2C2E', // Dark subtle background
+    textSecondary: '#9BA1A6', // Secondary text color for dark
+    error: '#FF6B6B',       // Lighter red for dark mode error
+    successMuted: '#4E8E50', // Darker muted green
   },
-  
+
+  // Note: darkGray seems redundant with dark, consider removing or differentiating
   darkGray: {
     text: '#ECEDEE',
     background: '#151718',

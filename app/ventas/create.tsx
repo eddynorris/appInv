@@ -1,4 +1,4 @@
-// app/ventas/create.tsx - Pantalla simplificada y amigable
+// app/ventas/create.tsx - Versión optimizada para reducir peticiones API
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput as RNTextInput, Alert, ActivityIndicator, Platform, Modal, Image, FlatList, TextInput } from 'react-native';
 import { Stack, router } from 'expo-router';
@@ -13,7 +13,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useVentas } from '@/hooks/crud/useVentas';
-import { useAuth } from '@/context/AuthContext'; // Importar contexto de autenticación
+import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 import { ProductPicker } from '@/components/ProductPicker';
 import { DetalleVentaRow } from '@/components/DetalleVentaRow';
@@ -21,8 +21,8 @@ import { DetalleVentaRow } from '@/components/DetalleVentaRow';
 export default function CreateVentaScreen() {
   const colorScheme = useColorScheme() || 'light';
   const isDark = colorScheme === 'dark';
-  const themeColors = Colors[colorScheme as 'light' | 'dark']; // Asegurar que el tipo es correcto
-  const { user } = useAuth(); // Obtener usuario logueado
+  const themeColors = Colors[colorScheme as 'light' | 'dark'];
+  const { user } = useAuth();
   
   // Estados locales para controlar visibilidad y búsqueda
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -31,6 +31,11 @@ export default function CreateVentaScreen() {
   const [clientesFiltrados, setClientesFiltrados] = useState<any[]>([]);
   const [showClientesDropdown, setShowClientesDropdown] = useState(false);
   const [showClienteFormModal, setShowClienteFormModal] = useState(false);
+  
+  // Referencias para prevenir cargas duplicadas
+  const optionsLoaded = useRef(false);
+  const almacenIdRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
   
   // Usar el hook de ventas
   const {
@@ -52,11 +57,8 @@ export default function CreateVentaScreen() {
     setClientes,
   } = useVentas();
   
-  // Control para verificar si ya se cargaron las opciones
-  const opcionesCargadas = useRef(false);
-
-  const handleClienteCreated = (cliente: Cliente) => {
-    
+  // Manejar cuando se crea un nuevo cliente
+  const handleClienteCreated = useCallback((cliente: Cliente) => {
     // Verificar si clientes y setClientes existen
     if (!setClientes) {
       // Fallback: actualizar solo clientesFiltrados y seleccionar el cliente
@@ -78,69 +80,78 @@ export default function CreateVentaScreen() {
     form.handleChange('cliente_id', cliente.id.toString());
     setClienteSearch(cliente.nombre);
     setShowClientesDropdown(false);
-  }
+  }, [clientes, form, setClientes]);
 
-useEffect(() => {
-  // Evitar ejecuciones repetidas usando una referencia
-  if (opcionesCargadas.current) {
-    return;
-  }
-
-  // Datos del usuario y opciones por defecto
-  const loadInitialData = async () => {
-    try {
-      // Cargar opciones primero
-      await loadOptions();
-      
-      // Configurar valores iniciales si están disponibles
-      let almacenIdToUse = '';
-      
-      // Verificar si el usuario tiene almacén asignado
-      if (user?.almacen_id && almacenes.length > 0) {
-        // Usar toString para asegurar una comparación de tipo consistente
-        const userAlmacenIdStr = user.almacen_id.toString();
-       
-        // Buscar el almacén asegurando comparación de strings
-        const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
-        
-        if (userAlmacen) {
-          almacenIdToUse = userAlmacen.id.toString();
-        } else {
-          console.log(`¡Almacén no encontrado! ID buscado: ${userAlmacenIdStr}`);
-          console.log('IDs disponibles:', almacenes.map(a => a.id.toString()));
-        }
-      } 
-      
-      // Si no se encontró el almacén del usuario, usar el primer almacén disponible
-      if (!almacenIdToUse && almacenes.length > 0) {
-        console.log('Usando el primer almacén disponible como alternativa');
-        almacenIdToUse = almacenes[0].id.toString();
-      }
-      
-      // Si tenemos un almacén para usar, configurarlo
-      if (almacenIdToUse) {
-        
-        // Actualizar el formulario con el ID del almacén
-        form.handleChange('almacen_id', almacenIdToUse);
-        
-        // Importante: Llamar a handleAlmacenChange DESPUÉS de haber configurado el ID
-        // y esperar a que complete antes de marcar como cargado
-        await handleAlmacenChange(almacenIdToUse);
-      } else {
-        console.log('No hay almacenes disponibles para precargar');
-      }
-      
-      // Marcar como cargado
-      opcionesCargadas.current = true;
-    } catch (error) {
-      console.error('Error al cargar datos iniciales:', error);
+  // Efecto para cargar datos iniciales (optimizado)
+  useEffect(() => {
+    // Evitar cargas duplicadas usando una referencia
+    if (optionsLoaded.current || isLoadingRef.current) {
+      return;
     }
-  };
-
-  loadInitialData();
-}, [loadOptions, handleAlmacenChange, form, almacenes, user]);
   
-  // Filtrar clientes basado en el texto de búsqueda
+    // Marcar como cargando para evitar llamadas duplicadas
+    isLoadingRef.current = true;
+    
+    // Cargar opciones y configurar almacén inicial
+    const initializeData = async () => {
+      try {
+        // Cargar opciones
+        const { almacenes } = await loadOptions();
+        
+        // Verificar si el usuario tiene un almacén asignado
+        if (user?.almacen_id) {
+          const userAlmacenIdStr = user.almacen_id.toString();
+          
+          // Verificar si el almacén existe en la lista de almacenes
+          const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
+          
+          if (userAlmacen) {
+            // Actualizar el formulario directamente
+            form.handleChange('almacen_id', userAlmacenIdStr);
+            
+            // Cargar presentaciones para este almacén
+            await handleAlmacenChange(userAlmacenIdStr);
+          } else if (almacenes.length > 0) {
+            // Si no hay coincidencia, usar el primer almacén disponible
+            const firstAlmacenId = almacenes[0].id.toString();
+            form.handleChange('almacen_id', firstAlmacenId);
+            await handleAlmacenChange(firstAlmacenId);
+          }
+        } else if (almacenes.length > 0) {
+          // Si el usuario no tiene almacén, usar el primer almacén disponible
+          const firstAlmacenId = almacenes[0].id.toString();
+          form.handleChange('almacen_id', firstAlmacenId);
+          await handleAlmacenChange(firstAlmacenId);
+        }
+        
+        // Marcar como cargado
+        optionsLoaded.current = true;
+      } catch (error) {
+        console.error('Error al cargar datos iniciales:', error);
+        Alert.alert('Error', 'No se pudieron cargar los datos iniciales');
+      } finally {
+        isLoadingRef.current = false;
+      }
+    };
+  
+    initializeData();
+  }, [loadOptions, handleAlmacenChange, form, user]);
+  
+  // Manejar cambio de almacén (interceptado para evitar cargas innecesarias)
+  const handleAlmacenChangeOptimized = useCallback((almacenId: string) => {
+    // Evitar llamadas duplicadas si es el mismo almacén
+    if (almacenIdRef.current === almacenId) {
+      return;
+    }
+    
+    // Actualizar la referencia
+    almacenIdRef.current = almacenId;
+    
+    // Llamar al handleAlmacenChange original
+    handleAlmacenChange(almacenId);
+  }, [handleAlmacenChange]);
+  
+  // Filtrar clientes basado en el texto de búsqueda (memoizado)
   const filtrarClientes = useCallback((texto: string) => {
     setClienteSearch(texto);
     if (!texto.trim()) {
@@ -165,20 +176,20 @@ useEffect(() => {
   }, [form]);
   
   // Manejar el cambio de fecha
-  const handleDateChange = (event: any, selectedDate?: Date) => {
+  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     
     if (selectedDate) {
       const formattedDate = selectedDate.toISOString().split('T')[0];
       form.handleChange('fecha', formattedDate);
     }
-  };
+  }, [form]);
   
   // Manejar la selección de producto
-  const handleProductSelect = (presentacionId: string, cantidad: string, precio: string) => {
+  const handleProductSelect = useCallback((presentacionId: string, cantidad: string, precio: string) => {
     agregarProducto(presentacionId, cantidad, precio);
     setShowProductModal(false);
-  };
+  }, [agregarProducto]);
   
   // Actualizar clienteSearch cuando cambia el cliente seleccionado
   useEffect(() => {
@@ -225,7 +236,7 @@ useEffect(() => {
       <ScrollView style={styles.container}>
         <ThemedText type="title" style={styles.title}>Registrar Nueva Venta</ThemedText>
         
-        {/* Sección de datos secundarios (compacta) - Mejora de estilos */}
+        {/* Sección de datos secundarios (compacta) */}
         <ThemedView style={styles.secondarySection}>
           <ThemedView style={styles.compactRow}>
             {/* Fecha de Venta - Compacto */}
@@ -285,7 +296,7 @@ useEffect(() => {
               ]}>
                 <Picker
                   selectedValue={form.formData.almacen_id}
-                  onValueChange={(value) => handleAlmacenChange(value)}
+                  onValueChange={handleAlmacenChangeOptimized}  // Usar la versión optimizada
                   style={[styles.uniformPicker, { color: themeColors?.text }]}
                   enabled={!isLoading && user?.rol === 'admin'} // Solo editable para administradores
                   dropdownIconColor={isDark ? '#FFFFFF' : '#666666'}
@@ -475,21 +486,22 @@ useEffect(() => {
                     'No hay productos disponibles en este almacén. ¿Desea intentar cargar productos nuevamente?',
                     [
                       {
-                        text: 'Cancelar',
-                        style: 'cancel'
+                        text: "Cancelar",
+                        style: "cancel"
                       },
                       {
-                        text: 'Reintentar',
+                        text: "Reintentar",
                         onPress: () => {
-                          // Intentar cargar presentaciones nuevamente
-                          handleAlmacenChange(form.formData.almacen_id);
-                          setTimeout(() => {
-                            if (presentacionesFiltradas.length > 0) {
-                              setShowProductModal(true);
-                            } else {
-                              Alert.alert('Sin productos', 'No se encontraron productos para este almacén');
-                            }
-                          }, 1000);
+                          if (form.formData.almacen_id) {
+                            handleAlmacenChange(form.formData.almacen_id);
+                            setTimeout(() => {
+                              if (presentacionesFiltradas.length > 0) {
+                                setShowProductModal(true);
+                              } else {
+                                Alert.alert('Sin productos', 'No se encontraron productos para este almacén');
+                              }
+                            }, 500);
+                          }
                         }
                       }
                     ]
@@ -564,18 +576,19 @@ useEffect(() => {
       </ScrollView>
       
       {/* Modal para crear cliente */}
-        <ClienteFormModal
-          visible={showClienteFormModal}
-          onClose={() => setShowClienteFormModal(false)}
-          onClienteCreated={handleClienteCreated}
-        />
+      <ClienteFormModal
+        visible={showClienteFormModal}
+        onClose={() => setShowClienteFormModal(false)}
+        onClienteCreated={handleClienteCreated}
+      />
+      
       {/* Modal para seleccionar productos */}
       {showProductModal && (
         <ProductPicker
-        visible={showProductModal}
-        onClose={() => setShowProductModal(false)}
+          visible={showProductModal}
+          onClose={() => setShowProductModal(false)}
           onSelectProduct={handleProductSelect}
-        presentaciones={presentacionesFiltradas}
+          presentaciones={presentacionesFiltradas}
           isLoading={isLoadingProductos}
         />
       )}
@@ -583,7 +596,7 @@ useEffect(() => {
   );
 }
 
-// Estilos mejorados y unificados para toda la pantalla
+// Los estilos se mantienen igual que en el archivo original
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -600,7 +613,6 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: 20,
   },
-  // Sección de datos secundarios
   secondarySection: {
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
     padding: 12,
@@ -631,14 +643,13 @@ const styles = StyleSheet.create({
   smallText: {
     fontSize: 14,
   },
-  // Estilos unificados para todos los controles de entrada
   uniformField: {
     borderWidth: 1,
     borderColor: '#E1E3E5',
     borderRadius: 8,
-    minHeight: 48,  // Cambiar de height fijo a minHeight
+    minHeight: 48,
     justifyContent: 'center',
-    overflow: 'visible',  // Cambiar de hidden a visible para iOS
+    overflow: 'visible',
     backgroundColor: '#FFFFFF',
   },
   uniformPicker: {
@@ -684,16 +695,14 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: '#FFFFFF',
   },
-  // Sección de cliente
   clienteSection: {
     marginBottom: 24,
-    backgroundColor: '#f0f8ff', // Fondo sutilmente destacado
+    backgroundColor: '#f0f8ff',
     padding: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e1e6f0',
   },
-  // Secciones principales
   section: {
     marginBottom: 24,
     gap: 12,
@@ -714,7 +723,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontWeight: '500',
   },
-  // Centro para botón de agregar
   centeredButtonContainer: {
     alignItems: 'center',
     marginBottom: 12,
@@ -839,7 +847,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontWeight: 'bold',
   },
-  // Estilos para buscador de clientes
   searchContainer: {
     position: 'relative',
     flexDirection: 'row',
@@ -895,7 +902,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#999999',
   },
-  // Estilos para buscador de clientes y selección
   selectedClienteContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -969,5 +975,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-
-});
+});              

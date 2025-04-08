@@ -380,13 +380,11 @@ export const ventaApi = {
       precio_unitario: string;  // Campo requerido
     }[];
   }): Promise<Venta> => {
-    console.log('Enviando datos a la API:', JSON.stringify(venta, null, 2));
     
     return fetchApi<Venta>('/ventas', {
       method: 'POST',
       body: JSON.stringify(venta),
     }).then(response => {
-      console.log('Respuesta recibida de la API:', response);
       return response;
     }).catch(error => {
       console.error('Error al crear venta en la API:', error);
@@ -442,8 +440,6 @@ export const inventarioApi = {
       stock_minimo: inventario.stock_minimo,
       ...(inventario.lote_id ? { lote_id: inventario.lote_id } : {})
     };
-    
-    console.log('Creating inventory with data:', JSON.stringify(cleanedData, null, 2));
     
     return fetchApi<any>('/inventarios', {
       method: 'POST',
