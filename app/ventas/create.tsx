@@ -1,46 +1,47 @@
-// app/ventas/create.tsx - Versión optimizada para reducir peticiones API
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput as RNTextInput, Alert, ActivityIndicator, Platform, Modal, Image, FlatList, TextInput } from 'react-native';
+// app/ventas/create.tsx - Versión mejorada con UI/UX optimizada
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
-import { ClienteFormModal } from '@/components/ClienteModal';
-import { Cliente } from '@/models';
+// Componentes
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { ClienteFormModal } from '@/components/ClienteModal';
+import { ProductPicker } from '@/components/ProductPicker';
+import { FormField } from '@/components/form/FormField';
+import { FormSelect } from '@/components/form/FormSelect';
+import DateField from '@/components/form/DateField';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { DetalleVentaRow } from '@/components/DetalleVentaRow';
+
+// Hooks y servicios
 import { useVentas } from '@/hooks/crud/useVentas';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
-import { ProductPicker } from '@/components/ProductPicker';
-import { DetalleVentaRow } from '@/components/DetalleVentaRow';
+import { formatCurrency } from '@/utils/formatters';
+import { Colors, ScreenStyles, FormStyles, SectionStyles } from '@/styles/Theme';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Cliente } from '@/models';
 
 export default function CreateVentaScreen() {
   const colorScheme = useColorScheme() || 'light';
   const isDark = colorScheme === 'dark';
-  const themeColors = Colors[colorScheme as 'light' | 'dark'];
   const { user } = useAuth();
+  const isAdmin = user?.rol === 'admin';
   
-  // Estados locales para controlar visibilidad y búsqueda
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Estados locales
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showClienteFormModal, setShowClienteFormModal] = useState(false);
   const [clienteSearch, setClienteSearch] = useState('');
   const [clientesFiltrados, setClientesFiltrados] = useState<any[]>([]);
-  const [showClientesDropdown, setShowClientesDropdown] = useState(false);
-  const [showClienteFormModal, setShowClienteFormModal] = useState(false);
+  const [showClienteSelector, setShowClienteSelector] = useState(false);
   
-  // Referencias para prevenir cargas duplicadas
-  const optionsLoaded = useRef(false);
-  const almacenIdRef = useRef<string | null>(null);
-  const isLoadingRef = useRef(false);
+  // Referencias
+  const optionsLoaded = React.useRef(false);
   
-  // Usar el hook de ventas
+  // Hook de ventas
   const {
     form,
-    validationRules,
     isLoading,
     isLoadingOptions,
     isLoadingProductos,
@@ -57,106 +58,53 @@ export default function CreateVentaScreen() {
     setClientes,
   } = useVentas();
   
-  // Manejar cuando se crea un nuevo cliente
-  const handleClienteCreated = useCallback((cliente: Cliente) => {
-    // Verificar si clientes y setClientes existen
-    if (!setClientes) {
-      // Fallback: actualizar solo clientesFiltrados y seleccionar el cliente
-      setClientesFiltrados(prev => [cliente, ...prev]);
-      form.handleChange('cliente_id', cliente.id.toString());
-      setClienteSearch(cliente.nombre);
-      setShowClientesDropdown(false);
-      return;
-    }
-    
-    // Actualizar la lista de clientes con el nuevo cliente al inicio
-    if (Array.isArray(clientes)) {
-      setClientes([cliente, ...clientes]);
-    } else {
-      setClientes([cliente]);
-    }
-    
-    // Seleccionar automáticamente el cliente recién creado
-    form.handleChange('cliente_id', cliente.id.toString());
-    setClienteSearch(cliente.nombre);
-    setShowClientesDropdown(false);
-  }, [clientes, form, setClientes]);
-
-  // Efecto para cargar datos iniciales (optimizado)
+  // Cargar datos iniciales
   useEffect(() => {
-    // Evitar cargas duplicadas usando una referencia
-    if (optionsLoaded.current || isLoadingRef.current) {
-      return;
-    }
-  
-    // Marcar como cargando para evitar llamadas duplicadas
-    isLoadingRef.current = true;
-    
-    // Cargar opciones y configurar almacén inicial
-    const initializeData = async () => {
-      try {
-        // Cargar opciones
-        const { almacenes } = await loadOptions();
-        
-        // Verificar si el usuario tiene un almacén asignado
-        if (user?.almacen_id) {
-          const userAlmacenIdStr = user.almacen_id.toString();
+    if (!optionsLoaded.current) {
+      const initializeData = async () => {
+        try {
+          // Cargar opciones
+          const { almacenes } = await loadOptions();
           
-          // Verificar si el almacén existe en la lista de almacenes
-          const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
-          
-          if (userAlmacen) {
-            // Actualizar el formulario directamente
+          // Preseleccionar almacén del usuario
+          if (user?.almacen_id) {
+            const userAlmacenIdStr = user.almacen_id.toString();
             form.handleChange('almacen_id', userAlmacenIdStr);
-            
-            // Cargar presentaciones para este almacén
             await handleAlmacenChange(userAlmacenIdStr);
           } else if (almacenes.length > 0) {
-            // Si no hay coincidencia, usar el primer almacén disponible
             const firstAlmacenId = almacenes[0].id.toString();
             form.handleChange('almacen_id', firstAlmacenId);
             await handleAlmacenChange(firstAlmacenId);
           }
-        } else if (almacenes.length > 0) {
-          // Si el usuario no tiene almacén, usar el primer almacén disponible
-          const firstAlmacenId = almacenes[0].id.toString();
-          form.handleChange('almacen_id', firstAlmacenId);
-          await handleAlmacenChange(firstAlmacenId);
+          
+          optionsLoaded.current = true;
+        } catch (error) {
+          console.error('Error al cargar datos iniciales:', error);
+          Alert.alert('Error', 'No se pudieron cargar los datos iniciales');
         }
-        
-        // Marcar como cargado
-        optionsLoaded.current = true;
-      } catch (error) {
-        console.error('Error al cargar datos iniciales:', error);
-        Alert.alert('Error', 'No se pudieron cargar los datos iniciales');
-      } finally {
-        isLoadingRef.current = false;
-      }
-    };
-  
-    initializeData();
+      };
+    
+      initializeData();
+    }
   }, [loadOptions, handleAlmacenChange, form, user]);
   
-  // Manejar cambio de almacén (interceptado para evitar cargas innecesarias)
-  const handleAlmacenChangeOptimized = useCallback((almacenId: string) => {
-    // Evitar llamadas duplicadas si es el mismo almacén
-    if (almacenIdRef.current === almacenId) {
-      return;
+  // Manejar la creación de un nuevo cliente
+  const handleClienteCreated = useCallback((cliente: Cliente) => {
+    if (setClientes) {
+      setClientes([cliente, ...clientes]);
     }
     
-    // Actualizar la referencia
-    almacenIdRef.current = almacenId;
-    
-    // Llamar al handleAlmacenChange original
-    handleAlmacenChange(almacenId);
-  }, [handleAlmacenChange]);
-  
-  // Filtrar clientes basado en el texto de búsqueda (memoizado)
+    form.handleChange('cliente_id', cliente.id.toString());
+    setClienteSearch(cliente.nombre);
+    setShowClienteSelector(false);
+  }, [clientes, form, setClientes]);
+
+  // Filtrar clientes
   const filtrarClientes = useCallback((texto: string) => {
     setClienteSearch(texto);
     if (!texto.trim()) {
       setClientesFiltrados([]);
-      setShowClientesDropdown(false);
+      setShowClienteSelector(false);
       return;
     }
     
@@ -165,24 +113,14 @@ export default function CreateVentaScreen() {
     );
     
     setClientesFiltrados(filtrados);
-    setShowClientesDropdown(true);
+    setShowClienteSelector(true);
   }, [clientes]);
 
-  // Seleccionar cliente desde los resultados de búsqueda
+  // Seleccionar cliente
   const seleccionarCliente = useCallback((cliente: any) => {
     form.handleChange('cliente_id', cliente.id.toString());
     setClienteSearch(cliente.nombre);
-    setShowClientesDropdown(false);
-  }, [form]);
-  
-  // Manejar el cambio de fecha
-  const handleDateChange = useCallback((event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      form.handleChange('fecha', formattedDate);
-    }
+    setShowClienteSelector(false);
   }, [form]);
   
   // Manejar la selección de producto
@@ -193,7 +131,6 @@ export default function CreateVentaScreen() {
   
   // Actualizar clienteSearch cuando cambia el cliente seleccionado
   useEffect(() => {
-    // Si el cliente está seleccionado pero no hay texto de búsqueda, actualizar el texto
     if (form.formData.cliente_id && !clienteSearch) {
       const clienteSeleccionado = clientes.find(c => c.id.toString() === form.formData.cliente_id);
       if (clienteSeleccionado) {
@@ -206,373 +143,290 @@ export default function CreateVentaScreen() {
   if (isLoadingOptions) {
     return (
       <>
-        <Stack.Screen options={{ 
-          title: 'Nueva Venta',
-          headerShown: true 
-        }} />
-        <ThemedView style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={themeColors?.tint} />
-          <ThemedText style={styles.loadingText}>Cargando datos...</ThemedText>
+        <Stack.Screen options={{ title: 'Nueva Venta', headerShown: true }} />
+        <ThemedView style={ScreenStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <ThemedText style={ScreenStyles.loadingText}>Cargando datos...</ThemedText>
         </ThemedView>
       </>
     );
   }
-  
-  // Fecha actual formateada para mostrar
-  const currentDate = form.formData.fecha 
-    ? new Date(form.formData.fecha).toLocaleDateString() 
-    : new Date().toLocaleDateString();
   
   // Calcular el total de la venta
   const total = calcularTotal();
   
   return (
     <>
-      <Stack.Screen options={{ 
-        title: 'Nueva Venta',
-        headerShown: true 
-      }} />
+      <Stack.Screen options={{ title: 'Nueva Venta', headerShown: true }} />
       
-      <ScrollView style={styles.container}>
-        <ThemedText type="title" style={styles.title}>Registrar Nueva Venta</ThemedText>
+      <ScrollView style={ScreenStyles.container}>
+        <ThemedText type="title" style={ScreenStyles.heading}>Registrar Nueva Venta</ThemedText>
         
-        {/* Sección de datos secundarios (compacta) */}
-        <ThemedView style={styles.secondarySection}>
-          <ThemedView style={styles.compactRow}>
-            {/* Fecha de Venta - Compacto */}
-            <ThemedView style={[styles.compactField, styles.dateField]}>
-              <ThemedText style={styles.smallLabel}>Fecha</ThemedText>
+        {/* Card principal */}
+        <ThemedView style={styles.formCard}>
+          {/* Sección de Cliente */}
+          <ThemedView style={styles.section}>
+            <ThemedView style={styles.sectionHeader}>
+              <ThemedText type="subtitle">Cliente</ThemedText>
               <TouchableOpacity
-                style={[
-                  styles.dateSelector,
-                  { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' },
-                  form.errors.fecha && styles.inputError
-                ]}
-                onPress={() => setShowDatePicker(true)}
-                disabled={isLoading}
+                style={styles.newClienteButton}
+                onPress={() => setShowClienteFormModal(true)}
               >
-                <ThemedText style={styles.smallText}>{currentDate}</ThemedText>
-                <IconSymbol name="calendar" size={16} color={isDark ? '#FFFFFF' : '#666666'} />
+                <IconSymbol name="plus.circle" size={16} color="#FFFFFF" />
+                <ThemedText style={styles.newClienteButtonText}>Nuevo Cliente</ThemedText>
               </TouchableOpacity>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={form.formData.fecha ? new Date(form.formData.fecha) : new Date()}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                />
-              )}
-            </ThemedView>
-            {/* Consumo Diario - Compacto */}
-            <ThemedView style={[styles.compactField]}>
-              <ThemedText style={styles.smallLabel}>Consumo/Dia (KG)</ThemedText>
-              <RNTextInput
-                style={[
-                  styles.uniformInput,
-                  { color: themeColors?.text },
-                  form.errors.consumo_diario_kg && styles.inputError
-                ]}
-                placeholder="Ej.: 25"
-                placeholderTextColor="#9BA1A6"
-                keyboardType="decimal-pad"
-                value={form.formData.consumo_diario_kg}
-                onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
-                editable={!isLoading}
-              />
-              {form.errors.consumo_diario_kg && (
-                <ThemedText style={styles.errorText}>{form.errors.consumo_diario_kg}</ThemedText>
-              )}
-            </ThemedView>
-          </ThemedView>
-          
-          <ThemedView style={styles.compactRow}>
-            {/* Almacén - Compacto y Preseleccionado */}
-            <ThemedView style={[styles.compactField, { flex: 1 }]}>
-              <ThemedText>Almacén</ThemedText>
-              <View style={[
-                styles.uniformField,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' },
-                form.errors.almacen_id && styles.inputError
-              ]}>
-                <Picker
-                  selectedValue={form.formData.almacen_id}
-                  onValueChange={handleAlmacenChangeOptimized}  // Usar la versión optimizada
-                  style={[styles.uniformPicker, { color: themeColors?.text }]}
-                  enabled={!isLoading && user?.rol === 'admin'} // Solo editable para administradores
-                  dropdownIconColor={isDark ? '#FFFFFF' : '#666666'}
-                >
-                  {Array.isArray(almacenes) && almacenes.length > 0 ? almacenes.map(almacen => (
-                    <Picker.Item 
-                      key={almacen.id} 
-                      label={almacen.nombre} 
-                      value={almacen.id.toString()} 
-                    />
-                  )) : (
-                    <Picker.Item label="Cargando almacenes..." value="" />
-                  )}
-                </Picker>
-              </View>
-              {form.errors.almacen_id && (
-                <ThemedText style={styles.errorText}>{form.errors.almacen_id}</ThemedText>
-              )}
             </ThemedView>
             
-            {/* Tipo de Pago - Compacto */}
-            <ThemedView style={[styles.tipoField]}>
-              <ThemedText>Tipo de Pago</ThemedText>
-              <View style={[
-                styles.uniformField,
-                { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }
-              ]}>
-                <Picker
-                  selectedValue={form.formData.tipo_pago}
-                  onValueChange={(value) => form.handleChange('tipo_pago', value)}
-                  style={[styles.uniformPicker, { color: themeColors?.text }]}
-                  enabled={!isLoading}
-                  dropdownIconColor={isDark ? '#FFFFFF' : '#666666'}
-                >
-                  <Picker.Item label="Contado" value="contado" />
-                  <Picker.Item label="Crédito" value="credito" />
-                </Picker>
-              </View>
-            </ThemedView>
-            
-          </ThemedView>
-        </ThemedView>
-        {/* Sección de cliente con buscador */}
-        <ThemedView style={styles.clienteSection}>
-          <ThemedView style={styles.clienteSectionHeader}>
-            <ThemedText type="subtitle" style={styles.primaryLabel}>
-              Cliente
-            </ThemedText>
-            <TouchableOpacity
-              style={styles.newClienteButton}
-              onPress={() => setShowClienteFormModal(true)}
-            >
-              <IconSymbol name="plus.circle" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.newClienteButtonText}>Nuevo Cliente</ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-          
-          {form.formData.cliente_id && clienteSearch ? (
-            <View style={styles.selectedClienteContainer}>
-              <View style={styles.selectedClienteInfo}>
-                <ThemedText style={styles.selectedClienteNombre}>
-                  {clienteSearch}
-                </ThemedText>
-                <ThemedText style={styles.selectedClienteId}>
-                  ID: {form.formData.cliente_id}
-                </ThemedText>
-              </View>
-              <TouchableOpacity 
-                style={styles.changeClienteButton}
-                onPress={() => {
-                  setShowClientesDropdown(true);
-                }}
-              >
-                <ThemedText style={styles.changeClienteText}>Cambiar</ThemedText>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={[
-                  styles.searchInput,
-                  { color: isDark ? '#FFFFFF' : '#000000' },
-                  form.errors.cliente_id && styles.inputError
-                ]}
-                placeholder="Buscar cliente por nombre..."
-                placeholderTextColor="#9BA1A6"
-                value={clienteSearch}
-                onChangeText={filtrarClientes}
-                onFocus={() => {
-                  if (clienteSearch.length > 0) {
-                    filtrarClientes(clienteSearch);
-                  }
-                }}
-                editable={!isLoading}
-              />
-              {clienteSearch.length > 0 && (
+            {form.formData.cliente_id ? (
+              <View style={styles.selectedClienteContainer}>
+                <View style={styles.selectedClienteInfo}>
+                  <ThemedText style={styles.selectedClienteNombre}>
+                    {clienteSearch}
+                  </ThemedText>
+                  <ThemedText style={styles.selectedClienteId}>
+                    ID: {form.formData.cliente_id}
+                  </ThemedText>
+                </View>
                 <TouchableOpacity 
-                  style={styles.clearButton} 
+                  style={styles.changeClienteButton}
                   onPress={() => {
-                    setClienteSearch('');
                     form.handleChange('cliente_id', '');
-                    setShowClientesDropdown(false);
+                    setClienteSearch('');
                   }}
                 >
-                  <IconSymbol name="xmark.circle.fill" size={20} color="#9BA1A6" />
+                  <ThemedText style={styles.changeClienteText}>Cambiar</ThemedText>
                 </TouchableOpacity>
-              )}
-            </View>
-          )}
-          
-          {showClientesDropdown && clientesFiltrados.length > 0 && (
-            <View style={[
-              styles.dropdownContainer, 
-              { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
-            ]}>
-              <ScrollView style={styles.clientesList} nestedScrollEnabled={true}>
-                {clientesFiltrados.map(cliente => (
-                  <TouchableOpacity
-                    key={cliente.id}
-                    style={[
-                      styles.clienteItem,
-                      { backgroundColor: form.formData.cliente_id === cliente.id.toString() ? '#e6f7ff' : 'transparent' }
-                    ]}
-                    onPress={() => seleccionarCliente(cliente)}
-                  >
-                    <ThemedText style={styles.clienteNombre}>{cliente.nombre}</ThemedText>
-                    {cliente.telefono && (
-                      <ThemedText style={styles.clienteInfo}>{cliente.telefono}</ThemedText>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-          
-          {showClientesDropdown && clientesFiltrados.length === 0 && clienteSearch.length > 0 && (
-            <View style={[
-              styles.dropdownContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
-            ]}>
-              <ThemedView style={styles.noResultsContainer}>
-                <ThemedText style={styles.emptyResults}>
-                  No se encontraron clientes con "{clienteSearch}"
-                </ThemedText>
-                <TouchableOpacity
-                  style={styles.createFromSearchButton}
-                  onPress={() => {
-                    setShowClientesDropdown(false);
-                    setShowClienteFormModal(true);
-                  }}
-                >
-                  <IconSymbol name="plus.circle" size={14} color="#FFFFFF" />
-                  <ThemedText style={styles.createFromSearchText}>Crear nuevo cliente</ThemedText>
-                </TouchableOpacity>
+              </View>
+            ) : (
+              <ThemedView style={styles.clienteSearchContainer}>
+                <FormField
+                  label="Buscar Cliente *"
+                  value={clienteSearch}
+                  onChangeText={filtrarClientes}
+                  placeholder="Ingrese nombre del cliente"
+                  error={form.errors.cliente_id}
+                  required
+                />
+                
+                {showClienteSelector && clientesFiltrados.length > 0 && (
+                  <View style={[
+                    styles.dropdownContainer, 
+                    { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
+                  ]}>
+                    <ScrollView style={styles.clientesList} nestedScrollEnabled={true}>
+                      {clientesFiltrados.map(cliente => (
+                        <TouchableOpacity
+                          key={cliente.id}
+                          style={[
+                            styles.clienteItem,
+                            { backgroundColor: form.formData.cliente_id === cliente.id.toString() ? '#e6f7ff' : 'transparent' }
+                          ]}
+                          onPress={() => seleccionarCliente(cliente)}
+                        >
+                          <ThemedText style={styles.clienteNombre}>{cliente.nombre}</ThemedText>
+                          {cliente.telefono && (
+                            <ThemedText style={styles.clienteInfo}>{cliente.telefono}</ThemedText>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+                
+                {showClienteSelector && clientesFiltrados.length === 0 && clienteSearch.length > 0 && (
+                  <View style={[
+                    styles.dropdownContainer,
+                    { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF' }
+                  ]}>
+                    <ThemedView style={styles.noResultsContainer}>
+                      <ThemedText style={styles.emptyResults}>
+                        No se encontraron clientes con "{clienteSearch}"
+                      </ThemedText>
+                      <TouchableOpacity
+                        style={styles.createFromSearchButton}
+                        onPress={() => {
+                          setShowClienteSelector(false);
+                          setShowClienteFormModal(true);
+                        }}
+                      >
+                        <IconSymbol name="plus.circle" size={14} color="#FFFFFF" />
+                        <ThemedText style={styles.createFromSearchText}>Crear nuevo cliente</ThemedText>
+                      </TouchableOpacity>
+                    </ThemedView>
+                  </View>
+                )}
               </ThemedView>
-            </View>
-          )}
-          
-          {form.errors.cliente_id && (
-            <ThemedText style={styles.errorText}>{form.errors.cliente_id}</ThemedText>
-          )}
-        </ThemedView>
-
-        {/* Sección de productos (destacada) */}
-        <ThemedView style={styles.section}>
-          <ThemedView style={styles.sectionHeaderRow}>
-            <ThemedText type="subtitle" style={styles.primaryLabel}>Productos</ThemedText>
+            )}
           </ThemedView>
           
-          {/* Botón Agregar centrado */}
-          <ThemedView style={styles.centeredButtonContainer}>
-            <TouchableOpacity 
-              style={[
-                styles.addButton,
-                (!form.formData.almacen_id || isLoading) && styles.disabledButton
-              ]}
-              onPress={() => {
-                if (!form.formData.almacen_id) {
-                  Alert.alert('Error', 'Selecciona un almacén antes de agregar productos');
-                  return;
-                }
-                
-                // Verificar si hay presentaciones filtradas
-                if (presentacionesFiltradas.length === 0) {
-                  Alert.alert(
-                    'Sin productos disponibles', 
-                    'No hay productos disponibles en este almacén. ¿Desea intentar cargar productos nuevamente?',
-                    [
-                      {
-                        text: "Cancelar",
-                        style: "cancel"
-                      },
-                      {
-                        text: "Reintentar",
-                        onPress: () => {
-                          if (form.formData.almacen_id) {
-                            handleAlmacenChange(form.formData.almacen_id);
-                            setTimeout(() => {
-                              if (presentacionesFiltradas.length > 0) {
-                                setShowProductModal(true);
-                              } else {
-                                Alert.alert('Sin productos', 'No se encontraron productos para este almacén');
-                              }
-                            }, 500);
+          {/* Configuración de Venta */}
+          <ThemedView style={styles.section}>
+            <ThemedText type="subtitle">Detalles</ThemedText>
+            
+            <ThemedView style={FormStyles.rowContainer}>
+              {/* Almacén */}
+              <ThemedView style={FormStyles.halfWidth}>
+                <FormSelect
+                  label="Almacén"
+                  value={form.formData.almacen_id}
+                  options={almacenes.map(a => ({ label: a.nombre, value: a.id.toString() }))}
+                  onChange={handleAlmacenChange}
+                  error={form.errors.almacen_id}
+                  disabled={!isAdmin}
+                  required
+                  helperText={!isAdmin ? "Asignado a tu usuario" : undefined}
+                />
+              </ThemedView>
+              
+              {/* Tipo de Pago */}
+              <ThemedView style={FormStyles.halfWidth}>
+                <FormSelect
+                  label="Tipo de Pago"
+                  value={form.formData.tipo_pago}
+                  options={[
+                    { label: "Contado", value: "contado" },
+                    { label: "Crédito", value: "credito" }
+                  ]}
+                  onChange={(value) => form.handleChange('tipo_pago', value)}
+                  required
+                />
+              </ThemedView>
+            </ThemedView>
+            
+            <ThemedView style={FormStyles.rowContainer}>
+              {/* Fecha */}
+              <ThemedView style={FormStyles.halfWidth}>
+                <DateField
+                  label="Fecha"
+                  value={form.formData.fecha}
+                  onChange={(value) => form.handleChange('fecha', value)}
+                  error={form.errors.fecha}
+                  required
+                />
+              </ThemedView>
+              
+              {/* Consumo Diario */}
+              <ThemedView style={FormStyles.halfWidth}>
+                <FormField
+                  label="Consumo Diario (kg)"
+                  value={form.formData.consumo_diario_kg}
+                  onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
+                  placeholder="Ej.: 25"
+                  keyboardType="numeric"
+                  error={form.errors.consumo_diario_kg}
+                />
+              </ThemedView>
+            </ThemedView>
+          </ThemedView>
+          
+          {/* Productos */}
+          <ThemedView style={styles.section}>
+            <ThemedView style={styles.sectionHeader}>
+              <ThemedText type="subtitle">Productos</ThemedText>
+              <TouchableOpacity 
+                style={[
+                  styles.addProductButton,
+                  (!form.formData.almacen_id || isLoading) && styles.disabledButton
+                ]}
+                onPress={() => {
+                  if (!form.formData.almacen_id) {
+                    Alert.alert('Error', 'Selecciona un almacén antes de agregar productos');
+                    return;
+                  }
+                  
+                  if (presentacionesFiltradas.length === 0) {
+                    Alert.alert(
+                      'Sin productos disponibles', 
+                      'No hay productos disponibles en este almacén. ¿Desea intentar cargar productos nuevamente?',
+                      [
+                        { text: "Cancelar", style: "cancel" },
+                        {
+                          text: "Reintentar",
+                          onPress: () => {
+                            if (form.formData.almacen_id) {
+                              handleAlmacenChange(form.formData.almacen_id);
+                              setTimeout(() => {
+                                if (presentacionesFiltradas.length > 0) {
+                                  setShowProductModal(true);
+                                } else {
+                                  Alert.alert('Sin productos', 'No se encontraron productos para este almacén');
+                                }
+                              }, 500);
+                            }
                           }
                         }
-                      }
-                    ]
-                  );
-                  return;
-                }
+                      ]
+                    );
+                    return;
+                  }
+                  
+                  setShowProductModal(true);
+                }}
+                disabled={isLoading || !form.formData.almacen_id}
+              >
+                <IconSymbol name="plus" size={18} color="#FFFFFF" />
+                <ThemedText style={styles.addProductButtonText}>Agregar Producto</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+            
+            {isLoadingProductos ? (
+              <ThemedView style={styles.loadingProducts}>
+                <ActivityIndicator size="small" color={Colors.primary} />
+                <ThemedText>Cargando productos disponibles...</ThemedText>
+              </ThemedView>
+            ) : (
+              <>
+                {form.formData.detalles.length === 0 ? (
+                  <ThemedView style={styles.emptyProducts}>
+                    <IconSymbol name="cart" size={40} color="#9BA1A6" />
+                    <ThemedText style={styles.emptyText}>
+                      No hay productos agregados
+                    </ThemedText>
+                    <ThemedText style={styles.emptySubtext}>
+                      Agrega productos usando el botón "Agregar Producto"
+                    </ThemedText>
+                  </ThemedView>
+                ) : (
+                  <ThemedView style={styles.productsList}>
+                    {form.formData.detalles.map((detalle, index) => (
+                      <DetalleVentaRow
+                        key={`${detalle.presentacion_id}_${index}`}
+                        detalle={detalle}
+                        index={index}
+                        presentaciones={presentacionesFiltradas}
+                        onUpdate={actualizarProducto}
+                        onDelete={eliminarProducto}
+                        disabled={isLoading}
+                      />
+                    ))}
+                  </ThemedView>
+                )}
                 
-                setShowProductModal(true);
-              }}
-              disabled={isLoading || !form.formData.almacen_id}
-            >
-              <IconSymbol name="plus.circle" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.addButtonText}>Agregar Productos</ThemedText>
-            </TouchableOpacity>
+                {form.errors.detalles && (
+                  <ThemedText style={FormStyles.errorText}>{form.errors.detalles}</ThemedText>
+                )}
+              </>
+            )}
           </ThemedView>
           
-          {/* Lista de productos agregados */}
-          {form.formData.detalles.length === 0 ? (
-            <ThemedView style={styles.emptyProducts}>
-              <IconSymbol name="cart" size={40} color="#9BA1A6" />
-              <ThemedText style={styles.emptyText}>
-                No hay productos agregados
-              </ThemedText>
-              <ThemedText style={styles.emptySubtext}>
-                Agrega productos usando el botón "Agregar Productos"
-              </ThemedText>
+          {/* Resumen y Total */}
+          <ThemedView style={styles.totalSection}>
+            <ThemedText type="subtitle">Resumen</ThemedText>
+            <ThemedView style={styles.totalRow}>
+              <ThemedText style={styles.totalLabel}>Total:</ThemedText>
+              <ThemedText style={styles.totalValue}>{formatCurrency(total)}</ThemedText>
             </ThemedView>
-          ) : (
-            <ThemedView style={styles.productsList}>
-              {form.formData.detalles.map((detalle, index) => (
-                <DetalleVentaRow
-                  key={`${detalle.presentacion_id}_${index}`}
-                  detalle={detalle}
-                  index={index}
-                  presentaciones={presentacionesFiltradas}
-                  onUpdate={actualizarProducto}
-                  onDelete={eliminarProducto}
-                  disabled={isLoading}
-                />
-              ))}
-              
-              <ThemedView style={styles.totalRow}>
-                <ThemedText style={styles.totalLabel}>Total:</ThemedText>
-                <ThemedText style={styles.totalValue}>{formatCurrency(total)}</ThemedText>
-              </ThemedView>
-            </ThemedView>
-          )}
+          </ThemedView>
           
-          {form.errors.detalles && (
-            <ThemedText style={styles.errorText}>{form.errors.detalles}</ThemedText>
-          )}
+          {/* Botones de acción */}
+          <ActionButtons
+            onSave={() => createVenta()}
+            onCancel={() => router.back()}
+            isSubmitting={isLoading}
+            saveDisabled={form.formData.detalles.length === 0}
+            saveText="Crear Venta"
+          />
         </ThemedView>
-        
-        {/* Botón para crear venta */}
-        <TouchableOpacity
-          style={[
-            styles.submitButton, 
-            isLoading && styles.submitButtonDisabled
-          ]}
-          onPress={() => createVenta()}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <IconSymbol name="checkmark.circle" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.submitButtonText}>Crear Venta</ThemedText>
-            </>
-          )}
-        </TouchableOpacity>
       </ScrollView>
       
       {/* Modal para crear cliente */}
@@ -596,178 +450,169 @@ export default function CreateVentaScreen() {
   );
 }
 
-// Los estilos se mantienen igual que en el archivo original
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-  },
-  title: {
+  formCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
     marginBottom: 20,
-  },
-  secondarySection: {
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 24,
-  },
-  compactRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  compactField: {
-    marginBottom: 8,
-    flex: 1,
-  },
-  dateField: {
-    flex: 1,
-  },
-  tipoField: {
-    flex: 1,
-  },
-  smallLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-    fontWeight: '500',
-    color: '#666666',
-  },
-  smallText: {
-    fontSize: 14,
-  },
-  uniformField: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    minHeight: 48,
-    justifyContent: 'center',
-    overflow: 'visible',
-    backgroundColor: '#FFFFFF',
-  },
-  uniformPicker: {
-    marginTop: Platform.OS === 'ios' ? 0 : -6,
-    marginBottom: Platform.OS === 'ios' ? 0 : -6,
-  },
-  uniformInput: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
-    height: 40,
-  },
-  smallPickerContainer: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-  },
-  smallPicker: {
-    height: 40,
-    fontSize: 14,
-  },
-  smallInput: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 14,
-  },
-  dateSelector: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    height: 40,
-    backgroundColor: '#FFFFFF',
-  },
-  clienteSection: {
-    marginBottom: 24,
-    backgroundColor: '#f0f8ff',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e1e6f0',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   section: {
     marginBottom: 24,
-    gap: 12,
   },
-  sectionHeaderRow: {
+  sectionHeader: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.lightGray2,
   },
-  primaryLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0a7ea4',
+  clienteSearchContainer: {
+    position: 'relative',
   },
-  label: {
-    fontSize: 16,
-    marginBottom: 6,
-    fontWeight: '500',
-  },
-  centeredButtonContainer: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  pickerContainer: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
-  },
-  picker: {
-    height: 40,
-    fontSize: 14,
-  },
-  input: {
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
+  dropdownContainer: {
     marginTop: 4,
+    borderWidth: 1,
+    borderColor: Colors.lightGray2,
+    borderRadius: 8,
+    maxHeight: 200,
+    zIndex: 1000,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
-  addButton: {
-    flexDirection: 'row',
-    backgroundColor: '#0a7ea4',
+  clientesList: {
+    padding: 8,
+    maxHeight: 150,
+  },
+  clienteItem: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.lightGray2,
+  },
+  clienteNombre: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  clienteInfo: {
+    fontSize: 12,
+    color: '#666666',
+    marginTop: 4,
+  },
+  emptyResults: {
+    textAlign: 'center',
+    color: '#999999',
+    paddingVertical: 8,
+  },
+  noResultsContainer: {
+    padding: 12,
     alignItems: 'center',
   },
-  addButtonText: {
+  createFromSearchButton: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 6,
+  },
+  createFromSearchText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    marginLeft: 6,
+    fontSize: 13,
     fontWeight: '500',
+  },
+  selectedClienteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: Colors.primary + '30', // 30% opacity
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.primary + '08', // 8% opacity
+  },
+  selectedClienteInfo: {
+    flex: 1,
+  },
+  selectedClienteNombre: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  selectedClienteId: {
+    fontSize: 13,
+    color: '#777777',
+    marginTop: 2,
+  },
+  changeClienteButton: {
+    backgroundColor: Colors.danger,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  changeClienteText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  newClienteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 4,
+  },
+  newClienteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  addProductButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    gap: 6,
+  },
+  addProductButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  productsList: {
+    gap: 12,
   },
   emptyProducts: {
     alignItems: 'center',
@@ -778,6 +623,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E1E3E5',
     borderStyle: 'dashed',
+    marginTop: 10,
+  },
+  loadingProducts: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    borderRadius: 8,
+    marginTop: 10,
   },
   emptyText: {
     fontSize: 16,
@@ -790,17 +645,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  productsList: {
-    marginTop: 8,
+  totalSection: {
+    backgroundColor: Colors.lightGray1,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 24,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f0f8ff',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 16,
+    marginTop: 10,
   },
   totalLabel: {
     fontSize: 18,
@@ -809,170 +664,6 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#0a7ea4',
+    color: Colors.primary,
   },
-  submitButton: {
-    flexDirection: 'row',
-    backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  submitButtonDisabled: {
-    backgroundColor: '#A5D6A7',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  noImage: {
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  almacenInfo: {
-    marginBottom: 10,
-    fontWeight: 'bold',
-  },
-  searchContainer: {
-    position: 'relative',
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-  },
-  clearButton: {
-    position: 'absolute',
-    right: 10,
-    padding: 5,
-  },
-  dropdownContainer: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    maxHeight: 200,
-    zIndex: 1000,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  clientesList: {
-    padding: 8,
-  },
-  clienteItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
-  },
-  clienteNombre: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  clienteInfo: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: 4,
-  },
-  emptyResults: {
-    padding: 16,
-    textAlign: 'center',
-    color: '#999999',
-  },
-  selectedClienteContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#f0f8ff',
-  },
-  selectedClienteInfo: {
-    flex: 1,
-  },
-  selectedClienteNombre: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  selectedClienteId: {
-    fontSize: 12,
-    color: '#777777',
-    marginTop: 2,
-  },
-  changeClienteButton: {
-    backgroundColor: '#0a7ea4',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  changeClienteText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  clienteSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  newClienteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#4CAF50',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    gap: 4,
-  },
-  newClienteButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  noResultsContainer: {
-    padding: 12,
-    alignItems: 'center',
-  },
-  createFromSearchButton: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#4CAF50',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    gap: 6,
-  },
-  createFromSearchText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-});              
+});

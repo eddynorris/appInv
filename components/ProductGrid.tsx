@@ -81,7 +81,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({
           onCantidadChange={(value) => onUpdate(index, 'cantidad', value)}
           onPrecioChange={(value) => onUpdate(index, getPrecioField(index), value)}
           onRemove={() => onRemove(index)}
-          precioLabel={isPedido ? 'Precio Est.:' : 'Precio:'}
+          precioLabel={isPedido ? 'Precio:' : 'Precio:'}
           readOnly={readOnly}
         />
       );

@@ -49,12 +49,6 @@ export default function PedidosScreen() {
   // Definir columnas para la tabla directamente en el componente
   const columns = useMemo(() => [
     {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-      sortable: true,
-    },
-    {
       id: 'fecha_entrega',
       label: 'Fecha Entrega',
       width: 1,
