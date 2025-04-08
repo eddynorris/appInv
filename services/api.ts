@@ -347,8 +347,21 @@ export const gastoApi = {
 
 // API methods for Venta
 export const ventaApi = {
-  getVentas: async (page = 1, perPage = 10): Promise<ApiResponse<Venta>> => {
-    return fetchApi<ApiResponse<Venta>>(`/ventas?page=${page}&per_page=${perPage}`);
+  getVentas: async (page = 1, perPage = 10, queryParams = ''): Promise<ApiResponse<Venta>> => {
+    let url = `/ventas?page=${page}&per_page=${perPage}`;
+    
+    // Si hay queryParams, agregarlos a la URL
+    if (queryParams && queryParams.length > 0) {
+      // Si queryParams ya incluye page y per_page, usamos la cadena directamente
+      if (queryParams.includes('page=') && queryParams.includes('per_page=')) {
+        url = `/ventas?${queryParams}`;
+      } else {
+        // Si no los incluye, los agregamos manteniendo los demás parámetros
+        url = `/ventas?${queryParams}&page=${page}&per_page=${perPage}`;
+      }
+    }
+    
+    return fetchApi<ApiResponse<Venta>>(url);
   },
   
   getVenta: async (id: number): Promise<Venta> => {
@@ -714,6 +727,9 @@ export const pagoApi = {
 
 
 // Servicio API de pedidos actualizado
+// services/api.ts - Actualización para el método getPedidos en pedidoApi
+
+// Servicio API de pedidos actualizado
 export const pedidoApi = {
   getPedidos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Pedido>> => {
     // Construir query string con los filtros
@@ -724,14 +740,18 @@ export const pedidoApi = {
     
     // Añadir filtros si existen
     Object.entries(filters).forEach(([key, value]) => {
-      if (value) {
+      if (value !== undefined && value !== null && value !== '') {
         queryParams.append(key, value.toString());
       }
     });
     
-    return fetchApi<ApiResponse<Pedido>>(`/pedidos?${queryParams.toString()}`);
+    const queryString = queryParams.toString();
+    console.log(`Consultando pedidos con parámetros: ${queryString}`);
+    
+    return fetchApi<ApiResponse<Pedido>>(`/pedidos?${queryString}`);
   },
   
+  // Resto de métodos del servicio pedidoApi...
   getPedido: async (id: number): Promise<Pedido> => {
     return fetchApi<Pedido>(`/pedidos/${id}`);
   },

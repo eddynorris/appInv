@@ -48,7 +48,6 @@ const initialFormData: VentaForm = {
 
 // Hook principal para gestión de ventas
 export const useVentas = () => {
-  // Auth
   const { user } = useAuth();
   
   // Estados principales (reducidos y agrupados semánticamente)
@@ -131,6 +130,13 @@ export const useVentas = () => {
       render: (item: Venta) => <ThemedText>{item.cliente?.nombre || 'Sin cliente'}</ThemedText>,
     },
     {
+      id: 'vendedor',
+      label: 'Vendedor',
+      width: 1.5,
+      sortable: true,
+      render: (item: Venta) => <ThemedText>{item.vendedor?.username || 'No asignado'}</ThemedText>,
+    },
+    {
       id: 'tipo_pago',
       label: 'Tipo',
       width: 1,
@@ -179,36 +185,28 @@ export const useVentas = () => {
   // Cargar opciones (clientes, almacenes) - Optimizado
   const loadOptions = useCallback(async () => {
     try {
-      console.log('Iniciando carga de opciones...');
       setIsLoadingOptions(true);
-      
       // Cargar primero los almacenes y verificar la respuesta
       const almacenesRes = await almacenApi.getAlmacenes();
-      console.log('Respuesta de almacenes:', almacenesRes);
       
       // Verificar si la respuesta tiene la estructura esperada
       if (!almacenesRes || !Array.isArray(almacenesRes.data)) {
-        console.error('Respuesta de almacenes inválida:', almacenesRes);
         // Establecer un array vacío como fallback
         setAlmacenes([]);
       } else {
         const almacenesData = almacenesRes.data;
-        console.log(`Almacenes cargados: ${almacenesData.length}`, almacenesData);
         setAlmacenes(almacenesData);
       }
       
       // Cargar clientes después
       const clientesRes = await clienteApi.getClientes(1, 100);
-      console.log('Respuesta de clientes:', clientesRes);
       
       // Verificar si la respuesta tiene la estructura esperada
       if (!clientesRes || !Array.isArray(clientesRes.data)) {
-        console.error('Respuesta de clientes inválida:', clientesRes);
         // Establecer un array vacío como fallback
         setClientes([]);
       } else {
         const clientesData = clientesRes.data;
-        console.log(`Clientes cargados: ${clientesData.length}`);
         setClientes(clientesData);
       }
       
@@ -240,19 +238,16 @@ export const useVentas = () => {
     
     // Evitar llamadas duplicadas
     if (isLoadingPresentaciones) {
-      console.log(`Ya se están cargando productos para almacén ${almacenId}`);
       return productsByAlmacen[almacenId] || [];
     }
     
     // Usar caché si existe
     if (productsByAlmacen[almacenId]?.length > 0) {
-      console.log(`Usando productos en caché para almacén ${almacenId}`);
       return productsByAlmacen[almacenId];
     }
     
     try {
       setIsLoadingPresentaciones(true);
-      console.log(`Cargando productos para almacén ${almacenId}...`);
       
       const response = await inventarioApi.getInventarios(1, 100, almacenId);
       const productos = response?.data || [];
@@ -265,7 +260,6 @@ export const useVentas = () => {
       
       return productos;
     } catch (error) {
-      console.error(`Error al cargar productos para almacén ${almacenId}:`, error);
       return [];
     } finally {
       setIsLoadingPresentaciones(false);
@@ -291,8 +285,18 @@ export const useVentas = () => {
       if (filters.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
       if (filters.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
       
+      // Verificar el rol de usuario y filtrar por vendedor_id si no es admin
+      if (user && user.rol !== 'admin' && user.id) {
+        console.log(`Usuario no es admin, filtrando ventas por vendedor_id: ${user.id}`);
+        params.append('vendedor_id', user.id.toString());
+      }
+      
+      // Construir URL con parámetros
+      const queryString = params.toString();
+      const url = queryString ? `/ventas?${queryString}&page=${page}&per_page=${perPage}` : `/ventas?page=${page}&per_page=${perPage}`;
+      
       // Llamar API
-      const response = await ventaApi.getVentas(page, perPage);
+      const response = await ventaApi.getVentas(page, perPage, queryString);
       
       // Procesar respuesta
       if (response?.data && response?.pagination) {
@@ -318,11 +322,10 @@ export const useVentas = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [pagination.page, pagination.perPage, filters, ventas.length, isLoading]);
+  }, [pagination.page, pagination.perPage, filters, ventas.length, isLoading, user]);
 
   // Manejar cambio de página - Corregido para evitar recargas automáticas
   const handlePageChange = useCallback((page: number) => {
-    console.log(`Cambiando a página ${page} desde handlePageChange`);
     // Actualizar estado de paginación solo si es necesario
     if (page !== pagination.page) {
       setPagination(prev => ({ ...prev, page }));
@@ -332,7 +335,6 @@ export const useVentas = () => {
 
   // Manejar cambio de elementos por página
   const handlePerPageChange = useCallback((perPage: number) => {
-    console.log(`Cambiando a ${perPage} elementos por página`);
     setPagination(prev => ({ ...prev, perPage, page: 1 }));
     loadVentas(1, perPage);
   }, [loadVentas]);
@@ -392,13 +394,11 @@ export const useVentas = () => {
 const loadVentaForEdit = useCallback(async (id: number) => {
   // Evitar cargar si ya está cargando
   if (isLoading) {
-    console.log('Ya hay una carga en progreso, evitando doble carga');
     return null;
   }
   
   // Evitar cargar si ya tenemos la venta cargada con el mismo ID
   if (ventaIdRef.current === id && venta !== null) {
-    console.log(`Venta ${id} ya está cargada, evitando recarga innecesaria`);
     return venta;
   }
   
@@ -406,7 +406,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
     setIsLoading(true);
     ventaIdRef.current = id;
     
-    console.log(`Cargando venta ${id} para edición...`);
     
     // Cargar venta
     const ventaData = await ventaApi.getVenta(id);
@@ -415,7 +414,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
       return null;
     }
     
-    console.log('Venta cargada correctamente:', ventaData.id);
     setVenta(ventaData);
     
     // Formatear fecha
@@ -468,7 +466,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
         }))
       };
       
-      console.log('Creando venta:', ventaData);
       const response = await ventaApi.createVenta(ventaData);
       
       if (response && response.id) {
@@ -512,7 +509,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
 
       };
       
-      console.log(`Actualizando venta ${ventaIdRef.current}:`, ventaData);
       const response = await ventaApi.updateVenta(ventaIdRef.current, ventaData);
       
       if (response) {
@@ -527,7 +523,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
         return false;
       }
     } catch (error) {
-      console.error('Error al actualizar venta:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Error al actualizar venta');
       return false;
     } finally {
@@ -578,17 +573,13 @@ const loadVentaForEdit = useCallback(async (id: number) => {
   const handleAlmacenChange = useCallback(async (almacenId: string) => {
     // Validación básica
     if (!almacenId) {
-      console.log('ID de almacén inválido');
       return;
     }
 
     // Si el almacén no cambió y no es una llamada forzada, no hacer nada
     if (form.formData.almacen_id === almacenId) {
-      console.log(`Almacén ${almacenId} ya seleccionado, evitando recarga innecesaria`);
       return;
     }
-    
-    console.log(`Cambiando almacén a: ${almacenId}`);
     
     // Verificar si hay productos ya agregados antes de cambiar el almacén
     if (form.formData.detalles.length > 0) {
@@ -620,7 +611,6 @@ const loadVentaForEdit = useCallback(async (id: number) => {
                 // Llamar solo a originalFiltrarPorAlmacenId que maneja el estado global
                 await originalFiltrarPorAlmacenId(almacenId);
                 
-                console.log(`Presentaciones cargadas para almacén ${almacenId}`);
               } catch (error) {
                 console.error(`Error al cargar presentaciones para almacén ${almacenId}:`, error);
                 Alert.alert("Error", "No se pudieron cargar los productos para este almacén");

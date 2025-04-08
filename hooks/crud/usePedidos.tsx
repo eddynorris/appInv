@@ -100,14 +100,23 @@ export const usePedidos = () => {
   useEffect(() => {
     loadOptions();
   }, [loadOptions]);
-  
+
   // Cargar listado de pedidos
   const loadPedidos = useCallback(async (page = pagination.page, perPage = pagination.perPage) => {
     try {
       setIsLoading(true);
       setError(null);
       
-      const response = await pedidoApi.getPedidos(page, perPage);
+      // Preparar filtros
+      const filters: Record<string, any> = {};
+      
+      // Verificar el rol de usuario y filtrar por vendedor_id si no es admin
+      if (user && user.rol !== 'admin' && user.id) {
+        console.log(`Usuario no es admin, filtrando pedidos por vendedor_id: ${user.id}`);
+        filters.vendedor_id = user.id;
+      }
+      
+      const response = await pedidoApi.getPedidos(page, perPage, filters);
       
       if (response) {
         setPedidos(response.data || []);
@@ -126,7 +135,7 @@ export const usePedidos = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [pagination.page, pagination.perPage]);
+  }, [pagination.page, pagination.perPage, user]);
   
   // Manejar cambio de página
   const handlePageChange = useCallback((newPage: number) => {

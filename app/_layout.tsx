@@ -23,20 +23,19 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
-
+    
     const inAuthGroup = segments[0] === '(auth)';
-
-    if (!user && !inAuthGroup) {
-      // If not authenticated and not on an auth screen, redirect to login
+    
+    if (!user) {
       router.replace('/login');
     } else if (user && inAuthGroup) {
-      // If authenticated and on an auth screen, redirect to home
-      router.replace('/');
+      // Role-based redirection
+      const targetRoute = user.rol === 'admin' ? '/' : '/';
+      router.replace(targetRoute);
     }
   }, [user, segments, isLoading, router]);
 
-  if (isLoading) {
-    // You could show a loading indicator here
+  if (isLoading || !user) {
     return <Slot />;
   }
 

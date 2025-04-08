@@ -57,7 +57,7 @@ export default function LoginScreen() {
 
     try {
       await login(username, password);
-      router.replace('/'); // Redirigir al dashboard después del login
+      // Remove the existing redirect and let the AuthGuard handle it
     } catch (err) {
       Alert.alert(
         'Error de inicio de sesión',

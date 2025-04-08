@@ -1,4 +1,4 @@
-// app/pedidos/[id].tsx (actualizado)
+// app/pedidos/[id].tsx - Actualizado para implementar restricciones basadas en rol
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, ActivityIndicator, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
@@ -13,11 +13,16 @@ import { Pedido } from '@/models';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { usePedidos } from '@/hooks/crud/usePedidos';
+import { useAuth } from '@/context/AuthContext'; // Importar contexto de autenticación
 
 export default function PedidoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const idNumerico = id ? parseInt(id as string) : 0;
   const colorScheme = useColorScheme() ?? 'light';
+  const { user } = useAuth(); // Obtener usuario actual
+  
+  // Determinar permisos según el rol
+  const isAdmin = user?.rol === 'admin';
   
   // Control para evitar múltiples cargas
   const isInitialMount = useRef(true);
@@ -40,12 +45,27 @@ export default function PedidoDetailScreen() {
     }
   }, [idNumerico, loadPedido]);
 
+  // Verificar si el usuario es el creador o es admin
+  const canEditOrDelete = isAdmin || (pedido?.vendedor_id === user?.id);
+
   const handleEdit = () => {
+    // Solo permitir edición si es admin o creador
+    if (!canEditOrDelete) {
+      Alert.alert("Acceso restringido", "No tienes permisos para editar esta proyección.");
+      return;
+    }
+    
     // Navegar a la pantalla de edición
     router.push(`/pedidos/edit/${idNumerico}`);
   };
 
   const handleDelete = async () => {
+    // Solo permitir eliminación si es admin o creador
+    if (!canEditOrDelete) {
+      Alert.alert("Acceso restringido", "No tienes permisos para eliminar esta proyección.");
+      return;
+    }
+    
     if (idNumerico) {
       await deletePedido(idNumerico, true);
     }
@@ -184,22 +204,27 @@ export default function PedidoDetailScreen() {
               {/* No mostrar botón de convertir si ya está entregado o cancelado */}
               <PedidoConversion 
                 pedidoId={idNumerico}
-                isDisabled={pedido.estado === 'entregado' || pedido.estado === 'cancelado'}
+                isDisabled={pedido.estado === 'entregado' || pedido.estado === 'cancelado' || !canEditOrDelete}
               />
               
-              <TouchableOpacity 
-                style={[styles.button, styles.editButton]} 
-                onPress={handleEdit}
-              >
-                <ThemedText style={styles.buttonText}>Editar</ThemedText>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.button, styles.deleteButton]} 
-                onPress={handleDelete}
-              >
-                <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
-              </TouchableOpacity>
+              {/* Solo mostrar botones de edición y eliminación si es admin o creador */}
+              {canEditOrDelete && (
+                <>
+                  <TouchableOpacity 
+                    style={[styles.button, styles.editButton]} 
+                    onPress={handleEdit}
+                  >
+                    <ThemedText style={styles.buttonText}>Editar</ThemedText>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.button, styles.deleteButton]} 
+                    onPress={handleDelete}
+                  >
+                    <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
+                  </TouchableOpacity>
+                </>
+              )}
             </ThemedView>
           </ThemedView>
         </ThemedView>

@@ -1,4 +1,6 @@
-// app/ventas/index.tsx - Versión optimizada
+// app/ventas/index.tsx - Modificación para controlar acceso por rol
+// Actualiza la pantalla de lista de ventas para controlar las acciones según el rol
+
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, Pressable } from 'react-native';
 import { Stack, router } from 'expo-router';
@@ -14,10 +16,13 @@ import { useVentas } from '@/hooks/crud/useVentas';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/context/AuthContext'; // Importar el contexto de autenticación
 
 export default function VentasScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { user } = useAuth(); // Obtener el usuario actual
+  const isAdmin = user?.rol === 'admin'; // Verificar si es administrador
   
   // Estados para DatePicker
   const [showFechaInicioPicker, setShowFechaInicioPicker] = useState(false);
@@ -25,6 +30,7 @@ export default function VentasScreen() {
   
   // Bandera para controlar la inicialización
   const isInitialized = useRef(false);
+  
   // Usar el hook especializado para ventas
   const { 
     ventas, 
@@ -79,7 +85,6 @@ export default function VentasScreen() {
     }
   }, []); 
 
-  
   // Navegar a la pantalla de creación de venta
   const handleAddVenta = () => {
     router.push('/ventas/create');
@@ -135,6 +140,13 @@ export default function VentasScreen() {
   // Manejar cambio de elementos por página
   const handleItemsPerPageChange = (perPage: number) => {
     loadVentas(1, perPage);
+  };
+
+  // Determinar qué acciones mostrar según el rol del usuario
+  const tableActions = {
+    onView: true, // Todos pueden ver detalles
+    onEdit: isAdmin, // Solo admin puede editar
+    onDelete: isAdmin // Solo admin puede eliminar
   };
 
   return (
@@ -245,11 +257,7 @@ export default function VentasScreen() {
             sortOrder: 'desc',
             onSort: () => {}
           }}
-          actions={{
-            onView: true,
-            onEdit: true,
-            onDelete: true
-          }}
+          actions={tableActions}
           deleteOptions={{
             title: 'Eliminar Venta',
             message: '¿Está seguro que desea eliminar esta venta?',
@@ -274,7 +282,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // Barra de herramientas compacta
+  // Estilos existentes, sin cambios
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,7 +321,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  // Filtros de fecha compactos
   dateFiltros: {
     paddingHorizontal: 16,
     paddingVertical: 8,

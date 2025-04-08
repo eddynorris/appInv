@@ -162,7 +162,6 @@ export const authService = {
       let user: User;
       if (data.user) {
         user = data.user;
-        console.log('Usuario obtenido de la respuesta API:', user);
       } else {
         // Fallback al método anterior de extraer del token
         const extractedUser = token.extractUser(data.access_token);
@@ -170,7 +169,6 @@ export const authService = {
           throw new Error('Token inválido');
         }
         user = extractedUser;
-        console.log('Usuario extraído del token JWT:', user);
       }
       
       await storage.saveUser(user);

@@ -1,4 +1,4 @@
-// app/pedidos/index.tsx
+// app/pedidos/index.tsx - Actualizado para manejar permisos según rol
 import React, { useEffect, useRef, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
@@ -9,8 +9,12 @@ import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { usePedidos } from '@/hooks/crud/usePedidos';
 import { Pedido } from '@/models';
+import { useAuth } from '@/context/AuthContext'; // Importar contexto de autenticación
 
 export default function PedidosScreen() {
+  const { user } = useAuth(); // Obtener el usuario actual
+  const isAdmin = user?.rol === 'admin'; // Verificar si es administrador
+  
   const {
     pedidos,
     isLoading,
@@ -65,6 +69,13 @@ export default function PedidosScreen() {
       render: (item: Pedido) => <ThemedText>{item.cliente?.nombre || '-'}</ThemedText>,
     },
     {
+      id: 'vendedor',
+      label: 'Vendedor',
+      width: 1,
+      sortable: true,
+      render: (item: Pedido) => <ThemedText>{item.vendedor?.username || '-'}</ThemedText>,
+    },
+    {
       id: 'total_estimado',
       label: 'Total Est.',
       width: 1,
@@ -97,6 +108,13 @@ export default function PedidosScreen() {
     }
     return success;
   }, [deletePedido, loadPedidos]);
+
+  // Configurar las acciones según el rol del usuario
+  const tableActions = {
+    onView: true, // Todos pueden ver detalles
+    onEdit: isAdmin, // Solo admin puede editar
+    onDelete: isAdmin // Solo admin puede eliminar
+  };
 
   return (
     <>
@@ -152,11 +170,7 @@ export default function PedidosScreen() {
             sortOrder: 'asc',
             onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
           }}
-          actions={{
-            onView: true,
-            onEdit: true,
-            onDelete: true
-          }}
+          actions={tableActions} // Usar acciones configuradas según rol
           deleteOptions={{
             title: 'Eliminar Proyección',
             message: '¿Está seguro que desea eliminar esta proyección?',

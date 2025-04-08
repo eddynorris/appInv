@@ -1,4 +1,4 @@
-// hooks/useApiResource.ts
+// hooks/useApiResource.tsx
 import { useState, useEffect, useCallback } from 'react';
 
 interface PaginationParams {

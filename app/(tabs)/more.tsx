@@ -8,6 +8,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { LogoutButton } from '@/components/LogoutButton';
+import { useAuth } from '@/context/AuthContext';
 
 interface MenuItemProps {
   title: string;
@@ -32,6 +33,8 @@ function MenuItem({ title, icon, route, color }: MenuItemProps) {
 }
 
 export default function MoreScreen() {
+  const { user } = useAuth();
+
   return (
     <>
       <Stack.Screen options={{ 
@@ -41,89 +44,80 @@ export default function MoreScreen() {
       
       <ScrollView style={{ flex: 1 }}>
         <ThemedView style={styles.container}>
-
+          {/* Show only sales section for non-admin users */}
           <ThemedView style={styles.section}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Clientes</ThemedText>
-            
-            <MenuItem 
-              title="Clientes" 
-              icon="person.fill" 
-              route="/clientes" 
-            />
-          </ThemedView>
-          
-          <ThemedView style={styles.section}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Ventas</ThemedText>
-            
+            <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Pedidos</ThemedText>
             <MenuItem 
               title="Ventas" 
               icon="bag.fill" 
               route="/ventas" 
             />
-            
             <MenuItem 
               title="Proyecciones" 
-              icon="calendar" 
+              icon="bag.fill" 
               route="/pedidos" 
             />
           </ThemedView>
-          
-          <ThemedView style={styles.section}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>Inventario</ThemedText>
-            
-            <MenuItem 
-              title="Almacenes" 
-              icon="house.fill" 
-              route="/almacenes" 
-            />
-            <MenuItem 
-              title="Movimientos" 
-              icon="arrow.left.arrow.right" 
-              route="/movimientos" 
-            />
-            <MenuItem 
-              title="Presentaciones" 
-              icon="arrow.left.arrow.right" 
-              route="/presentaciones" 
-            />
-            <MenuItem 
-              title="Lotes" 
-              icon="arrow.left.arrow.right" 
-              route="/lotes" 
-            />
-            <MenuItem 
-              title="Inventarios" 
-              icon="list.clipboard.fill" 
-              route="/inventarios" 
-            />
-          </ThemedView>
-          
-          <ThemedView style={styles.section}>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
-            
-            <MenuItem 
-              title="Gastos" 
-              icon="banknote" 
-              route="/gastos" 
-            />
-            
-            <MenuItem 
-              title="Pagos" 
-              icon="creditcard" 
-              route="/pagos" 
-            />
-          </ThemedView>
-          
+          {/* Show all sections for admin users */}
+          {user?.rol === 'admin' && (
+            <>
+              <ThemedView style={styles.section}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Clientes</ThemedText>
+                <MenuItem 
+                  title="Clientes" 
+                  icon="person.fill" 
+                  route="/clientes" 
+                />
+              </ThemedView>
+              
+              <ThemedView style={styles.section}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>Inventario</ThemedText>
+                <MenuItem 
+                  title="Almacenes" 
+                  icon="house.fill" 
+                  route="/almacenes" 
+                />
+                <MenuItem 
+                  title="Movimientos" 
+                  icon="arrow.left.arrow.right" 
+                  route="/movimientos" 
+                />
+                <MenuItem 
+                  title="Presentaciones" 
+                  icon="arrow.left.arrow.right" 
+                  route="/presentaciones" 
+                />
+                <MenuItem 
+                  title="Lotes" 
+                  icon="arrow.left.arrow.right" 
+                  route="/lotes" 
+                />
+                <MenuItem 
+                  title="Inventarios" 
+                  icon="list.clipboard.fill" 
+                  route="/inventarios" 
+                />
+              </ThemedView>
+              
+              <ThemedView style={styles.section}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
+                <MenuItem 
+                  title="Gastos" 
+                  icon="banknote" 
+                  route="/gastos" 
+                />
+                <MenuItem 
+                  title="Pagos" 
+                  icon="creditcard" 
+                  route="/pagos" 
+                />
+              </ThemedView>
+            </>
+          )}
+
+          {/* Account section for all users */}
           <ThemedView style={styles.section}>
             <ThemedText type="subtitle" style={styles.sectionTitle}>Cuenta</ThemedText>
-            
-            {/* Use the text variant for a clean menu look */}
-            <TouchableOpacity style={styles.menuItem}>
-              <IconSymbol name="gear.fill" size={24} color="#757575" />
-              <ThemedText style={styles.menuText}>Configuración</ThemedText>
-            </TouchableOpacity>
-            
-            {/* Add LogoutButton */}
             <TouchableOpacity style={styles.menuItem}>
               <IconSymbol name="rectangle.portrait.and.arrow.right" size={24} color="#E53935" />
               <LogoutButton variant="text" />

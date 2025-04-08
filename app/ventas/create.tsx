@@ -59,7 +59,6 @@ export default function CreateVentaScreen() {
     
     // Verificar si clientes y setClientes existen
     if (!setClientes) {
-      console.error('setClientes no está disponible');
       // Fallback: actualizar solo clientesFiltrados y seleccionar el cliente
       setClientesFiltrados(prev => [cliente, ...prev]);
       form.handleChange('cliente_id', cliente.id.toString());
@@ -93,10 +92,6 @@ useEffect(() => {
       // Cargar opciones primero
       await loadOptions();
       
-      // Mejorar el log para diagnosticar
-      console.log("Usuario actual:", user);
-      console.log("Almacenes disponibles:", almacenes.map(a => `${a.id}:${a.nombre}`).join(', '));
-      
       // Configurar valores iniciales si están disponibles
       let almacenIdToUse = '';
       
@@ -104,13 +99,11 @@ useEffect(() => {
       if (user?.almacen_id && almacenes.length > 0) {
         // Usar toString para asegurar una comparación de tipo consistente
         const userAlmacenIdStr = user.almacen_id.toString();
-        console.log(`Buscando almacén con ID: ${userAlmacenIdStr} (tipo: ${typeof userAlmacenIdStr})`);
-        
+       
         // Buscar el almacén asegurando comparación de strings
         const userAlmacen = almacenes.find(a => a.id.toString() === userAlmacenIdStr);
         
         if (userAlmacen) {
-          console.log(`Precargando almacén del usuario: ${userAlmacen.nombre} (ID: ${userAlmacen.id})`);
           almacenIdToUse = userAlmacen.id.toString();
         } else {
           console.log(`¡Almacén no encontrado! ID buscado: ${userAlmacenIdStr}`);
@@ -126,7 +119,6 @@ useEffect(() => {
       
       // Si tenemos un almacén para usar, configurarlo
       if (almacenIdToUse) {
-        console.log(`Configurando almacén ID: ${almacenIdToUse}`);
         
         // Actualizar el formulario con el ID del almacén
         form.handleChange('almacen_id', almacenIdToUse);

@@ -1,6 +1,6 @@
 // components/data/EnhancedDataTable.tsx
 import React, { useMemo, useCallback, useState } from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, View } from 'react-native';
+import { FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, View, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,6 +9,7 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAuth } from '@/context/AuthContext'; // Importar el contexto de autenticación
 
 // Column definition
 export interface Column<T> {
@@ -62,7 +63,7 @@ interface EnhancedDataTableProps<T extends { id: number | string }> {
   onRowPress?: (item: T) => void;
 }
 
-export function EnhancedDataTable<T extends { id: number | string }>({
+export function EnhancedDataTable<T extends { id: number | string, vendedor_id?: number | string }>({
   data,
   columns,
   isLoading,
@@ -80,26 +81,38 @@ export function EnhancedDataTable<T extends { id: number | string }>({
   const [deleteId, setDeleteId] = useState<number | string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const { user } = useAuth(); // Obtener el usuario actual
 
-  // Handle navigation to detail view
+  // Determinar permisos basados en el rol de usuario
+  const isAdmin = user?.rol === 'admin';
+
+  // Handle navigation to detail view - Siempre permitido
   const handleViewDetail = useCallback((id: number | string) => {
     router.push(`${baseRoute}/${id}`);
   }, [baseRoute]);
 
-  // Handle navigation to edit view
+  // Handle navigation to edit view - Solo para admins
   const handleEdit = useCallback((id: number | string) => {
+    if (!isAdmin) {
+      Alert.alert("Acceso restringido", "No tienes permisos para editar ventas.");
+      return;
+    }
     router.push(`${baseRoute}/edit/${id}`);
-  }, [baseRoute]);
+  }, [baseRoute, isAdmin]);
 
-  // Show delete confirmation
+  // Show delete confirmation - Solo para admins
   const handleDeleteClick = useCallback((id: number | string) => {
+    if (!isAdmin) {
+      Alert.alert("Acceso restringido", "No tienes permisos para eliminar ventas.");
+      return;
+    }
     setDeleteId(id);
     setShowDeleteDialog(true);
-  }, []);
+  }, [isAdmin]);
 
   // Execute delete action
   const handleDeleteConfirm = useCallback(async () => {
-    if (!deleteId || !deleteOptions) return;
+    if (!deleteId || !deleteOptions || !isAdmin) return;
     
     try {
       setDeleteLoading(true);
@@ -115,7 +128,17 @@ export function EnhancedDataTable<T extends { id: number | string }>({
       setShowDeleteDialog(false);
       setDeleteId(null);
     }
-  }, [deleteId, deleteOptions]);
+  }, [deleteId, deleteOptions, isAdmin]);
+
+  // Determinar qué acciones mostrar basado en el rol
+  const displayActions = useMemo(() => {
+    return {
+      onView: actions.onView, // Vista de detalle siempre permitida
+      onEdit: isAdmin && actions.onEdit, // Editar solo para admin
+      onDelete: isAdmin && actions.onDelete, // Eliminar solo para admin
+      customActions: actions.customActions || [] // Acciones personalizadas
+    };
+  }, [actions, isAdmin]);
 
   // Memoized header component to prevent re-renders
   const TableHeader = useMemo(() => (
@@ -147,85 +170,94 @@ export function EnhancedDataTable<T extends { id: number | string }>({
       ))}
       
       {/* Actions column if any actions enabled */}
-      {(actions.onView || actions.onEdit || actions.onDelete || actions.customActions?.length) && (
+      {(displayActions.onView || displayActions.onEdit || displayActions.onDelete || displayActions.customActions?.length) && (
         <View style={styles.actionsHeader}>
           <ThemedText type="defaultSemiBold">Acciones</ThemedText>
         </View>
       )}
     </ThemedView>
-  ), [columns, sorting, actions, colorScheme]);
+  ), [columns, sorting, displayActions, colorScheme]);
 
   // Render each row
-  const renderItem = useCallback(({ item }: { item: T }) => (
-    <ThemedView style={styles.row}>
-      {columns.map((column) => (
-        <TouchableOpacity
-          key={`${item.id}-${column.id}`}
-          style={[
-            styles.cell,
-            column.width ? { flex: column.width } : {}
-          ]}
-          onPress={() => {
-            if (onRowPress) {
-              onRowPress(item);
-            } else {
-              handleViewDetail(item.id);
-            }
-          }}
-        >
-          {column.render ? (
-            column.render(item)
-          ) : (
-            <ThemedText numberOfLines={1}>
-              {(item[column.id as keyof T] as any)?.toString() || '-'}
-            </ThemedText>
-          )}
-        </TouchableOpacity>
-      ))}
-      
-      {/* Action buttons */}
-      {(actions.onView || actions.onEdit || actions.onDelete || actions.customActions?.length) && (
-        <View style={styles.actionsCell}>
-          {actions.onView && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: Colors.info }]}
-              onPress={() => handleViewDetail(item.id)}
-            >
-              <IconSymbol name="info.circle.fill" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-          
-          {actions.onEdit && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: Colors.primary }]}
-              onPress={() => handleEdit(item.id)}
-            >
-              <IconSymbol name="pencil.fill" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-          
-          {actions.onDelete && deleteOptions && (
-            <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: Colors.danger }]}
-              onPress={() => handleDeleteClick(item.id)}
-            >
-              <IconSymbol name="trash.fill" size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-          
-          {actions.customActions?.map((action, index) => (
-            <TouchableOpacity
-              key={`custom-action-${index}`}
-              style={[styles.actionButton, { backgroundColor: action.color }]}
-              onPress={() => action.onPress(item.id)}
-            >
-              <IconSymbol name={action.icon} size={16} color="#FFFFFF" />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </ThemedView>
-  ), [columns, actions, handleViewDetail, handleEdit, handleDeleteClick, deleteOptions, onRowPress]);
+  const renderItem = useCallback(({ item }: { item: T }) => {
+    // Verifica si el usuario es el creador de la venta
+    const isCreator = user?.id && item.vendedor_id && user.id.toString() === item.vendedor_id.toString();
+    
+    return (
+      <ThemedView style={styles.row}>
+        {columns.map((column) => (
+          <TouchableOpacity
+            key={`${item.id}-${column.id}`}
+            style={[
+              styles.cell,
+              column.width ? { flex: column.width } : {}
+            ]}
+            onPress={() => {
+              if (onRowPress) {
+                onRowPress(item);
+              } else {
+                handleViewDetail(item.id);
+              }
+            }}
+          >
+            {column.render ? (
+              column.render(item)
+            ) : (
+              <ThemedText numberOfLines={1}>
+                {(item[column.id as keyof T] as any)?.toString() || '-'}
+              </ThemedText>
+            )}
+          </TouchableOpacity>
+        ))}
+        
+        {/* Action buttons - Solo mostrar las que correspondan según el rol */}
+        {(displayActions.onView || displayActions.onEdit || displayActions.onDelete || displayActions.customActions?.length) && (
+          <View style={styles.actionsCell}>
+            {/* El botón de ver detalle siempre está disponible */}
+            {displayActions.onView && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: Colors.info }]}
+                onPress={() => handleViewDetail(item.id)}
+              >
+                <IconSymbol name="info.circle.fill" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            
+            {/* Editar solo para admin */}
+            {displayActions.onEdit && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: Colors.primary }]}
+                onPress={() => handleEdit(item.id)}
+              >
+                <IconSymbol name="pencil.fill" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            
+            {/* Eliminar solo para admin */}
+            {displayActions.onDelete && deleteOptions && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: Colors.danger }]}
+                onPress={() => handleDeleteClick(item.id)}
+              >
+                <IconSymbol name="trash.fill" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+            
+            {/* Acciones personalizadas */}
+            {displayActions.customActions?.map((action, index) => (
+              <TouchableOpacity
+                key={`custom-action-${index}`}
+                style={[styles.actionButton, { backgroundColor: action.color }]}
+                onPress={() => action.onPress(item.id)}
+              >
+                <IconSymbol name={action.icon} size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </ThemedView>
+    );
+  }, [columns, displayActions, handleViewDetail, handleEdit, handleDeleteClick, deleteOptions, onRowPress, user]);
 
   // Memoized empty component
   const EmptyComponent = useMemo(() => {
@@ -297,6 +329,7 @@ export function EnhancedDataTable<T extends { id: number | string }>({
           onConfirm={handleDeleteConfirm}
           onCancel={() => setShowDeleteDialog(false)}
           confirmButtonColor={Colors.danger}
+          isLoading={deleteLoading}
         />
       )}
     </ThemedView>
