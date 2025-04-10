@@ -1,62 +1,26 @@
 // app/almacenes/index.tsx
-import React, { useMemo } from 'react';
+import React from 'react';
 import { StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { almacenApi } from '@/services/api';
-import { useApiResource } from '@/hooks/useApiResource';
-import { Almacen } from '@/models';
+import { useAlmacenes } from '@/hooks/crud/useAlmacenes';
 
 export default function AlmacenesScreen() {
-  // Use our custom hook for API interaction
-  const { 
-    data: almacenes, 
-    isLoading, 
-    error, 
-    pagination, 
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteItem
-  } = useApiResource<Almacen>({
-    initialParams: { page: 1, perPage: 10 },
-    fetchFn: almacenApi.getAlmacenes,
-    deleteFn: almacenApi.deleteAlmacen
-  });
-  
-  // Define table columns - memoized to prevent recreating on each render
-  const columns: Column<Almacen>[] = useMemo(() => [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-      sortable: true,
-    },
-    {
-      id: 'nombre',
-      label: 'Nombre',
-      width: 2,
-      sortable: true,
-    },
-    {
-      id: 'ciudad',
-      label: 'Ciudad',
-      width: 1,
-      sortable: true,
-      render: (item: Almacen) => <ThemedText>{item.ciudad || '-'}</ThemedText>,
-    },
-    {
-      id: 'direccion',
-      label: 'Dirección',
-      width: 1.5,
-      render: (item: Almacen) => <ThemedText>{item.direccion || '-'}</ThemedText>,
-    },
-  ], []);
+  // Usar el hook refactorizado para la LISTA
+  const {
+    almacenes,
+    isLoading,
+    error,
+    columns,
+    pagination,
+    refresh,       // Para el botón/gesto de refresco
+    deleteAlmacen  // Para la acción de borrado en la tabla
+  } = useAlmacenes(); // No necesita opciones
 
   const handleAddAlmacen = () => {
     router.push('/almacenes/create');
@@ -88,8 +52,8 @@ export default function AlmacenesScreen() {
             totalPages: pagination.totalPages,
             itemsPerPage: pagination.itemsPerPage,
             totalItems: pagination.totalItems,
-            onPageChange: handlePageChange,
-            onItemsPerPageChange: handleItemsPerPageChange
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange
           }}
           sorting={{
             sortColumn: 'id',
@@ -106,10 +70,10 @@ export default function AlmacenesScreen() {
             message: '¿Está seguro que desea eliminar este almacén?',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
-            onDelete: async (id) => await deleteItem(Number(id))
+            onDelete: async (id) => await deleteAlmacen(Number(id))
           }}
           emptyMessage="No hay almacenes disponibles"
-          onRefresh={fetchData}
+          onRefresh={refresh}
         />
         
         <FloatingActionButton 

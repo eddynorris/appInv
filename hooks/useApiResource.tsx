@@ -1,5 +1,6 @@
 // hooks/useApiResource.tsx
 import { useState, useEffect, useCallback } from 'react';
+import { Alert } from 'react-native';
 
 interface PaginationParams {
   page: number;
@@ -29,7 +30,8 @@ export function useApiResource<T extends { id: number }>({
   createFn,
   updateFn,
   deleteFn,
-  getFn
+  getFn,
+
 }: ApiResourceOptions<T>) {
   const [data, setData] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,10 +70,6 @@ export function useApiResource<T extends { id: number }>({
     }
   }, [fetchFn, pagination.currentPage, pagination.itemsPerPage]);
   
-  // Initial data fetch
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
   
   // Handle page change
   const handlePageChange = useCallback((page: number) => {
@@ -134,24 +132,34 @@ export function useApiResource<T extends { id: number }>({
     if (!deleteFn) {
       throw new Error('Delete function not provided');
     }
-    
+
     try {
       setIsLoading(true);
       await deleteFn(id);
-      
-      // If this is the last item on the page and not the first page, go to previous page
+
+      // Si this is the last item on the page and not the first page, go to previous page
       if (data.length === 1 && pagination.currentPage > 1) {
         fetchData(pagination.currentPage - 1, pagination.itemsPerPage);
       } else {
         // Otherwise refresh current page
         fetchData();
       }
-      
+
       return true;
-    } catch (err) {
-      console.error('Error deleting item:', err);
-      setError(err instanceof Error ? err.message : 'Error deleting item');
-      return false;
+    } catch (err: any) {
+      let errorMessage = 'Error al eliminar el elemento';
+
+      // Captura específicamente el error que viene de tu API
+      if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      Alert.alert("Error", errorMessage || "No se pudo eliminar");
+      // Importante: Lanza el error para que pueda ser capturado por los hooks que utilizan este
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }

@@ -1,5 +1,5 @@
 // app/almacenes/[id].tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -7,63 +7,68 @@ import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCa
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedText } from '@/components/ThemedText';
-import { almacenApi } from '@/services/api';
+import { useAlmacenItem } from '@/hooks/crud/useAlmacenItem';
 import { Almacen } from '@/models';
 
 export default function AlmacenDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [almacen, setAlmacen] = useState<Almacen | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
   
-  // Use useEffect para cargar los datos una sola vez
+   // Usar el hook con
+   const { getAlmacen, deleteAlmacen, isLoading: hookLoading, error: hookError } = useAlmacenItem(); // <-- Usa el nuevo hook
+  // Cargar datos del almacén
+  // Cargar datos del almacén
   useEffect(() => {
     const fetchAlmacen = async () => {
       if (!id) return;
-      
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const data = await almacenApi.getAlmacen(parseInt(id));
-        setAlmacen(data);
-      } catch (err) {
-        console.error('Error fetching almacen:', err);
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos del almacén');
-      } finally {
-        setIsLoading(false);
+
+      const data = await getAlmacen(parseInt(id));
+      if (data) {
+          setAlmacen(data);
+      } else {
+          // El error se puede obtener de hookError después de la llamada
+          // O manejarlo dentro del componente si prefieres
+          setLocalError(hookError || 'Error al cargar los datos del almacén');
       }
+      // setLocalLoading(false); // El hook ya maneja isLoading
     };
 
     fetchAlmacen();
-  }, [id]); // Solo depende de id
+  }, [id, getAlmacen, hookError]); // Añade hookError a las dependencias si lo usas para setear localError
 
-  const handleEdit = useCallback(() => {
+
+  const handleEdit = () => {
     router.push(`/almacenes/edit/${id}`);
-  }, [id]);
+  };
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = async () => {
     if (!id) return;
-    
-    try {
-      setIsLoading(true);
-      await almacenApi.deleteAlmacen(parseInt(id));
-      router.replace('/almacenes');
-    } catch (error) {
-      console.error('Error deleting almacen:', error);
-      setError('Error al eliminar el almacén');
-      setIsLoading(false);
-    } finally {
-      setShowDeleteDialog(false);
+
+    // setLocalLoading(true); // El hook ya maneja isLoading
+    const success = await deleteAlmacen(parseInt(id));
+    // setLocalLoading(false); // El hook ya maneja isLoading
+    setShowDeleteDialog(false); // Siempre cierra el diálogo
+
+    if (success) {
+      router.replace('/almacenes'); // Navega si fue exitoso
+    } else {
+      // Muestra el error del hook si falló
+      setLocalError(hookError || 'Error al eliminar el almacén');
     }
-  }, [id]);
+  };
+
+  // El estado de carga ahora viene directamente del hook
+  const isLoading = hookLoading;
+  // Combina el error local (si aún lo usas) con el del hook
+  const displayError = localError || hookError;
 
   return (
     <ScreenContainer
       title={almacen?.nombre || 'Detalles del Almacén'}
       isLoading={isLoading}
-      error={error}
+      error={displayError}
       loadingMessage="Cargando datos del almacén..."
     >
       {almacen && (

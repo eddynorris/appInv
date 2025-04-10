@@ -6,37 +6,29 @@ import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCa
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedText } from '@/components/ThemedText';
-import { clienteApi } from '@/services/api';
+import { useClienteItem } from '@/hooks/crud/useClienteItem';
 import { Cliente } from '@/models';
+import { Alert } from 'react-native';
 
 export default function ClienteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [cliente, setCliente] = useState<Cliente | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Use useEffect para cargar los datos una sola vez
-  useEffect(() => {
-    const fetchCliente = async () => {
-      if (!id) return;
-      
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const data = await clienteApi.getCliente(parseInt(id));
-        setCliente(data);
-      } catch (err) {
-        console.error('Error fetching cliente:', err);
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos del cliente');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const { getCliente, deleteCliente, isLoading, error: hookError } = useClienteItem();
 
-    fetchCliente();
-  }, [id]); // Solo depende de id
+  // Cargar datos usando el hook
+  useEffect(() => {
+    const fetchClienteData = async () => {
+      if (!id) return;
+      const data = await getCliente(parseInt(id));
+      // Si getCliente falla, el error estará en hookError
+      if (data) {
+        setCliente(data);
+      }
+      // No es necesario manejar error aquí, se mostrará a través de hookError
+    };
+    fetchClienteData();
+  }, [id, getCliente]); // Depende de id y la función del hook
 
   const handleEdit = useCallback(() => {
     router.push(`/clientes/edit/${id}`);
@@ -44,28 +36,27 @@ export default function ClienteDetailScreen() {
 
   const handleDelete = useCallback(async () => {
     if (!id) return;
-    
-    try {
-      setIsLoading(true);
-      await clienteApi.deleteCliente(parseInt(id));
-      router.replace('/clientes');
-    } catch (error) {
-      console.error('Error deleting cliente:', error);
-      setError('Error al eliminar el cliente');
-      setIsLoading(false);
-    } finally {
-      setShowDeleteDialog(false);
+    const success = await deleteCliente(parseInt(id));
+    setShowDeleteDialog(false); // Siempre cerrar
+    if (success) {
+      router.replace('/clientes'); // Volver a la lista
+    } else {
+      console.log("handleDelete - Error detected. hookError:", hookError); // Log para depurar
+      Alert.alert('Error al Eliminar', hookError || 'Ocurrió un error inesperado.');
     }
-  }, [id]);
+    // No es necesario setError aquí, hookError se actualizará si deleteCliente falla
+  }, [id, deleteCliente]);
 
   return (
     <ScreenContainer
       title={cliente?.nombre || 'Detalles del Cliente'}
-      isLoading={isLoading}
-      error={error}
+      isLoading={isLoading && !cliente} // Muestra carga si el hook está cargando Y AÚN no hay datos
+      error={hookError}
       loadingMessage="Cargando datos del cliente..."
     >
-      {cliente && (
+      {!isLoading && hookError && <ThemedText>Error al cargar...</ThemedText>}
+      
+      {!isLoading && !hookError && cliente && (
         <DetailCard>
           <ThemedText type="title">{cliente.nombre}</ThemedText>
           

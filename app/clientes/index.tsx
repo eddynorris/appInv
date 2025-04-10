@@ -8,69 +8,30 @@ import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { clienteApi } from '@/services/api';
-import { useApiResource } from '@/hooks/useApiResource';
+import { useClientesList } from '@/hooks/crud/useClientesList'; 
 import { Cliente } from '@/models';
 
-export default function ClientesScreen() {
-  // Use our custom hook for API interaction
-  const { 
-    data: clientes, 
-    isLoading, 
-    error, 
-    pagination, 
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteItem
-  } = useApiResource<Cliente>({
-    initialParams: { page: 1, perPage: 10 },
-    fetchFn: clienteApi.getClientes,
-    deleteFn: clienteApi.deleteCliente
-  });
-  
-  // Define table columns - memoized to prevent recreating on each render
-  const columns: Column<Cliente>[] = useMemo(() => [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-      sortable: true,
-    },
-    {
-      id: 'nombre',
-      label: 'Nombre',
-      width: 2,
-      sortable: true,
-    },
-    {
-      id: 'telefono',
-      label: 'Teléfono',
-      width: 1,
-      sortable: true,
-    },
-    {
-      id: 'direccion',
-      label: 'Dirección',
-      width: 1.5,
-      render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText>,
-    },
-    {
-      id: 'saldo_pendiente',
-      label: 'Saldo',
-      width: 1,
-      render: (item: Cliente) => (
-        <ThemedText>${parseFloat(item.saldo_pendiente || '0').toFixed(2)}</ThemedText>
-      ),
-    },
-  ], []);
 
+export default function ClientesScreen() {
+  // Usar el hook refactorizado para la LISTA
+  const {
+    clientes,
+    isLoading,
+    error,
+    columns, // <-- Columnas vienen del hook
+    pagination,
+    refresh, // <-- Para refrescar
+    deleteCliente // <-- Para borrar desde la tabla
+  } = useClientesList();
+ 
   // Calcular estadísticas de clientes
   const saldoTotal = useMemo(() => {
-    return clientes.reduce((total, cliente) => 
+    // Asegúrate que 'clientes' sea un array antes de reducir
+    if (!Array.isArray(clientes)) return 0;
+    return clientes.reduce((total, cliente) =>
       total + parseFloat(cliente.saldo_pendiente || '0'), 0);
-  }, [clientes]);
-
+  }, [clientes]); // Depende de los datos de la lista}
+  
   const handleAddCliente = () => {
     router.push('/clientes/create');
   };
@@ -91,7 +52,7 @@ export default function ClientesScreen() {
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Saldo Total:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              ${isLoading ? '0.00' : saldoTotal.toFixed(2)}
+              S./{(isLoading || !Array.isArray(clientes)) ? '$0.00' : `$${saldoTotal.toFixed(2)}`}
             </ThemedText>
           </ThemedView>
         </ThemedView>
@@ -107,8 +68,8 @@ export default function ClientesScreen() {
             totalPages: pagination.totalPages,
             itemsPerPage: pagination.itemsPerPage,
             totalItems: pagination.totalItems,
-            onPageChange: handlePageChange,
-            onItemsPerPageChange: handleItemsPerPageChange
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange
           }}
           sorting={{
             sortColumn: 'id',
@@ -125,10 +86,10 @@ export default function ClientesScreen() {
             message: '¿Está seguro que desea eliminar este cliente?',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
-            onDelete: async (id) => await deleteItem(Number(id))
+            onDelete: async (id) => await deleteCliente(Number(id))
           }}
           emptyMessage="No hay clientes disponibles"
-          onRefresh={fetchData}
+          onRefresh={refresh}
         />
         
         <FloatingActionButton 

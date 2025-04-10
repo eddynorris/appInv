@@ -6,18 +6,15 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { FormField } from '@/components/form/FormField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ThemedText } from '@/components/ThemedText';
-import { clienteApi } from '@/services/api';
+import { useClienteItem } from '@/hooks/crud/useClienteItem'; 
 import { useForm } from '@/hooks/useForm';
 
 export default function CreateClienteScreen() {
-  // Use our custom form hook for state management
-  const { 
-    formData, 
-    errors, 
-    isSubmitting, 
-    handleChange, 
-    handleSubmit 
-  } = useForm({
+  // Usar el hook de ITEM para la creación
+  const { createCliente, isLoading: hookIsLoading, error: hookError } = useClienteItem();
+
+  // useForm sigue en el componente
+  const { formData, errors, isSubmitting, handleChange, handleSubmit } = useForm({
     nombre: '',
     telefono: '',
     direccion: '',
@@ -30,34 +27,32 @@ export default function CreateClienteScreen() {
     direccion: (value: string) => !value.trim() ? 'La dirección es obligatoria' : null,
   };
 
-  // Form submission handler with validation
-  const submitForm = async (data: typeof formData) => {
-    try {
-      const response = await clienteApi.createCliente(data);
-      
-      if (response) {
-        Alert.alert(
-          'Cliente Creado',
-          'El cliente ha sido creado exitosamente',
-          [{ text: 'OK', onPress: () => router.replace('/clientes') }]
-        );
-        return true;
-      } else {
-        Alert.alert('Error', 'No se pudo crear el cliente');
-        return false;
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al crear el cliente';
-      Alert.alert('Error', errorMessage);
+  // submitForm usa createCliente de useClienteItem
+  const submitForm = async (data: typeof formData): Promise<boolean> => {
+    const response = await createCliente(data); // <-- Llama a la función del hook
+
+    if (response) {
+      Alert.alert(
+        'Cliente Creado',
+        'El cliente ha sido creado exitosamente',
+        [{ text: 'OK', onPress: () => router.replace('/clientes') }]
+      );
+      return true;
+    } else {
+      Alert.alert('Error', hookError || 'No se pudo crear el cliente');
       return false;
     }
   };
+
+  // isLoading combina estado de form y hook
+  const isLoading = isSubmitting || hookIsLoading;
 
   return (
     <ScreenContainer title="Nuevo Cliente">
       <ThemedText type="title" style={{ marginBottom: 20 }}>Crear Cliente</ThemedText>
 
-      <FormField
+      <FormField  
+        disabled={isSubmitting}
         label="Nombre"
         value={formData.nombre}
         onChangeText={(value) => handleChange('nombre', value)}
@@ -67,6 +62,7 @@ export default function CreateClienteScreen() {
       />
 
       <FormField
+        disabled={isSubmitting}
         label="Teléfono"
         value={formData.telefono}
         onChangeText={(value) => handleChange('telefono', value)}
@@ -77,6 +73,7 @@ export default function CreateClienteScreen() {
       />
 
       <FormField
+        disabled={isSubmitting}
         label="Dirección"
         value={formData.direccion}
         onChangeText={(value) => handleChange('direccion', value)}

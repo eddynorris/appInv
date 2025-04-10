@@ -90,73 +90,90 @@ export const API_CONFIG = {
   }
 };
 
-// Simplified error handling
-const handleApiError = (error: any): never => {
-  let message = 'Error en la solicitud';
-  
-  if (error.response) {
-    if (error.response.status === 401) {
-      message = 'Sesión expirada, por favor inicie sesión nuevamente';
-    } else {
-      message = `Error del servidor (${error.response.status}): ${error.response.data?.message || ''}`;
-    }
-  } else if (error.request) {
-    message = 'Error de red: No se pudo conectar al servidor';
-  } else if (error.message) {
-    message = error.message;
-  }
-  
-  throw new Error(message);
-};
+// Define una interfaz para errores HTTP estructurados (buena práctica)
+interface HttpError extends Error {
+  response?: {
+    status: number;
+    data: any; // El cuerpo de la respuesta parseado
+  };
+}
 
-// Función fetch simplificada
+
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${API_CONFIG.baseUrl}${endpoint}`;
+  console.log(`API request: ${options.method || 'GET'} ${url}`);
+  
+  const authHeaders = await authService.getAuthHeader();
+  
+  // Verificar si se está enviando FormData
+  const isFormData = options.body instanceof FormData;
+  
+  // No incluir Content-Type para FormData, deja que el navegador lo establezca
+  const headers = {
+    ...(!isFormData ? API_CONFIG.headers : { 'Accept': 'application/json' }),
+    ...(authHeaders || {}),
+    ...(options.headers || {}),
+  };
+    
   try {
-    const url = `${API_CONFIG.baseUrl}${endpoint}`;
-    console.log(`API request: ${options.method || 'GET'} ${url}`);
-    
-    if (options.body) {
-      console.log('Request body:', options.body);
-    }
-    
-    const authHeaders = await authService.getAuthHeader();
-    
-    // Verificar si se está enviando FormData
-    const isFormData = options.body instanceof FormData;
-    
-    // No incluir Content-Type para FormData, deja que el navegador lo establezca
-    const headers = {
-      ...(!isFormData ? API_CONFIG.headers : { 'Accept': 'application/json' }),
-      ...(authHeaders || {}),
-      ...(options.headers || {}),
-    };
-    
-    console.log('Request headers:', JSON.stringify(headers));
-    
     const response = await fetch(url, {
       ...options,
       headers,
     });
     
+    // Manejar respuestas sin contenido
+    if (response.status === 204) {
+      console.log('API response: 204 No Content');
+      return null as T;
+    }
+    
+    // Leer el cuerpo de la respuesta UNA SOLA VEZ
+    let responseData: any;
+    try {
+      // Obtener el texto de la respuesta primero
+      const responseText = await response.text();
+      
+      // Si hay contenido, intentar parsearlo como JSON
+      if (responseText.trim()) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (jsonError) {
+          // Si no es JSON válido, usar el texto en bruto
+          responseData = responseText;
+          console.warn("API response was not valid JSON:", responseText);
+        }
+      } else {
+        // Respuesta vacía
+        console.log('API response: Empty response');
+        responseData = {};
+      }
+    } catch (readError : any) {
+      responseData = `Error reading response: ${readError.message}`;
+    }
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(`API error: ${response.status} ${response.statusText}`, errorData);
-      throw { response: { status: response.status, data: errorData } };
+      // La respuesta NO fue exitosa (>= 400)
+      console.error(`API error: ${response.status}`, responseData);
+
+      // Crear un error que incluya la respuesta
+      const error: HttpError = new Error(
+        responseData?.error || responseData?.message || `Error HTTP: ${response.status}`
+      );
+      error.response = {
+        status: response.status,
+        data: responseData,
+      };
+      throw error;
     }
     
-    // Manejar respuestas vacías
-    const text = await response.text();
-    if (!text.trim()) {
-      console.log('API response: Empty response');
-      return {} as T;
-    }
-    
-    const data = JSON.parse(text) as T;
-    console.log('API response success:', typeof data === 'object' ? 'Object data' : data);
-    return data;
-  } catch (error) {
+    console.log('API response success:', typeof responseData === 'object' ? 'Object data' : responseData);
+    return responseData as T;
+  } catch (error: any) {
     console.error('API fetch error:', error);
-    return handleApiError(error);
+    if (error.response) {
+      throw error;
+    }
+    throw new Error(error.message || 'Network error');
   }
 }
 
