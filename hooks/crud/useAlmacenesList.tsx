@@ -5,7 +5,7 @@ import { almacenApi } from '@/services/api';
 import { Almacen } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
 
-export function useAlmacenes() {
+export function useAlmacenesList() {
   const {
     data: almacenes,
     isLoading,

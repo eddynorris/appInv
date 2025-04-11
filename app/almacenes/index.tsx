@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { useAlmacenes } from '@/hooks/crud/useAlmacenes';
+import { useAlmacenesList } from '@/hooks/crud/useAlmacenesList';
 
 export default function AlmacenesScreen() {
   // Usar el hook refactorizado para la LISTA
@@ -20,7 +20,7 @@ export default function AlmacenesScreen() {
     pagination,
     refresh,       // Para el botón/gesto de refresco
     deleteAlmacen  // Para la acción de borrado en la tabla
-  } = useAlmacenes(); // No necesita opciones
+  } = useAlmacenesList(); // No necesita opciones
 
   const handleAddAlmacen = () => {
     router.push('/almacenes/create');

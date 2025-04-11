@@ -41,7 +41,7 @@ export function useClientesList() {
     { id: 'id', label: 'ID', width: 0.5, sortable: true },
     { id: 'nombre', label: 'Nombre', width: 2, sortable: true },
     { id: 'telefono', label: 'Teléfono', width: 1, sortable: true },
-     { id: 'direccion', label: 'Dirección', width: 1.5, render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText>, }, // Añadida de index.tsx
+    { id: 'direccion', label: 'Dirección', width: 1.5, render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText>, }, // Añadida de index.tsx
     { id: 'saldo_pendiente', label: 'Saldo', width: 1, render: (item: Cliente) => <ThemedText>${parseFloat(item.saldo_pendiente || '0').toFixed(2)}</ThemedText> },
   ], []);
 

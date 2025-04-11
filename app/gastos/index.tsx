@@ -1,5 +1,5 @@
 // app/gastos/index.tsx
-import React, { useEffect, useRef, useMemo } from 'react';
+import React from 'react';
 import { StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 
@@ -8,89 +8,29 @@ import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { useGastos } from '@/hooks/crud/useGastos';
-import { Gasto } from '@/models';
+import { useGastosList } from '@/hooks/crud/useGastosList';
 
 export default function GastosScreen() {
-  const { 
-    entities: gastos, 
-    isLoading, 
-    error, 
+  // Usar el hook refactorizado para la lista con control de permisos
+  const {
+    gastos,
+    isLoading,
+    error,
+    columns,
     pagination,
-    loadEntities,
-    deleteEntity,
+    refresh,
+    deleteGasto,
     getEstadisticas,
-    getCategoryColor
-  } = useGastos();
+    isAdmin,
+    canEditOrDelete
+  } = useGastosList();
   
-  // Control para evitar múltiples cargas
-  const isInitialMount = useRef(true);
-  
-  // Cargar datos solo una vez al montar el componente
-  useEffect(() => {
-    // Solo realizar la carga inicial
-    if (isInitialMount.current) {
-      console.log('Cargando datos de gastos (carga inicial)');
-      loadEntities();
-      isInitialMount.current = false;
-    }
-  }, []); // Sin dependencias para evitar recargas
-  
-  // Obtener las estadísticas
+  // Calcular estadísticas
   const { totalMonto, totalGastos } = getEstadisticas();
 
   const handleAddGasto = () => {
     router.push('/gastos/create');
   };
-
-  // Definir columnas para la tabla directamente en el componente
-  const columns = useMemo(() => [
-    {
-      id: 'descripcion',
-      label: 'Descripción',
-      width: 2,
-      sortable: true,
-    },
-    {
-      id: 'monto',
-      label: 'Monto',
-      width: 1,
-      sortable: true,
-      render: (item: Gasto) => (
-        <ThemedText>${parseFloat(item.monto).toFixed(2)}</ThemedText>
-      ),
-    },
-    {
-      id: 'categoria',
-      label: 'Categoría',
-      width: 1,
-      sortable: true,
-      render: (item: Gasto) => (
-        <ThemedText style={{ color: getCategoryColor(item.categoria) }}>
-          {item.categoria.charAt(0).toUpperCase() + item.categoria.slice(1)}
-        </ThemedText>
-      ),
-    },
-    {
-      id: 'fecha',
-      label: 'Fecha',
-      width: 1,
-      sortable: true,
-      render: (item: Gasto) => (
-        <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>
-      ),
-    },
-  ], [getCategoryColor]);
-
-  // Función callback para manejar la eliminación
-  const handleDelete = useMemo(() => async (id: string | number) => {
-    const success = await deleteEntity(Number(id));
-    if (success) {
-      // Recargar la lista después de eliminar
-      loadEntities();
-    }
-    return success;
-  }, [deleteEntity, loadEntities]);
 
   return (
     <ScreenContainer 
@@ -133,19 +73,20 @@ export default function GastosScreen() {
             onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
           }}
           actions={{
-            onView: true,
-            onEdit: true,
-            onDelete: true
+            onView: true, // Todos pueden ver detalles
+            onEdit: isAdmin, // Solo admin puede editar directamente desde la tabla
+            onDelete: isAdmin // Solo admin puede eliminar directamente desde la tabla
           }}
+
           deleteOptions={{
             title: 'Eliminar Gasto',
             message: '¿Está seguro que desea eliminar este gasto?',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
-            onDelete: handleDelete
+            onDelete: async (id) => await deleteGasto(Number(id))
           }}
           emptyMessage="No hay gastos disponibles"
-          onRefresh={loadEntities}
+          onRefresh={refresh}
         />
         
         <FloatingActionButton 

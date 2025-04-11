@@ -333,8 +333,24 @@ export const almacenApi = {
 
 // API methods for Gasto
 export const gastoApi = {
-  getGastos: async (page = 1, perPage = 10): Promise<ApiResponse<Gasto>> => {
-    return fetchApi<ApiResponse<Gasto>>(`/gastos?page=${page}&per_page=${perPage}`);
+  getGastos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Gasto>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const queryString = queryParams.toString();
+    console.log(`Consultando gastos con parámetros: ${queryString}`);
+    
+    return fetchApi<ApiResponse<Gasto>>(`/gastos?${queryString}`);
   },
   
   getGasto: async (id: number): Promise<Gasto> => {

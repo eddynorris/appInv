@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+// app/gastos/[id].tsx
+import React, { useState, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Alert } from 'react-native';
 
@@ -8,49 +9,68 @@ import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { useGastos } from '@/hooks/crud/useGastos';
+import { useGastoItem } from '@/hooks/crud/useGastoItem';
+import { useAuth } from '@/context/AuthContext'; // Importar el contexto de autenticación
 import { Gasto } from '@/models';
 
 export default function GastoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [gasto, setGasto] = useState<Gasto | null>(null);
+  const { user } = useAuth(); // Obtener información del usuario
   
   const { 
-    entity, 
+    getGasto, 
+    deleteGasto, 
     isLoading, 
     error, 
-    loadEntity, 
-    deleteEntity,
-    getCategoryColor
-  } = useGastos();
-
-  // Tipo explícito para corregir errores de TypeScript
-  const gasto = entity as Gasto | null;
+    getCategoryColor 
+  } = useGastoItem();
   
-  // Referencia para controlar la primera carga
-  const isInitialMount = useRef(true);
-  
-  // Cargar datos al inicio, solo una vez
+  // Cargar datos del gasto
   useEffect(() => {
-    if (!id) return;
-    
     const fetchData = async () => {
-      console.log(`Cargando detalles de gasto ID: ${id}`);
-      await loadEntity(parseInt(id));
+      if (!id) return;
+      
+      const data = await getGasto(parseInt(id));
+      if (data) {
+        setGasto(data);
+      }
     };
     
     fetchData();
-  }, [id]); // Solo depende del ID
+  }, [id, getGasto]);
+  
+  // Determinar si el usuario tiene permisos para editar/eliminar este gasto
+  const canEditOrDelete = () => {
+    if (!user || !gasto) return false;
+    
+    // Admins pueden editar/eliminar cualquier gasto
+    if (user.rol === 'admin') return true;
+    
+    // Usuarios normales solo pueden editar/eliminar sus propios gastos
+    return gasto.usuario_id === user.id;
+  };
   
   const handleEdit = () => {
+    if (!canEditOrDelete()) {
+      Alert.alert('Acceso denegado', 'No tienes permiso para editar este gasto');
+      return;
+    }
     router.push(`/gastos/edit/${id}`);
   };
   
   const handleDelete = async () => {
     if (!id) return;
     
+    if (!canEditOrDelete()) {
+      Alert.alert('Acceso denegado', 'No tienes permiso para eliminar este gasto');
+      setShowDeleteDialog(false);
+      return;
+    }
+    
     try {
-      const success = await deleteEntity(parseInt(id));
+      const success = await deleteGasto(parseInt(id));
       if (success) {
         // Mostrar mensaje de éxito y redirigir
         Alert.alert(
@@ -58,13 +78,33 @@ export default function GastoDetailScreen() {
           'El gasto ha sido eliminado exitosamente',
           [{ text: 'OK', onPress: () => router.replace('/gastos') }]
         );
+      } else {
+        Alert.alert('Error', 'No se pudo eliminar el gasto');
       }
     } catch (error) {
-      console.error('Error deleting gasto:', error);
+      console.error('Error eliminando gasto:', error);
       Alert.alert('Error', 'No se pudo eliminar el gasto');
     } finally {
       setShowDeleteDialog(false);
     }
+  };
+
+  // Renderizar botones solo si tiene permisos
+  const renderActionButtons = () => {
+    // Si no tiene permisos, no mostrar botones
+    if (!canEditOrDelete()) {
+      return null;
+    }
+    
+    // Si tiene permisos, mostrar botones de acción
+    return (
+      <ActionButtons
+        onSave={handleEdit}
+        saveText="Editar"
+        onDelete={() => setShowDeleteDialog(true)}
+        showDelete={true}
+      />
+    );
   };
 
   return (
@@ -115,20 +155,18 @@ export default function GastoDetailScreen() {
               label="Categoría" 
               value={gasto.categoria} 
             />
-            {gasto.almacen && (
-              <DetailRow 
-                label="Almacén" 
-                value={gasto.almacen.nombre} 
-              />
-            )}
+            <DetailRow 
+              label="Creado por" 
+              value={gasto.almacen_id ? `${gasto.almacen?.nombre}` : 'No especificado'} 
+            />
+            <DetailRow 
+              label="Creado por" 
+              value={gasto.usuario_id ? `Usuario: ${gasto.usuario?.username}` : 'No especificado'} 
+            />
           </DetailSection>
 
-          <ActionButtons
-            onSave={handleEdit}
-            saveText="Editar"
-            onDelete={() => setShowDeleteDialog(true)}
-            showDelete={true}
-          />
+          {/* Renderizar botones condicionalmente */}
+          {renderActionButtons()}
         </DetailCard>
       )}
       

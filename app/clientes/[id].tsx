@@ -1,3 +1,4 @@
+// app/clientes/id.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 

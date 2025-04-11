@@ -58,6 +58,19 @@ export default function MoreScreen() {
               route="/pedidos" 
             />
           </ThemedView>
+          <ThemedView style={styles.section}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
+                <MenuItem 
+                  title="Gastos" 
+                  icon="banknote" 
+                  route="/gastos" 
+                />
+                <MenuItem 
+                  title="Pagos" 
+                  icon="creditcard" 
+                  route="/pagos" 
+                />
+              </ThemedView>
           {/* Show all sections for admin users */}
           {user?.rol === 'admin' && (
             <>
@@ -96,20 +109,6 @@ export default function MoreScreen() {
                   title="Inventarios" 
                   icon="list.clipboard.fill" 
                   route="/inventarios" 
-                />
-              </ThemedView>
-              
-              <ThemedView style={styles.section}>
-                <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
-                <MenuItem 
-                  title="Gastos" 
-                  icon="banknote" 
-                  route="/gastos" 
-                />
-                <MenuItem 
-                  title="Pagos" 
-                  icon="creditcard" 
-                  route="/pagos" 
                 />
               </ThemedView>
             </>
