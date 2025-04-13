@@ -352,7 +352,7 @@ export const gastoApi = {
     
     return fetchApi<ApiResponse<Gasto>>(`/gastos?${queryString}`);
   },
-  
+
   getGasto: async (id: number): Promise<Gasto> => {
     return fetchApi<Gasto>(`/gastos/${id}`);
   },
@@ -396,10 +396,23 @@ export const ventaApi = {
     
     return fetchApi<ApiResponse<Venta>>(url);
   },
-  
+
   getVenta: async (id: number): Promise<Venta> => {
     return fetchApi<Venta>(`/ventas/${id}`);
   },
+  
+  // Método para obtener TODAS las ventas sin paginación
+  getAllVentas: async (queryParams = ''): Promise<Venta[]> => {
+    let url = `/ventas?all=true`;
+    
+    // Si hay queryParams, agregarlos a la URL
+    if (queryParams && queryParams.length > 0) {
+      url = `${url}&${queryParams}`;
+    }
+    
+    return fetchApi<Venta[]>(url);
+  },
+  
 
   createVenta: async (venta: {
     cliente_id: number;
@@ -614,12 +627,25 @@ export const presentacionApi = {
 
 // API methods for Pagos
 export const pagoApi = {
-  getPagos: async (page = 1, perPage = 10, ventaId?: number): Promise<ApiResponse<any>> => {
-    let endpoint = `/pagos?page=${page}&per_page=${perPage}`;
-    if (ventaId) {
-      endpoint += `&venta_id=${ventaId}`;
-    }
-    return fetchApi<ApiResponse<any>>(endpoint);
+
+  getPagos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Gasto>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const queryString = queryParams.toString();
+    console.log(`Consultando gastos con parámetros: ${queryString}`);
+    
+    return fetchApi<ApiResponse<Gasto>>(`/pagos?${queryString}`);
   },
   
   getPago: async (id: number): Promise<any> => {

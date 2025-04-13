@@ -187,6 +187,7 @@ export const useVentas = () => {
     
     try {
       setIsLoadingOptions(true);
+      console.log('Cargando opciones (clientes y almacenes)...');
       
       // Cargar datos en paralelo para mayor eficiencia
       const [clientesRes, almacenesRes] = await Promise.all([

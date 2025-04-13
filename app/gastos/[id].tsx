@@ -156,7 +156,7 @@ export default function GastoDetailScreen() {
               value={gasto.categoria} 
             />
             <DetailRow 
-              label="Creado por" 
+              label="Almacen" 
               value={gasto.almacen_id ? `${gasto.almacen?.nombre}` : 'No especificado'} 
             />
             <DetailRow 

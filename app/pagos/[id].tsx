@@ -10,38 +10,35 @@ import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { pagoApi, API_CONFIG } from '@/services/api';
-import { Pago } from '@/models';
-import { Colors } from '@/constants/Colors';
+import { usePagoItem } from '@/hooks/crud/usePagoItem';
+import { API_CONFIG } from '@/services/api';
 
 export default function PagoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [pago, setPago] = useState<Pago | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [pago, setPago] = useState<any | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Usar el hook refactorizado para operaciones CRUD de un pago
+  const { 
+    getPago, 
+    deletePago, 
+    isLoading, 
+    error 
+  } = usePagoItem();
 
   // Cargar datos del pago
   useEffect(() => {
     const fetchPago = async () => {
       if (!id) return;
       
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const data = await pagoApi.getPago(parseInt(id));
+      const data = await getPago(parseInt(id));
+      if (data) {
         setPago(data);
-      } catch (err) {
-        console.error('Error fetching pago:', err);
-        setError(err instanceof Error ? err.message : 'Error al cargar los datos del pago');
-      } finally {
-        setIsLoading(false);
       }
     };
 
     fetchPago();
-  }, [id]);
+  }, [id, getPago]);
 
   // Navegación a pantalla de edición
   const handleEdit = useCallback(() => {
@@ -52,18 +49,13 @@ export default function PagoDetailScreen() {
   const handleDelete = useCallback(async () => {
     if (!id) return;
     
-    try {
-      setIsLoading(true);
-      await pagoApi.deletePago(parseInt(id));
+    const success = await deletePago(parseInt(id));
+    setShowDeleteDialog(false); // Siempre cerrar el diálogo
+    
+    if (success) {
       router.replace('/pagos');
-    } catch (error) {
-      console.error('Error deleting pago:', error);
-      setError('Error al eliminar el pago');
-      setIsLoading(false);
-    } finally {
-      setShowDeleteDialog(false);
     }
-  }, [id]);
+  }, [id, deletePago]);
 
   // Ver comprobante
   const viewReceipt = useCallback(() => {
@@ -92,7 +84,7 @@ export default function PagoDetailScreen() {
   return (
     <ScreenContainer
       title={pago ? `Pago #${pago.id}` : 'Detalles del Pago'}
-      isLoading={isLoading}
+      isLoading={isLoading && !pago}
       error={error}
       loadingMessage="Cargando datos del pago..."
     >
@@ -131,7 +123,50 @@ export default function PagoDetailScreen() {
             {pago.referencia && (
               <DetailRow label="Referencia" value={pago.referencia} />
             )}
+            {/* Mostrar el usuario que registró el pago si está disponible */}
+            {pago.usuario_id && (
+              <DetailRow label="Registrado por" value={`${pago.usuario?.username}`} />
+              
+            )}
           </DetailSection>
+          
+          {/* Sección de información de la venta y cliente */}
+          {pago.venta && (
+            <DetailSection title="Información de Venta">
+              {pago.venta.cliente && (
+                <DetailRow 
+                  label="Cliente" 
+                  value={
+                    <TouchableOpacity onPress={() => router.push(`/clientes/${pago.venta.cliente.id}`)}>
+                      <ThemedText style={styles.linkText}>{pago.venta.cliente.nombre}</ThemedText>
+                    </TouchableOpacity>
+                  }
+                />
+              )}
+              <DetailRow 
+                label="Total Venta" 
+                value={`${parseFloat(pago.venta.total || '0').toFixed(2)}`} 
+              />
+              <DetailRow 
+                label="Estado de Pago" 
+                value={
+                  <ThemedText style={{
+                    color: pago.venta.estado_pago === 'pagado' ? '#4CAF50' : 
+                           pago.venta.estado_pago === 'parcial' ? '#FF9800' : '#F44336'
+                  }}>
+                    {pago.venta.estado_pago === 'pagado' ? 'Pagado' :
+                     pago.venta.estado_pago === 'parcial' ? 'Pago Parcial' : 'Pendiente'}
+                  </ThemedText>
+                } 
+              />
+              {pago.venta.saldo_pendiente && (
+                <DetailRow 
+                  label="Saldo Pendiente" 
+                  value={`${parseFloat(pago.venta.saldo_pendiente).toFixed(2)}`} 
+                />
+              )}
+            </DetailSection>
+          )}
 
           {pago.url_comprobante && (
             <ThemedView style={styles.comprobante}>

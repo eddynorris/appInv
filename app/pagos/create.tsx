@@ -1,235 +1,146 @@
-// app/pagos/create.tsx - Versión refactorizada
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, Alert, View, ActivityIndicator, ScrollView } from 'react-native';
+// app/pagos/create.tsx
+import React, { useEffect } from 'react';
+import { StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { PaymentForm } from '@/components/form/PaymentForm';
-import { pagoApi, ventaApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Venta } from '@/models';
-import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';
-
-// Tipos
-interface FormData {
-  venta_id: string;
-  monto: string;
-  fecha: string;
-  metodo_pago: string;
-  referencia: string;
-}
+import { usePagoItem } from '@/hooks/crud/usePagoItem';
+import { useVentasPendientes } from '@/hooks/crud/useVentasPendientes';
+import { useForm } from '@/hooks/useForm';
 
 export default function CreatePagoScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [ventas, setVentas] = useState<Venta[]>([]);
-  const [isLoadingVentas, setIsLoadingVentas] = useState(true);
   
-  // Usar hook personalizado para la gestión de archivos
+  // Hook para gestión de ventas pendientes
   const { 
-    file: comprobante, 
-    setFile: setComprobante,
+    ventaOptions, 
+    selectedVentaId, 
+    selectedVentaInfo, 
+    setSelectedVentaId, 
+    isLoading: isLoadingVentas, 
+    error: ventasError 
+  } = useVentasPendientes();
+  
+  // Hook para operaciones CRUD de pagos
+  const { 
+    createPago, 
+    isLoading: isPagoLoading, 
+    error: pagoError,
+    comprobante,
+    existingComprobante,
+    setComprobante,
+    setExistingComprobante,
     pickImage,
     takePhoto,
     pickDocument
-  } = useImageUploader({
-    maxSizeMB: 5,
-    allowedTypes: ['image', 'document']
-  });
+  } = usePagoItem();
   
-  // Estado del formulario
-  const [formData, setFormData] = useState<FormData>({
-    venta_id: '',
+  // Hook para manejo del formulario
+  const { 
+    formData, 
+    errors, 
+    isSubmitting, 
+    handleChange, 
+    handleSubmit, 
+    validate,
+    setErrors 
+  } = useForm({
+    venta_id: selectedVentaId,
     monto: '',
-    fecha: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
+    fecha: new Date().toISOString().split('T')[0],
     metodo_pago: 'efectivo',
     referencia: '',
   });
 
-  // Estado de errores
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Cargar ventas disponibles para asignar pagos
+  // Actualizar el ID de venta cuando cambie la selección
   useEffect(() => {
-    const loadVentas = async () => {
-      try {
-        setIsLoadingVentas(true);
-        const response = await ventaApi.getVentas(1, 100);
-        
-        if (response && response.data) {
-          // Filtrar solo ventas con pagos pendientes
-          const ventasConPendientes = response.data.filter(venta => 
-            venta.estado_pago === 'pendiente' || venta.estado_pago === 'parcial'
-          );
-          setVentas(ventasConPendientes);
-          
-          // Si hay ventas, preseleccionar la primera
-          if (ventasConPendientes.length > 0) {
-            setFormData(prev => ({
-              ...prev,
-              venta_id: ventasConPendientes[0].id.toString()
-            }));
-          }
-        }
-      } catch (error) {
-        console.error('Error al cargar ventas:', error);
-        Alert.alert('Error', 'No se pudieron cargar las ventas disponibles');
-      } finally {
-        setIsLoadingVentas(false);
+    if (selectedVentaId) {
+      handleChange('venta_id', selectedVentaId);
+    }
+  }, [selectedVentaId, handleChange]);
+
+  // Reglas de validación para el formulario
+  const validationRules = {
+    venta_id: (value: string) => !value.trim() ? 'La venta es requerida' : null,
+    monto: (value: string) => {
+      if (!value.trim()) return 'El monto es requerido';
+      if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un monto válido';
+      if (selectedVentaInfo && parseFloat(value) > parseFloat(selectedVentaInfo.saldoPendiente)) {
+        return `El monto supera el saldo pendiente (${selectedVentaInfo.saldoPendiente})`;
       }
-    };
-    
-    loadVentas();
-  }, []);
-
-  // Handler de cambio de campos
-  const handleChange = useCallback((field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  }, [errors]);
-
-  // Validación de formulario
-  const validate = useCallback(() => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.venta_id) {
-      newErrors.venta_id = 'La venta es requerida';
-    }
-    
-    if (!formData.monto.trim()) {
-      newErrors.monto = 'El monto es requerido';
-    } else if (isNaN(parseFloat(formData.monto)) || parseFloat(formData.monto) <= 0) {
-      newErrors.monto = 'Ingrese un monto válido';
-    } else if (ventaInfo && parseFloat(formData.monto) > parseFloat(ventaInfo.saldoPendiente)) {
-      newErrors.monto = `El monto supera el saldo pendiente ($${ventaInfo.saldoPendiente})`;
-    }
-    
+      return null;
+    },
     // Solo para transferencias exigimos referencia y comprobante
-    if (formData.metodo_pago === 'transferencia') {
-      if (!formData.referencia?.trim()) {
-        newErrors.referencia = 'La referencia es requerida para transferencias';
-      }
-      
-      if (!comprobante) {
-        newErrors.comprobante = 'El comprobante es requerido para transferencias';
-      }
+    referencia: (value: string) => {
+      if (formData.metodo_pago !== 'transferencia') return null;
+      return !value.trim() ? 'La referencia es requerida para transferencias' : null;
     }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData, comprobante, ventaInfo]);
+  };
 
-  // Envío del formulario
-  const handleSubmit = useCallback(async () => {
-    if (!validate()) {
+  // Validación adicional para comprobante
+  const validateComprobante = () => {
+    if (formData.metodo_pago === 'transferencia' && !comprobante) {
+      setErrors(prev => ({
+        ...prev,
+        comprobante: 'El comprobante es requerido para transferencias'
+      }));
+      return false;
+    }
+    return true;
+  };
+
+  // Manejar envío del formulario
+  const submitForm = async () => {
+    // Validar reglas del formulario y comprobante
+    if (!validate(validationRules) || !validateComprobante()) {
       return;
     }
     
     try {
-      setIsSubmitting(true);
-      
-      // Crear el objeto base de datos del pago
+      // Preparar los datos del pago
       const pagoData = {
         venta_id: parseInt(formData.venta_id),
         monto: formData.monto.replace(',', '.'),
         fecha: formData.fecha,
         metodo_pago: formData.metodo_pago,
-        referencia: formData.referencia || null
+        referencia: formData.referencia || undefined
       };
       
-      let response;
-      
-      // Si hay un comprobante, usar el método con comprobante
-      if (comprobante) {
-        response = await pagoApi.createPagoWithComprobante(pagoData, comprobante.uri);
-      } else {
-        // Si no hay comprobante, usar el método JSON estándar
-        response = await pagoApi.createPago(pagoData);
-      }
+      // Crear el pago
+      const response = await createPago(pagoData);
       
       if (response) {
         Alert.alert(
           'Pago Registrado',
           'El pago ha sido registrado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace('/pagos') 
-            }
-          ]
+          [{ text: 'OK', onPress: () => router.replace('/pagos') }]
         );
+        return true;
       } else {
-        Alert.alert('Error', 'No se pudo registrar el pago');
+        throw new Error(pagoError || 'No se pudo registrar el pago');
       }
-    } catch (err) {
-      // Intentar obtener un mensaje de error más específico
-      let errorMessage = 'Ocurrió un error al registrar el pago';
-      
-      if (err.response?.data) {
-        if (typeof err.response.data === 'string') {
-          errorMessage = err.response.data;
-        } else if (err.response.data.error) {
-          errorMessage = err.response.data.error;
-        } else if (err.response.data.message) {
-          errorMessage = err.response.data.message;
-        }
-      } else if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      console.error('Error al registrar pago:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Ocurrió un error al registrar el pago');
+      return false;
     }
-  }, [formData, comprobante, validate]);
+  };
 
-  // Obtener información de la venta seleccionada (memoizada)
-  const ventaInfo = useMemo(() => {
-    if (!formData.venta_id) return null;
-    
-    const ventaSeleccionada = ventas.find(v => v.id.toString() === formData.venta_id);
-    if (!ventaSeleccionada) return null;
-    
-    return {
-      total: parseFloat(ventaSeleccionada.total).toFixed(2),
-      cliente: ventaSeleccionada.cliente?.nombre || 'Cliente no disponible',
-      saldoPendiente: ventaSeleccionada.saldo_pendiente 
-        ? parseFloat(ventaSeleccionada.saldo_pendiente).toFixed(2)
-        : parseFloat(ventaSeleccionada.total).toFixed(2)
-    };
-  }, [formData.venta_id, ventas]);
+  // Manejar cambio de venta seleccionada
+  const handleVentaChange = (value: string) => {
+    setSelectedVentaId(value);
+    handleChange('venta_id', value); // Actualizar el formulario con el nuevo ID de venta
+  };
 
-  // Opciones de venta para el selector (memoizadas)
-  const ventaOptions = useMemo(() => {
-    return ventas.map(venta => ({
-      id: venta.id.toString(),
-      label: `Venta #${venta.id} - ${venta.cliente?.nombre || 'Cliente'} - $${parseFloat(venta.total).toFixed(2)}`,
-      saldoPendiente: venta.saldo_pendiente || venta.total
-    }));
-  }, [ventas]);
-
-  // Renderizar pantalla de carga
+  // Mostrar pantalla de carga mientras se cargan las ventas
   if (isLoadingVentas) {
     return (
       <>
-        <Stack.Screen options={{ 
-          title: 'Registrar Pago',
-          headerShown: true 
-        }} />
-        
+        <Stack.Screen options={{ title: 'Registrar Pago', headerShown: true }} />
         <ThemedView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
           <ThemedText>Cargando ventas disponibles...</ThemedText>
@@ -238,18 +149,13 @@ export default function CreatePagoScreen() {
     );
   }
 
-  // Renderizar mensaje si no hay ventas disponibles
-  if (ventas.length === 0) {
+  // Mostrar mensaje si no hay ventas disponibles
+  if (ventaOptions.length === 0) {
     return (
       <>
-        <Stack.Screen options={{ 
-          title: 'Registrar Pago',
-          headerShown: true 
-        }} />
-        
+        <Stack.Screen options={{ title: 'Registrar Pago', headerShown: true }} />
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
-          
           <ThemedView style={styles.errorContainer}>
             <ThemedText style={styles.errorText}>
               No hay ventas con pagos pendientes
@@ -259,6 +165,9 @@ export default function CreatePagoScreen() {
       </>
     );
   }
+
+  // Determinar si se está procesando
+  const isProcessing = isSubmitting || isPagoLoading;
 
   return (
     <>
@@ -271,19 +180,32 @@ export default function CreatePagoScreen() {
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
 
+          {pagoError && !isProcessing && (
+            <ThemedView style={styles.errorContainer}>
+              <ThemedText style={styles.errorText}>{pagoError}</ThemedText>
+            </ThemedView>
+          )}
+
           <PaymentForm
             formData={formData}
             errors={errors}
-            isSubmitting={isSubmitting}
-            onChange={handleChange}
-            onSubmit={handleSubmit}
+            isSubmitting={isProcessing}
+            onChange={(field, value) => {
+              // Manejar el cambio de venta_id de forma especial
+              if (field === 'venta_id') {
+                handleVentaChange(value);
+              } else {
+                handleChange(field, value);
+              }
+            }}
+            onSubmit={() => handleSubmit(submitForm)}
             onCancel={() => router.back()}
             comprobante={comprobante}
             setComprobante={setComprobante}
-            existingComprobante={null}
-            setExistingComprobante={() => {}}
+            existingComprobante={existingComprobante}
+            setExistingComprobante={setExistingComprobante}
             ventaOptions={ventaOptions}
-            ventaInfo={ventaInfo}
+            ventaInfo={selectedVentaInfo}
             pickImage={pickImage}
             takePhoto={takePhoto}
             pickDocument={pickDocument}
@@ -309,15 +231,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   errorContainer: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 12,
     backgroundColor: 'rgba(229, 57, 53, 0.1)',
     borderRadius: 8,
+    marginBottom: 16,
   },
   errorText: {
     color: '#E53935',
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
   }
 });

@@ -1,74 +1,97 @@
-// app/pagos/edit/[id].tsx - Versión refactorizada
-import React, { useState, useEffect, useMemo } from 'react';
+// app/pagos/edit/[id].tsx
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { PaymentForm } from '@/components/form/PaymentForm';
-import { pagoApi, API_CONFIG } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { usePagoItem } from '@/hooks/crud/usePagoItem';
+import { useForm } from '@/hooks/useForm';
 import { Pago } from '@/models';
-import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';
 
 export default function EditPagoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme() ?? 'light';
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Estado del formulario
-  const [formData, setFormData] = useState<Partial<Pago>>({
+  const [ventaId, setVentaId] = useState<string>('');
+  const [isFetchingInitial, setIsFetchingInitial] = useState(true);
+  const [ventaInfo, setVentaInfo] = useState<{
+    total: string;
+    cliente: string;
+    saldoPendiente: string;
+  } | null>(null);
+
+  // Hook para operaciones CRUD de pagos
+  const {
+    getPago,
+    updatePago,
+    isLoading: isPagoLoading,
+    error: pagoError,
+    comprobante,
+    existingComprobante,
+    setComprobante,
+    setExistingComprobante,
+    pickImage,
+    takePhoto,
+    pickDocument
+  } = usePagoItem();
+
+  // Hook para manejo del formulario
+  const {
+    formData,
+    errors,
+    isSubmitting,
+    handleChange,
+    handleSubmit,
+    validate,
+    setFormData,
+    setErrors
+  } = useForm({
     monto: '',
     fecha: new Date().toISOString().split('T')[0],
     metodo_pago: 'efectivo',
     referencia: '',
+    venta_id: ''
   });
 
-  // Estado de errores
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Gestión de archivos con el hook personalizado
-  const { 
-    file: comprobante, 
-    setFile: setComprobante,
-    pickImage,
-    takePhoto,
-    pickDocument
-  } = useImageUploader({
-    maxSizeMB: 5,
-    allowedTypes: ['image', 'document']
-  });
-
-  // Comprobante existente
-  const [existingComprobante, setExistingComprobante] = useState<string | null>(null);
-
-  // Cargar datos del pago
+  // Cargar los datos del pago
   useEffect(() => {
     const fetchPago = async () => {
       if (!id) return;
-      
+
       try {
-        setIsLoading(true);
-        const response = await pagoApi.getPago(parseInt(id));
-        
-        if (response) {
-          // Asegurar que la fecha sea correcta
-          const fechaFormateada = response.fecha 
-            ? new Date(response.fecha).toISOString().split('T')[0] 
+        setIsFetchingInitial(true);
+        const pago = await getPago(parseInt(id));
+
+        if (pago) {
+          // Formatear fecha correctamente
+          const fechaFormateada = pago.fecha
+            ? new Date(pago.fecha).toISOString().split('T')[0]
             : new Date().toISOString().split('T')[0];
-            
+
+          // Actualizar el formulario con los datos
           setFormData({
-            venta_id: response.venta_id.toString(),
-            monto: response.monto || '',
+            venta_id: pago.venta_id.toString(),
+            monto: pago.monto || '',
             fecha: fechaFormateada,
-            metodo_pago: response.metodo_pago || 'efectivo',
-            referencia: response.referencia || '',
+            metodo_pago: pago.metodo_pago || 'efectivo',
+            referencia: pago.referencia || '',
           });
-          
-          if (response.url_comprobante) {
-            setExistingComprobante(response.url_comprobante);
+
+          // Guardar el ID de la venta para referencia
+          setVentaId(pago.venta_id.toString());
+
+          // Establecer info detallada de la venta para mostrar
+          if (pago.venta) {
+            setVentaInfo({
+              total: parseFloat(pago.venta.total).toFixed(2),
+              cliente: pago.venta?.cliente?.nombre || 'Cliente no disponible',
+              saldoPendiente: pago.venta.saldo_pendiente 
+                ? parseFloat(pago.venta.saldo_pendiente).toFixed(2) 
+                : '0.00'
+            });
           }
         } else {
           Alert.alert('Error', 'No se pudo cargar los datos del pago');
@@ -79,126 +102,82 @@ export default function EditPagoScreen() {
         Alert.alert('Error', 'No se pudo cargar los datos del pago');
         router.back();
       } finally {
-        setIsLoading(false);
+        setIsFetchingInitial(false);
       }
     };
 
     fetchPago();
-  }, [id]);
+  }, [id, getPago, setFormData]);
 
-  // Handler de cambio de campos
-  const handleChange = (field: keyof Pago, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Limpiar error cuando se cambia el campo
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
+  // Reglas de validación para el formulario
+  const validationRules = {
+    monto: (value: string) => {
+      if (!value.trim()) return 'El monto es requerido';
+      if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un monto válido';
+      return null;
+    },
+    // Solo para transferencias exigimos referencia
+    referencia: (value: string) => {
+      if (formData.metodo_pago !== 'transferencia') return null;
+      return !value.trim() ? 'La referencia es requerida para transferencias' : null;
     }
   };
 
-  // Validación del formulario
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.monto?.trim()) {
-      newErrors.monto = 'El monto es requerido';
-    } else if (isNaN(parseFloat(formData.monto)) || parseFloat(formData.monto) <= 0) {
-      newErrors.monto = 'Ingrese un monto válido';
+  // Validación adicional para comprobante
+  const validateComprobante = () => {
+    if (formData.metodo_pago === 'transferencia' && !existingComprobante && !comprobante) {
+      setErrors(prev => ({
+        ...prev,
+        comprobante: 'El comprobante es requerido para transferencias'
+      }));
+      return false;
     }
-    
-    // Si el método de pago es transferencia, se requiere referencia
-    if (formData.metodo_pago === 'transferencia') {
-      if (!formData.referencia?.trim()) {
-        newErrors.referencia = 'La referencia es requerida para transferencias';
-      }
-      
-      // Si no hay comprobante existente y tampoco se ha seleccionado uno nuevo
-      if (!existingComprobante && !comprobante) {
-        newErrors.comprobante = 'El comprobante es requerido para transferencias';
-      }
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return true;
   };
 
-  // Envío del formulario
-  const handleSubmit = async () => {
-    if (!validate() || !id) {
+  // Manejar envío del formulario
+  const submitForm = async () => {
+    if (!id) return;
+
+    // Validar reglas del formulario y comprobante
+    if (!validate(validationRules) || !validateComprobante()) {
       return;
     }
-    
+
     try {
-      setIsSubmitting(true);
-      
-      // Asegurar que la fecha está en el formato correcto para la API
-      let fechaFormateada = formData.fecha;
-      if (fechaFormateada && !fechaFormateada.includes('T')) {
-        fechaFormateada = `${fechaFormateada}T00:00:00Z`;
-      }
-      
+      // Preparar los datos del pago
       const pagoData = {
-        monto: formData.monto?.replace(',', '.'),
-        fecha: fechaFormateada,
+        monto: formData.monto.replace(',', '.'),
+        fecha: formData.fecha,
         metodo_pago: formData.metodo_pago,
-        referencia: formData.referencia
+        referencia: formData.referencia || undefined
       };
-      
-      let response;
-      
-      // Si hay un nuevo comprobante, usar el método con comprobante
-      if (comprobante) {
-        response = await pagoApi.updatePagoWithComprobante(parseInt(id), pagoData, comprobante.uri);
-      } else {
-        response = await pagoApi.updatePago(parseInt(id), pagoData);
-      }
-      
+
+      // Actualizar el pago
+      const response = await updatePago(parseInt(id), pagoData);
+
       if (response) {
         Alert.alert(
           'Pago Actualizado',
           'El pago ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back()
-            }
-          ]
+          [{ text: 'OK', onPress: () => router.back() }]
         );
+        return true;
       } else {
-        Alert.alert('Error', 'No se pudo actualizar el pago');
+        throw new Error(pagoError || 'No se pudo actualizar el pago');
       }
-    } catch (err) {
-      console.error('Error al actualizar pago:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al actualizar el pago';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      console.error('Error al actualizar pago:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Ocurrió un error al actualizar el pago');
+      return false;
     }
   };
 
-  // Función para ver el comprobante existente
-  const viewExistingComprobante = () => {
-    if (existingComprobante) {
-      const comprobanteUrl = `${API_CONFIG.baseUrl}/uploads/${existingComprobante}`;
-      Alert.alert('Comprobante', `URL: ${comprobanteUrl}`);
-    }
-  };
-
-  // Si está cargando, mostrar indicador
-  if (isLoading) {
+  // Mostrar pantalla de carga durante la carga inicial
+  if (isFetchingInitial) {
     return (
       <>
-        <Stack.Screen options={{ 
-          title: 'Editar Pago',
-          headerShown: true 
-        }} />
+        <Stack.Screen options={{ title: 'Editar Pago', headerShown: true }} />
         <ThemedView style={[styles.container, styles.loadingContainer]}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
           <ThemedText>Cargando datos del pago...</ThemedText>
@@ -206,6 +185,9 @@ export default function EditPagoScreen() {
       </>
     );
   }
+
+  // Determinar si se está procesando
+  const isProcessing = isSubmitting || isPagoLoading;
 
   return (
     <>
@@ -218,17 +200,24 @@ export default function EditPagoScreen() {
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Editar Pago</ThemedText>
 
+          {pagoError && !isProcessing && (
+            <ThemedView style={styles.errorContainer}>
+              <ThemedText style={styles.errorText}>{pagoError}</ThemedText>
+            </ThemedView>
+          )}
+
           <PaymentForm
             formData={formData}
             errors={errors}
-            isSubmitting={isSubmitting}
+            isSubmitting={isProcessing}
             onChange={handleChange}
-            onSubmit={handleSubmit}
+            onSubmit={() => handleSubmit(submitForm)}
             onCancel={() => router.back()}
             comprobante={comprobante}
             setComprobante={setComprobante}
             existingComprobante={existingComprobante}
             setExistingComprobante={setExistingComprobante}
+            ventaInfo={ventaInfo}
             isEdit={true}
             pickImage={pickImage}
             takePhoto={takePhoto}
@@ -251,5 +240,17 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 16,
+  },
+  errorContainer: {
+    padding: 12,
+    backgroundColor: 'rgba(229, 57, 53, 0.1)',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#E53935',
+    fontSize: 14,
+    textAlign: 'center',
   }
 });
