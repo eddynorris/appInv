@@ -1,174 +1,143 @@
-import React, { useEffect } from 'react';
-import { View, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+// app/lotes/[id].tsx
+import React, { useState, useEffect, useRef } from 'react';
+import { Alert, View, StyleSheet } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { AntDesign } from '@expo/vector-icons';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { ThemedView } from '@/components/ThemedView';
+import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
 import { ThemedText } from '@/components/ThemedText';
-import { Divider } from '@/components/layout/Divider';
-import { Button } from '@/components/buttons/Button';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { useLotes } from '@/hooks/crud/useLotes';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
+import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
+import { useLoteItem } from '@/hooks/crud/useLoteItem';
+import { Lote } from '@/models';
 
 export default function LoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const colorScheme = useColorScheme();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [lote, setLote] = useState<Lote | null>(null);
+  const [localLoading, setLocalLoading] = useState(false);
+  const initialLoadDone = useRef(false);
   
-  const {
-    lote,
-    isLoading,
+  const { 
+    getLote, 
+    deleteLote, 
+    isLoading, 
     error,
-    loadLote,
-    confirmDelete,
     calcularRendimiento
-  } = useLotes();
+  } = useLoteItem();
   
-  // Cargar datos del lote al montar
+  // Cargar datos del lote una sola vez
   useEffect(() => {
-    if (id) {
-      loadLote(parseInt(id));
-    }
-  }, [id, loadLote]);
+    const fetchLoteData = async () => {
+      if (!id || initialLoadDone.current) return;
+      
+      try {
+        setLocalLoading(true);
+        initialLoadDone.current = true; // Marcar que ya iniciamos la carga
+        
+        const data = await getLote(parseInt(id));
+        if (data) {
+          setLote(data);
+        }
+      } catch (error) {
+        console.error('Error cargando datos del lote:', error);
+      } finally {
+        setLocalLoading(false);
+      }
+    };
+    
+    fetchLoteData();
+  }, [id]); // No incluir getLote como dependencia
   
-  // Función para formatear la fecha
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+  // Manejar la navegación a edición
+  const handleEdit = () => {
+    router.push(`/lotes/edit/${id}`);
+  };
+  
+  // Manejar la eliminación
+  const handleDelete = async () => {
+    if (!id) return;
+    
+    const success = await deleteLote(parseInt(id));
+    setShowDeleteDialog(false);
+    
+    if (success) {
+      Alert.alert(
+        'Lote Eliminado',
+        'El lote ha sido eliminado exitosamente',
+        [{ text: 'OK', onPress: () => router.replace('/lotes') }]
+      );
+    } else {
+      Alert.alert('Error', 'No se pudo eliminar el lote');
+    }
   };
   
   // Calcular rendimiento
   const rendimiento = lote && lote.peso_seco_kg ? 
     calcularRendimiento(
-      parseFloat(lote.peso_humedo_kg), 
-      parseFloat(lote.peso_seco_kg)
+      parseFloat(lote.peso_humedo_kg.toString()), 
+      parseFloat(lote.peso_seco_kg.toString())
     ) : 
     'No disponible';
   
   return (
     <ScreenContainer 
-      title="Detalle de Lote" 
-      isLoading={isLoading} 
+      title={lote ? `Lote #${lote.id}` : 'Detalles del Lote'}
+      isLoading={isLoading || localLoading}
       error={error}
-      loadingMessage="Cargando detalle del lote..."
+      loadingMessage="Cargando datos del lote..."
     >
-      <ScrollView>
-        {lote && (
-          <>
-            <View style={styles.header}>
-              <ThemedText type="title">Lote #{lote.id}</ThemedText>
-              <View style={styles.actions}>
-                <TouchableOpacity onPress={() => router.push(`/lotes/edit/${lote.id}`)}>
-                  <AntDesign 
-                    name="edit" 
-                    size={24} 
-                    color={Colors[colorScheme ?? 'light'].text} 
-                    style={{ marginRight: 20 }}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => confirmDelete(lote.id, true)}>
-                  <AntDesign 
-                    name="delete" 
-                    size={24} 
-                    color="#E53935" 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <ThemedView style={styles.card}>
-              <ThemedText type="subtitle">Información General</ThemedText>
-              <Divider style={{ marginVertical: 12 }} />
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Producto:</ThemedText>
-                <ThemedText style={styles.value}>{lote.producto?.nombre || 'No especificado'}</ThemedText>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Proveedor:</ThemedText>
-                <ThemedText style={styles.value}>{lote.proveedor?.nombre || 'No especificado'}</ThemedText>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Descripcion:</ThemedText>
-                <ThemedText style={styles.value}>{lote.descripcion}</ThemedText>
-              </View>
-
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Fecha de Ingreso:</ThemedText>
-                <ThemedText style={styles.value}>{formatDate(lote.fecha_ingreso)}</ThemedText>
-              </View>
-
-            </ThemedView>
-            
-            <ThemedView style={styles.card}>
-              <ThemedText type="subtitle">Información de Peso</ThemedText>
-              <Divider style={{ marginVertical: 12 }} />
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Peso Húmedo:</ThemedText>
-                <ThemedText style={styles.value}>{parseFloat(lote.peso_humedo_kg).toFixed(2)} kg</ThemedText>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Peso Seco:</ThemedText>
-                <ThemedText style={styles.value}>
-                  {lote.peso_seco_kg ? parseFloat(lote.peso_seco_kg).toFixed(2) + ' kg' : 'No registrado'}
-                </ThemedText>
-              </View>
-
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Diponible:</ThemedText>
-                <ThemedText style={styles.value}>
-                  {lote.cantidad_disponible_kg ? parseFloat(lote.cantidad_disponible_kg).toFixed(2) + ' kg' : 'No registrado'}
-                </ThemedText>
-              </View>
-              
-              <View style={styles.infoRow}>
-                <ThemedText style={styles.label}>Rendimiento:</ThemedText>
-                <ThemedText style={styles.value}>{rendimiento}</ThemedText>
-              </View>
-            </ThemedView>
-            
-            <Button 
-              text="Volver al Listado" 
-              onPress={() => router.back()} 
-              type="secondary"
-              style={{ marginTop: 20 }}
+      {lote && (
+        <DetailCard>
+          <ThemedText type="title">Lote #{lote.id}</ThemedText>
+          
+          <DetailSection title="Información General">
+            <DetailRow label="Producto" value={lote.producto?.nombre || 'No especificado'} />
+            <DetailRow label="Proveedor" value={lote.proveedor?.nombre || 'No especificado'} />
+            <DetailRow label="Descripción" value={lote.descripcion || 'No especificada'} />
+            <DetailRow 
+              label="Fecha de Ingreso" 
+              value={new Date(lote.fecha_ingreso).toLocaleDateString()} 
             />
-          </>
-        )}
-      </ScrollView>
+          </DetailSection>
+          
+          <DetailSection title="Información de Peso">
+            <DetailRow 
+              label="Peso Húmedo" 
+              value={`${parseFloat(lote.peso_humedo_kg.toString()).toFixed(2)} kg`} 
+            />
+            <DetailRow 
+              label="Peso Seco" 
+              value={lote.peso_seco_kg ? `${parseFloat(lote.peso_seco_kg.toString()).toFixed(2)} kg` : 'No registrado'} 
+            />
+            <DetailRow 
+              label="Disponible" 
+              value={lote.cantidad_disponible_kg ? `${parseFloat(lote.cantidad_disponible_kg.toString()).toFixed(2)} kg` : 'No registrado'} 
+            />
+            <DetailRow 
+              label="Rendimiento" 
+              value={rendimiento} 
+            />
+          </DetailSection>
+          
+          <ActionButtons
+            onSave={handleEdit}
+            saveText="Editar"
+            onDelete={() => setShowDeleteDialog(true)}
+            showDelete={true}
+          />
+        </DetailCard>
+      )}
+      
+      <ConfirmationDialog
+        visible={showDeleteDialog}
+        title="Eliminar Lote"
+        message="¿Está seguro que desea eliminar este lote? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  actions: {
-    flexDirection: 'row',
-  },
-  card: {
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  label: {
-    fontWeight: '500',
-    width: 140,
-  },
-  value: {
-    flex: 1,
-  }
-});

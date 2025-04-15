@@ -1,6 +1,6 @@
 // app/lotes/edit/[id].tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { View } from 'react-native';
+import { View, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 
@@ -12,57 +12,80 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useLotes } from '@/hooks/crud/useLotes';
+import { useLoteItem } from '@/hooks/crud/useLoteItem';
 
 export default function EditLoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  const [isLoadingInitial, setIsLoadingInitial] = useState(true);
-  const dataLoaded = useRef(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const initialLoadDone = useRef(false);
   
-  const { 
+  // Usar el hook refactorizado
+  const {
     form,
+    validationRules,
     isLoading,
     isLoadingOptions,
     error,
     updateLote,
-    validationRules,
+    loadLoteForEdit,
     productos,
-    proveedores,
-    loadLoteForEdit
-  } = useLotes();
+    proveedores
+  } = useLoteItem();
   
   const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
   
-  // Cargar datos del lote una sola vez al montar
+  // Cargar datos del lote una sola vez
   useEffect(() => {
-    if (!id || dataLoaded.current) return;
-    
     const fetchData = async () => {
+      if (!id || initialLoadDone.current) return;
+      
       try {
-        console.log(`Cargando datos para lote ID: ${id}`);
+        initialLoadDone.current = true; // Marcar que ya iniciamos la carga
         await loadLoteForEdit(parseInt(id));
-        dataLoaded.current = true;
-        setIsLoadingInitial(false);
+        setIsDataLoaded(true);
       } catch (error) {
-        console.error('Error cargando lote:', error);
-        setIsLoadingInitial(false);
+        console.error('Error cargando datos del lote:', error);
+        Alert.alert(
+          'Error',
+          'No se pudieron cargar los datos del lote',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
       }
     };
     
     fetchData();
-  }, [id]);  // Quitamos loadLoteForEdit de las dependencias para evitar el bucle
-
+  }, [id]); // No incluir loadLoteForEdit como dependencia
+  
+  // Función para manejar el envío del formulario
+  const submitForm = async () => {
+    if (!id) return false;
+    
+    const response = await updateLote(parseInt(id), formData);
+    
+    if (response) {
+      Alert.alert(
+        'Lote Actualizado',
+        'El lote ha sido actualizado exitosamente',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+      return true;
+    } else {
+      Alert.alert('Error', error || 'No se pudo actualizar el lote');
+      return false;
+    }
+  };
+  
   return (
     <ScreenContainer 
-      title="Editar Lote" 
-      isLoading={isLoading || isLoadingOptions || isLoadingInitial}
+      title="Editar Lote"
+      isLoading={(isLoading || isLoadingOptions) && !isDataLoaded}
       error={error}
       loadingMessage="Cargando datos del lote..."
     >
       <ThemedText type="title" style={{ marginBottom: 20 }}>Editar Lote</ThemedText>
-
+      
       {/* Selección de Producto */}
       <ThemedView style={{ marginBottom: 16 }}>
         <ThemedText style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>
@@ -79,6 +102,7 @@ export default function EditLoteScreen() {
             onValueChange={(value) => handleChange('producto_id', value.toString())}
             style={{ color: Colors[colorScheme].text }}
             dropdownIconColor={Colors[colorScheme].text}
+            enabled={!isSubmitting}
           >
             {productos.map((producto) => (
               <Picker.Item 
@@ -111,6 +135,7 @@ export default function EditLoteScreen() {
             onValueChange={(value) => handleChange('proveedor_id', value.toString())}
             style={{ color: Colors[colorScheme].text }}
             dropdownIconColor={Colors[colorScheme].text}
+            enabled={!isSubmitting}
           >
             <Picker.Item 
               label="(Sin proveedor)" 
@@ -130,13 +155,15 @@ export default function EditLoteScreen() {
       </ThemedView>
       
       <FormField
-        label="Descripcion"
+        label="Descripción"
         value={formData.descripcion}
         onChangeText={(value) => handleChange('descripcion', value)}
         placeholder="Descripción del lote"
         error={errors.descripcion}
-        required
+        multiline
+        disabled={isSubmitting}
       />
+
       <FormField
         label="Peso Húmedo (kg)"
         value={formData.peso_humedo_kg}
@@ -145,6 +172,7 @@ export default function EditLoteScreen() {
         error={errors.peso_humedo_kg}
         keyboardType="numeric"
         required
+        disabled={isSubmitting}
       />
 
       <FormField
@@ -154,6 +182,7 @@ export default function EditLoteScreen() {
         placeholder="0.00"
         error={errors.peso_seco_kg}
         keyboardType="numeric"
+        disabled={isSubmitting}
       />
       
       <FormField
@@ -163,18 +192,19 @@ export default function EditLoteScreen() {
         placeholder="0.00"
         error={errors.cantidad_disponible_kg}
         keyboardType="numeric"
+        disabled={isSubmitting}
       />
 
-      {/* Reemplazamos el FormField por DateField */}
       <DateField
         label="Fecha de Ingreso"
         value={formData.fecha_ingreso}
         onChange={(value) => handleChange('fecha_ingreso', value)}
         error={errors.fecha_ingreso}
+        disabled={isSubmitting}
       />
 
       <ActionButtons
-        onSave={() => id && handleSubmit(() => updateLote(parseInt(id)), validationRules)}
+        onSave={() => id && handleSubmit(submitForm, validationRules)}
         onCancel={() => router.back()}
         isSubmitting={isSubmitting}
         saveText="Guardar Cambios"

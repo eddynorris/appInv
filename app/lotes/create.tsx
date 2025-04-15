@@ -1,5 +1,6 @@
-import React from 'react';
-import { View } from 'react-native';
+// app/lotes/create.tsx
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 
@@ -11,12 +12,15 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useLotes } from '@/hooks/crud/useLotes';
+import { useLoteItem } from '@/hooks/crud/useLoteItem';
 
 export default function CreateLoteScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
+  const [initialLoading, setInitialLoading] = useState(true);
+  const initialLoadDone = useRef(false);
   
+  // Usar el hook refactorizado
   const { 
     form,
     validationRules,
@@ -24,16 +28,53 @@ export default function CreateLoteScreen() {
     isLoadingOptions,
     error,
     createLote,
+    prepareForCreate,
     productos,
-    proveedores
-  } = useLotes();
+    proveedores,
+    loadOptions
+  } = useLoteItem();
   
   const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
+
+  // Cargar opciones al montar el componente una sola vez
+  useEffect(() => {
+    const prepare = async () => {
+      if (initialLoadDone.current) return;
+      
+      initialLoadDone.current = true;
+      try {
+        // Cargar opciones y resetear el formulario
+        await loadOptions();
+        form.resetForm();
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    
+    prepare();
+  }, []); // Sin dependencias para evitar bucles
+
+  // Función para manejar el envío del formulario
+  const submitForm = async () => {
+    const response = await createLote(formData);
+    
+    if (response) {
+      Alert.alert(
+        'Lote Creado',
+        'El lote ha sido creado exitosamente',
+        [{ text: 'OK', onPress: () => router.replace('/lotes') }]
+      );
+      return true;
+    } else {
+      Alert.alert('Error', error || 'No se pudo crear el lote');
+      return false;
+    }
+  };
 
   return (
     <ScreenContainer 
       title="Crear Lote" 
-      isLoading={isLoading || isLoadingOptions}
+      isLoading={(isLoading || isLoadingOptions || initialLoading) && !isSubmitting}
       error={error}
       loadingMessage="Cargando datos..."
     >
@@ -55,6 +96,7 @@ export default function CreateLoteScreen() {
             onValueChange={(value) => handleChange('producto_id', value.toString())}
             style={{ color: Colors[colorScheme].text }}
             dropdownIconColor={Colors[colorScheme].text}
+            enabled={!isSubmitting}
           >
             <Picker.Item 
               label="Seleccionar producto" 
@@ -92,6 +134,7 @@ export default function CreateLoteScreen() {
             onValueChange={(value) => handleChange('proveedor_id', value.toString())}
             style={{ color: Colors[colorScheme].text }}
             dropdownIconColor={Colors[colorScheme].text}
+            enabled={!isSubmitting}
           >
             <Picker.Item 
               label="(Sin proveedor)" 
@@ -111,12 +154,13 @@ export default function CreateLoteScreen() {
       </ThemedView>
 
       <FormField
-        label="Descripcion"
+        label="Descripción"
         value={formData.descripcion}
         onChangeText={(value) => handleChange('descripcion', value)}
         placeholder="Descripción del lote"
         error={errors.descripcion}
-        required
+        multiline
+        disabled={isSubmitting}
       />
 
       <FormField
@@ -127,6 +171,7 @@ export default function CreateLoteScreen() {
         error={errors.peso_humedo_kg}
         keyboardType="numeric"
         required
+        disabled={isSubmitting}
       />
 
       <FormField
@@ -136,6 +181,7 @@ export default function CreateLoteScreen() {
         placeholder="0.00"
         error={errors.peso_seco_kg}
         keyboardType="numeric"
+        disabled={isSubmitting}
       />
 
       <DateField
@@ -143,12 +189,14 @@ export default function CreateLoteScreen() {
         value={formData.fecha_ingreso}
         onChange={(value) => handleChange('fecha_ingreso', value)}
         error={errors.fecha_ingreso}
+        disabled={isSubmitting}
       />
 
       <ActionButtons
-        onSave={() => handleSubmit(createLote, validationRules)}
+        onSave={() => handleSubmit(submitForm, validationRules)}
         onCancel={() => router.back()}
         isSubmitting={isSubmitting}
+        saveText="Crear Lote"
       />
     </ScreenContainer>
   );
