@@ -7,15 +7,22 @@ import ProductCard from './ProductCard';
 import { Presentacion } from '@/models';
 import { ProductCardStyles as styles } from '@/styles/Theme';
 
+// Interfaz para el detalle que maneja este grid (podría ser genérico)
+interface DetalleGridItem {
+  presentacion_id: string;
+  cantidad: string;
+  precio_estimado?: string;
+  precio_unitario?: string;
+}
+
+// Hacer UpdateFieldKey más genérico para incluir campos de venta
+type UpdateFieldKey = 'cantidad' | 'precio_estimado' | 'precio_unitario';
+
 interface ProductGridProps {
-  detalles: Array<{
-    presentacion_id: string;
-    cantidad: string;
-    precio_estimado?: string;
-    precio_unitario?: string;
-  }>;
+  detalles: Array<DetalleGridItem>; // Usar interfaz genérica
   presentaciones: Presentacion[];
-  onUpdate: (index: number, field: string, value: string) => void;
+  // Usar el tipo específico para field
+  onUpdate: (index: number, field: UpdateFieldKey, value: string) => void;
   onRemove: (index: number) => void;
   onAddProduct: () => void;
   isPedido?: boolean;

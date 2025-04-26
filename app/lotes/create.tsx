@@ -121,7 +121,7 @@ export default function CreateLoteScreen() {
       {/* Selección de Proveedor */}
       <ThemedView style={{ marginBottom: 16 }}>
         <ThemedText style={{ fontSize: 16, fontWeight: '500', marginBottom: 4 }}>
-          Proveedor
+          Proveedor *
         </ThemedText>
         <View style={{
           borderWidth: 1,
@@ -151,16 +151,20 @@ export default function CreateLoteScreen() {
             ))}
           </Picker>
         </View>
+        {errors.proveedor_id && (
+          <ThemedText style={{ color: '#E53935', fontSize: 14 }}>{errors.proveedor_id}</ThemedText>
+        )}
       </ThemedView>
 
       <FormField
-        label="Descripción"
+        label="Descripción *"
         value={formData.descripcion}
         onChangeText={(value) => handleChange('descripcion', value)}
         placeholder="Descripción del lote"
         error={errors.descripcion}
         multiline
         disabled={isSubmitting}
+        required
       />
 
       <FormField

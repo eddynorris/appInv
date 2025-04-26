@@ -34,59 +34,52 @@ export interface ApiResponse<T> {
 // Base URL configuration
 const getBaseUrl = () => {
   // Usar la variable de entorno si está definida
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+
+  if (apiUrl) {
+    console.log(`Usando API URL desde variable de entorno: ${apiUrl}`);
+    // Asegurarse que no termine con /
+    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
   }
-  
-  // Fallback por compatibilidad
-  if (Platform.OS === 'android') {
-    return 'http://192.168.1.37:5000'; // Usar IP para Android
-  }
-  return 'http://localhost:5000'; // Para iOS y web
+
+  // Fallback si la variable de entorno no está definida (menos ideal)
+  const fallbackUrl = 'https://manngojk.lat'; // Incluye http:// y sin / al final
+  console.warn(`EXPO_PUBLIC_API_URL no está definida. Usando fallback: ${fallbackUrl}`);
+  return fallbackUrl;
 };
 
 export const API_CONFIG = {
-  baseUrl: getBaseUrl(),
+  baseUrl: getBaseUrl(), // Llama a la función corregida
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
   timeout: 15000, // 15 segundos timeout
-  getImageUrl: (path?: string): string => {
+
+  // --- FUNCIÓN getImageUrl SIMPLIFICADA ---
+  getImageUrl: (path?: string | null): string => {
+    // Si el path es nulo, indefinido, o una cadena vacía, devuelve vacío.
     if (!path) {
-      console.log('No se proporcionó ruta de imagen');
-      return '';
+      // console.log('No se proporcionó ruta de imagen o es inválida.');
+      return ''; // O devuelve una URL a una imagen placeholder si prefieres
     }
-    
-    // Si ya es una URL absoluta, devolverla directamente
+
+    // Si la API devuelve una URL absoluta (como la pre-firmada de S3), úsala directamente.
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      console.log('Usando URL absoluta:', path);
+      // console.log('Usando URL absoluta (pre-firmada o pública):', path);
       return path;
     }
-    
-    // Manejar rutas relativas que empiezan con /uploads/
-    if (path.startsWith('/uploads/')) {
-      const fullUrl = `${API_CONFIG.baseUrl}${path}`;
-      console.log('URL con ruta /uploads/:', fullUrl);
-      return fullUrl;
-    }
-    
-    // Limpiar y normalizar la ruta
-    const cleanPath = path.replace(/\\/g, '/').replace(/^\//, '');
-    
-    // Construir la URL completa
-    const baseUrl = API_CONFIG.baseUrl.endsWith('/')
-      ? API_CONFIG.baseUrl.slice(0, -1)
-      : API_CONFIG.baseUrl;
-    
-    const fullUrl = `${baseUrl}/uploads/${cleanPath}`;
-    console.log('URL construida para imagen:', fullUrl);
-    return fullUrl;
+    // Si llega aquí, el 'path' no es una URL válida que la app pueda usar.
+    // Esto no debería pasar si la API siempre devuelve None o una URL pre-firmada.
+    console.warn('getImageUrl recibió una ruta inesperada (no es URL absoluta):', path);
+    return ''; // O devuelve una URL placeholder
   },
-  // Función auxiliar para verificar si una URL de imagen es válida
-  isValidImageUrl: (url: string | undefined): boolean => {
+
+  // --- FUNCIÓN isValidImageUrl SIMPLIFICADA ---
+  isValidImageUrl: (url: string | undefined | null): boolean => {
     if (!url) return false;
-    return url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/uploads/');
+    // Una URL válida ahora es simplemente una que empieza con http o https
+    return url.startsWith('http://') || url.startsWith('https://');
   }
 };
 
@@ -179,8 +172,24 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
 
 // API methods for Cliente
 export const clienteApi = {
-  getClientes: async (page = 1, perPage = 10): Promise<ApiResponse<Cliente>> => {
-    return fetchApi<ApiResponse<Cliente>>(`/clientes?page=${page}&per_page=${perPage}`);
+  getClientes: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Cliente>> => {
+    // Construir query string con los filtros
+    const queryParams = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString()
+    });
+    
+    // Añadir filtros si existen
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, value.toString());
+      }
+    });
+    
+    const queryString = queryParams.toString();
+    console.log(`Consultando clientes con parámetros: ${queryString}`);
+    
+    return fetchApi<ApiResponse<Cliente>>(`/clientes?${queryString}`);
   },
 
   getCliente: async (id: number): Promise<Cliente> => {

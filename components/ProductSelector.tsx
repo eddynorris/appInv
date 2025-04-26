@@ -17,12 +17,9 @@ interface ProductSelectorProps {
 }
 
 // Obtener la URL correcta de la imagen
-const getImageUrl = (urlFoto?: string) => {
-  if (!urlFoto) return null;
-  
-  // Asegurar que los separadores de ruta son los correctos (/ en lugar de \)
-  const normalizedPath = urlFoto.replace(/\\/g, '/');
-  return `${API_CONFIG.baseUrl}/uploads/${normalizedPath}`;
+const getImageUrl = (urlFoto?: string | null): string | undefined => {
+  const url = API_CONFIG.getImageUrl(urlFoto); // Obtiene la URL procesada o ''
+  return url || undefined; // Devuelve la URL si no es vacía, sino undefined
 };
 
 const ProductItem = memo(({ item, onSelect }: { 

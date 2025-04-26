@@ -153,9 +153,14 @@ const FileUploadSection = memo(({
   // Ver comprobante existente
   const viewExistingComprobante = () => {
     if (existingComprobante) {
-      const comprobanteUrl = `${API_CONFIG.baseUrl}/uploads/${existingComprobante}`;
-      // En producción, aquí usarías Linking.openURL o similar
-      alert(`URL del comprobante: ${comprobanteUrl}`);
+      const comprobanteUrl = API_CONFIG.getImageUrl(existingComprobante);
+      if (comprobanteUrl) {
+        console.log('Abriendo comprobante URL:', comprobanteUrl);
+        alert(`URL del comprobante: ${comprobanteUrl}`);
+      } else {
+        console.warn('No se pudo obtener una URL válida para el comprobante existente:', existingComprobante);
+        alert('No se pudo obtener la URL del comprobante.');
+      }
     }
   };
 

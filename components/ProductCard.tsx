@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { View, Image, TextInput, TouchableOpacity } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -36,40 +36,27 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const nombreProductoBase = presentacion?.producto?.nombre || '';
   
-  // Obtener la URL correcta de la imagen
-  const getImageUrl = (urlFoto?: string) => {
-    if (!urlFoto) return null;
-    
-    // Asegurar que los separadores de ruta son los correctos (/ en lugar de \)
-    const normalizedPath = urlFoto.replace(/\\/g, '/');
-    const imageUrl = `${API_CONFIG.baseUrl}/uploads/${normalizedPath}`;
-    
-    console.log(`Renderizando imagen (normalizada): ${imageUrl}`);
-    return imageUrl;
-  };
+  // Usar useMemo para calcular la URL de la imagen solo si url_foto cambia
+  const imageUrl = useMemo(() => {
+    const url = API_CONFIG.getImageUrl(presentacion.url_foto);
+    console.log(`Calculando URL de imagen (memoizada si no cambia): ${url || 'N/A'}`);
+    return url || undefined;
+  }, [presentacion.url_foto]); // Dependencia: url_foto
   
   // Renderizado de la imagen de producto
   const renderImage = () => {
-    // Verificar explícitamente la presencia de url_foto para evitar errores
-    if (presentacion.url_foto) {
-      try {
-        const imageUrl = getImageUrl(presentacion.url_foto);
-        
-        if (imageUrl) {
-          return (
-            <Image 
-              source={{ uri: imageUrl }} 
-              style={styles.productoImage}
-              resizeMode="contain"
-            />
-          );
-        }
-      } catch (error) {
-        console.error("Error al renderizar imagen:", error);
-      }
-    }
+    // Usar la URL memoizada
+    if (imageUrl) {
+      return (
+        <Image 
+          source={{ uri: imageUrl }} 
+          style={styles.productoImage}
+          resizeMode="contain"
+        />
+      );
+    } 
     
-    // Mostrar un placeholder si no hay imagen o hubo un error
+    // Mostrar un placeholder si no hay imagen
     return (
       <ThemedView style={styles.productoImagePlaceholder}>
         <IconSymbol name="photo" size={32} color="#9BA1A6" />

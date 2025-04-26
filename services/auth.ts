@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { jwtDecode } from 'jwt-decode';
+import { API_CONFIG } from './api';
 
 // Auth Interfaces - Actualizadas para incluir rol y almacen_id
 export interface User {
@@ -26,11 +27,6 @@ interface JwtPayload {
   almacen_id?: number;    // Añadido
   exp: number;
 }
-
-// API configuration
-const API_URL = Platform.OS === 'android' 
-  ? 'http://192.168.1.37:5000' 
-  : 'http://localhost:5000';
 
 // Storage keys
 const TOKEN_KEY = 'auth_token';
@@ -141,7 +137,7 @@ const token = {
 export const authService = {
   async login(username: string, password: string): Promise<User> {
     try {
-      const response = await fetch(`${API_URL}/auth`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,7 +176,7 @@ export const authService = {
 
   async register(username: string, password: string): Promise<void> {
     try {
-      const response = await fetch(`${API_URL}/registrar`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/registrar`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

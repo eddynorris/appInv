@@ -1,241 +1,265 @@
-// app/pedidos/index.tsx - Actualizado para manejar permisos según rol
-import React, { useEffect, useRef, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+// app/pedidos/index.tsx - Refactorizado
+import React, { useMemo, useCallback, useEffect, useState } from 'react';
+import { StyleSheet, Alert, View, TextInput, Button, TouchableOpacity, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+// Ya no necesitamos Picker
+// import { Picker } from '@react-native-picker/picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
-import { usePedidos } from '@/hooks/crud/usePedidos';
-import { Pedido } from '@/models';
-import { useAuth } from '@/context/AuthContext'; // Importar contexto de autenticación
+import { usePedidosList } from '@/hooks/crud/usePedidosList';
+import { Collapsible } from '@/components/Collapsible';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/context/AuthContext';
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function PedidosScreen() {
-  const { user } = useAuth(); // Obtener el usuario actual
-  const isAdmin = user?.rol === 'admin'; // Verificar si es administrador
-  
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
+  const { user } = useAuth(); // No necesitamos user aquí directamente ahora
+
+  // Estados locales para la visibilidad de los DatePickers
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+
+  // Obtener solo los elementos necesarios del hook
   const {
     pedidos,
     isLoading,
     error,
+    columns,
     pagination,
-    loadPedidos,
+    refresh,
     deletePedido,
-    getEstadisticas,
-    getStateColor
-  } = usePedidos();
-  
-  // Control para evitar múltiples cargas
-  const isInitialMount = useRef(true);
-  
-  // Cargar datos solo una vez al montar el componente
-  useEffect(() => {
-    // Solo realizar la carga inicial
-    if (isInitialMount.current) {
-      console.log('Cargando datos de pedidos (carga inicial)');
-      loadPedidos();
-      isInitialMount.current = false;
-    }
-  }, []); // Sin dependencias para evitar recargas
-  
-  // Obtener las estadísticas
-  const estadisticas = getEstadisticas();
+    // Filtros de fecha
+    dateFilters,
+    handleDateFilterChange,
+    applyDateFilters,
+    clearDateFilters,
+    // Ya no necesitamos isAdmin aquí directamente
+    // isAdmin,
+    // Ya no necesitamos las listas de filtros
+    // clientesFiltro,
+    // vendedoresFiltro,
+    // almacenesFiltro,
+  } = usePedidosList();
+
+  // Ya no necesitamos cargar opciones de filtros
+  // useEffect(() => { ... }, []);
 
   const handleAddPedido = () => {
     router.push('/pedidos/create');
   };
 
-  // Definir columnas para la tabla directamente en el componente
-  const columns = useMemo(() => [
-    {
-      id: 'fecha_entrega',
-      label: 'Fecha Entrega',
-      width: 1,
-      sortable: true,
-      render: (item: Pedido) => <ThemedText>{new Date(item.fecha_entrega).toLocaleDateString()}</ThemedText>,
-    },
-    {
-      id: 'cliente',
-      label: 'Cliente',
-      width: 1.5,
-      sortable: true,
-      render: (item: Pedido) => <ThemedText>{item.cliente?.nombre || '-'}</ThemedText>,
-    },
-    {
-      id: 'vendedor',
-      label: 'Vendedor',
-      width: 1,
-      sortable: true,
-      render: (item: Pedido) => <ThemedText>{item.vendedor?.username || '-'}</ThemedText>,
-    },
-    {
-      id: 'total_estimado',
-      label: 'Total Est.',
-      width: 1,
-      sortable: true,
-      render: (item: Pedido) => <ThemedText>${parseFloat(item.total_estimado || '0').toFixed(2)}</ThemedText>,
-    },
-    {
-      id: 'estado',
-      label: 'Estado',
-      width: 1,
-      sortable: true,
-      render: (item: Pedido) => {
-        const color = getStateColor(item.estado);
-        
-        return (
-          <ThemedText style={{ color, fontWeight: '500', textTransform: 'capitalize' }}>
-            {item.estado}
-          </ThemedText>
-        );
-      },
-    },
-  ], [getStateColor]);
-
-  // Función callback para manejar la eliminación
-  const handleDelete = useMemo(() => async (id: string | number) => {
-    const success = await deletePedido(Number(id), false);
-    if (success) {
-      // Recargar la lista después de eliminar
-      loadPedidos();
-    }
+  const handleDelete = useCallback(async (id: string | number) => {
+    const success = await deletePedido(Number(id));
     return success;
-  }, [deletePedido, loadPedidos]);
+  }, [deletePedido]);
 
-  // Configurar las acciones según el rol del usuario
-  const tableActions = {
-    onView: true, // Todos pueden ver detalles
-    onEdit: isAdmin, // Solo admin puede editar
-    onDelete: isAdmin // Solo admin puede eliminar
+  const tableActions = useMemo(() => ({
+    onView: true,
+    onEdit: true,
+    onDelete: true
+  }), []);
+
+  // Formatear fecha YYYY-MM-DD a DD/MM/YYYY para mostrar
+  const formatDateDisplay = (dateString: string) => {
+    if (!dateString || !/\d{4}-\d{2}-\d{2}/.test(dateString)) {
+        return 'Seleccionar fecha';
+    }
+    try {
+        const [year, month, day] = dateString.split('-');
+        // Validar que las partes sean números válidos si es necesario
+        return `${day}/${month}/${year}`;
+    } catch (e) {
+        return 'Fecha inválida';
+    }
+  };
+
+  // Función para crear el objeto Date inicial para el picker
+  const getPickerDateValue = (dateString: string): Date => {
+    if (dateString && /\d{4}-\d{2}-\d{2}/.test(dateString)) {
+        try {
+            const [year, month, day] = dateString.split('-').map(Number);
+            // ¡Importante! month es 0-indexado en el constructor de Date
+            return new Date(year, month - 1, day);
+        } catch (e) {
+            // Fallback a hoy si hay error
+            return new Date();
+        }
+    } 
+    // Default a hoy si no hay fecha válida
+    return new Date(); 
+  };
+
+  // Manejador genérico para cambios en DateTimePicker
+  const onDateChange = (event: DateTimePickerEvent, selectedDate: Date | undefined, filterKey: keyof typeof dateFilters) => {
+    // Ocultar picker (en Android se oculta solo, en iOS no)
+    if (Platform.OS === 'ios') {
+       if (filterKey === 'fechaInicio') setShowStartDatePicker(false);
+       else setShowEndDatePicker(false);
+    } else {
+       // En Android, ocultar siempre después de una acción (set o dismiss)
+       setShowStartDatePicker(false);
+       setShowEndDatePicker(false);
+    }
+
+    if (event.type === 'set' && selectedDate) {
+      const year = selectedDate.getUTCFullYear();
+      const month = (selectedDate.getUTCMonth() + 1).toString().padStart(2, '0'); 
+      const day = selectedDate.getUTCDate().toString().padStart(2, '0'); 
+      const formattedDate = `${year}-${month}-${day}`;
+
+      console.log(`Selected Date Object (${filterKey}):`, selectedDate);
+      console.log(`Formatted Date String (${filterKey}):`, formattedDate);
+
+      handleDateFilterChange(filterKey, formattedDate);
+    }
   };
 
   return (
     <>
-      <Stack.Screen options={{ 
+      <Stack.Screen options={{
         title: 'Proyecciones',
-        headerShown: true 
+        headerShown: true
       }} />
-      
+
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.summary}>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total Proyecciones:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : estadisticas.total}
-            </ThemedText>
+        <Collapsible title="Filtrar por Fecha">
+          <ThemedView style={styles.filterContainer}>
+            {/* Fecha Desde */}
+            <View style={styles.filterRow}>
+              <ThemedText style={styles.filterLabel}>Fecha Desde:</ThemedText>
+              <TouchableOpacity
+                style={[styles.input, styles.dateInput]}
+                onPress={() => setShowStartDatePicker(true)}
+              >
+                <ThemedText style={{ color: isDark ? '#FFF' : '#000' }}>
+                  {formatDateDisplay(dateFilters.fechaInicio)}
+                </ThemedText>
+                <IconSymbol name="calendar" size={20} color={Colors[colorScheme].icon} />
+              </TouchableOpacity>
+              {showStartDatePicker && (
+                <DateTimePicker
+                  value={getPickerDateValue(dateFilters.fechaInicio)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, date) => onDateChange(event, date, 'fechaInicio')}
+                />
+              )}
+            </View>
+
+            {/* Fecha Hasta */}
+            <View style={styles.filterRow}>
+              <ThemedText style={styles.filterLabel}>Fecha Hasta:</ThemedText>
+              <TouchableOpacity
+                style={[styles.input, styles.dateInput]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <ThemedText style={{ color: isDark ? '#FFF' : '#000' }}>
+                  {formatDateDisplay(dateFilters.fechaFin)}
+                </ThemedText>
+                <IconSymbol name="calendar" size={20} color={Colors[colorScheme].icon} />
+              </TouchableOpacity>
+              {showEndDatePicker && (
+                <DateTimePicker
+                  value={getPickerDateValue(dateFilters.fechaFin)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, date) => onDateChange(event, date, 'fechaFin')}
+                  minimumDate={dateFilters.fechaInicio ? getPickerDateValue(dateFilters.fechaInicio) : undefined}
+                />
+              )}
+            </View>
+
+            {/* Eliminar filtros de Vendedor, Almacén y Cliente */}
+
+            {/* Botones de Acción de Filtros */}
+            <View style={styles.filterActions}>
+              <Button title="Limpiar" onPress={clearDateFilters} color={Colors.danger} />
+              <Button title="Aplicar" onPress={applyDateFilters} color={Colors.primary} />
+            </View>
           </ThemedView>
-          
-          <ThemedView style={styles.summaryBadges}>
-            <ThemedView style={[styles.badge, styles.badgeProgramado]}>
-              <ThemedText style={styles.badgeText}>{estadisticas.programados} Prog.</ThemedText>
-            </ThemedView>
-            
-            <ThemedView style={[styles.badge, styles.badgeConfirmado]}>
-              <ThemedText style={styles.badgeText}>{estadisticas.confirmados} Conf.</ThemedText>
-            </ThemedView>
-            
-            <ThemedView style={[styles.badge, styles.badgeEntregado]}>
-              <ThemedText style={styles.badgeText}>{estadisticas.entregados} Entr.</ThemedText>
-            </ThemedView>
-            
-            <ThemedView style={[styles.badge, styles.badgeCancelado]}>
-              <ThemedText style={styles.badgeText}>{estadisticas.cancelados} Canc.</ThemedText>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
-        
+        </Collapsible>
+
+        {/* Tabla de Datos (sin cambios) */}
         <EnhancedDataTable
           data={pedidos}
           columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/pedidos"
-          pagination={{
-            currentPage: pagination.currentPage,
-            totalPages: pagination.totalPages,
-            itemsPerPage: pagination.itemsPerPage,
-            totalItems: pagination.totalItems,
-            onPageChange: pagination.onPageChange,
-            onItemsPerPageChange: pagination.onItemsPerPageChange
-          }}
+          pagination={pagination}
           sorting={{
-            sortColumn: 'id',
-            sortOrder: 'asc',
-            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
+            sortColumn: pagination.sortColumn,
+            sortOrder: pagination.sortOrder,
+            onSort: pagination.onSort
           }}
-          actions={tableActions} // Usar acciones configuradas según rol
+          actions={tableActions}
           deleteOptions={{
             title: 'Eliminar Proyección',
-            message: '¿Está seguro que desea eliminar esta proyección?',
+            message: '¿Está seguro que desea eliminar esta proyección? Esta acción no se puede deshacer.',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
             onDelete: handleDelete
           }}
           emptyMessage="No hay proyecciones disponibles"
-          onRefresh={loadPedidos}
+          onRefresh={refresh}
         />
-        
-        <FloatingActionButton 
-          icon="plus.circle.fill" 
-          onPress={handleAddPedido} 
+
+        <FloatingActionButton
+          icon="plus.circle.fill"
+          onPress={handleAddPedido}
         />
       </ThemedView>
     </>
   );
 }
 
+// Estilos (mantener los necesarios para filtros de fecha)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
   },
-  summary: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
+  filterContainer: {
     padding: 16,
-    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    marginBottom: 10,
+    backgroundColor: '#f8f9fa',
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  filterRow: {
+    marginBottom: 12,
   },
-  summaryLabel: {
-    fontSize: 16,
+  filterLabel: {
+    fontSize: 14,
     fontWeight: '500',
+    marginBottom: 4,
+    color: '#495057',
   },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  summaryBadges: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  badge: {
+  input: {
+    borderWidth: 1,
+    borderColor: '#ced4da',
     borderRadius: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    minWidth: 70,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  // Estilo específico para el botón de fecha
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 10, // Ajustar padding si es necesario
   },
-  badgeProgramado: {
-    backgroundColor: 'rgba(255, 193, 7, 0.2)',
-  },
-  badgeConfirmado: {
-    backgroundColor: 'rgba(33, 150, 243, 0.2)',
-  },
-  badgeEntregado: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-  },
-  badgeCancelado: {
-    backgroundColor: 'rgba(244, 67, 54, 0.2)',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '500',
+  filterActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 16,
   },
 });

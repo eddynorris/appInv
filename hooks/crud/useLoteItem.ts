@@ -4,6 +4,7 @@ import { loteApi } from '@/services/api';
 import { Lote, ProductoSimple, ProveedorSimple } from '@/models';
 import { useForm } from '../useForm';
 import { useAuth } from '@/context/AuthContext';
+import { Alert } from 'react-native';
 
 // Valores iniciales para el formulario
 const initialFormValues = {
@@ -19,6 +20,8 @@ const initialFormValues = {
 // Reglas de validación para el formulario
 const validationRules = {
   producto_id: (value: string) => !value ? 'El producto es requerido' : null,
+  proveedor_id: (value: string) => !value ? 'El proveedor es requerido' : null,
+  descripcion: (value: string) => !value.trim() ? 'La descripción es requerida' : null,
   peso_humedo_kg: (value: string) => {
     if (!value.trim()) return 'El peso húmedo es requerido';
     if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un peso válido';
@@ -134,26 +137,51 @@ export function useLoteItem() {
     setIsLoading(true);
     setError(null);
     try {
+      // Validar que el usuario tenga un almacén asignado
+      if (!user?.almacen_id) {
+        throw new Error('El usuario actual no tiene un almacén asignado.');
+      }
+
+      const pesoHumedo = parseFloat(data.peso_humedo_kg.replace(',', '.'));
+      if (isNaN(pesoHumedo)) throw new Error('Peso húmedo inválido');
+
+      const pesoSeco = data.peso_seco_kg.trim() 
+          ? parseFloat(data.peso_seco_kg.replace(',', '.')) 
+          : undefined;
+      if (data.peso_seco_kg.trim() && (pesoSeco === undefined || isNaN(pesoSeco))) throw new Error('Peso seco inválido');
+      
+      const cantidadDisponibleInput = data.cantidad_disponible_kg.trim() 
+          ? parseFloat(data.cantidad_disponible_kg.replace(',', '.')) 
+          : undefined;
+       if (data.cantidad_disponible_kg.trim() && (cantidadDisponibleInput === undefined || isNaN(cantidadDisponibleInput))) throw new Error('Cantidad disponible inválida');
+
+      // Default cantidad_disponible_kg to peso_humedo_kg if not provided
+      const cantidadDisponibleFinal = cantidadDisponibleInput ?? pesoHumedo;
+
       const loteData = {
         producto_id: parseInt(data.producto_id),
         proveedor_id: data.proveedor_id ? parseInt(data.proveedor_id) : undefined,
         descripcion: data.descripcion,
-        peso_humedo_kg: parseFloat(data.peso_humedo_kg.replace(',', '.')),
-        peso_seco_kg: data.peso_seco_kg.trim() 
-          ? parseFloat(data.peso_seco_kg.replace(',', '.')) 
-          : undefined,
-        cantidad_disponible_kg: data.cantidad_disponible_kg.trim() 
-          ? parseFloat(data.cantidad_disponible_kg.replace(',', '.')) 
-          : undefined,
+        peso_humedo_kg: pesoHumedo,
+        peso_seco_kg: pesoSeco,
+        // Usar el valor final calculado o proporcionado
+        cantidad_disponible_kg: cantidadDisponibleFinal, 
         fecha_ingreso: `${data.fecha_ingreso}T00:00:00Z`,
-        almacen_id: user?.almacen_id, // Usar el almacén del usuario si existe
+        almacen_id: user.almacen_id, // Ya validamos que existe
       };
       
+      // Validar IDs parseados
+      if (isNaN(loteData.producto_id) || (loteData.proveedor_id !== undefined && isNaN(loteData.proveedor_id)) ){
+           throw new Error("Producto o Proveedor inválido.");
+      }
+
       return await loteApi.createLote(loteData as any);
     } catch (err) {
       console.error('Error creating lote item:', err);
       const message = err instanceof Error ? err.message : 'Error al crear el lote';
       setError(message);
+      // Mostrar alerta aquí también para errores durante la preparación/envío
+      Alert.alert('Error al Crear', message); 
       return null;
     } finally {
       setIsLoading(false);

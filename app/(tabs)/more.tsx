@@ -106,6 +106,11 @@ export default function MoreScreen() {
                   route="/lotes" 
                 />
                 <MenuItem 
+                  title="Productos" 
+                  icon="list.clipboard.fill" 
+                  route="/productos" 
+                />
+                <MenuItem 
                   title="Inventarios" 
                   icon="list.clipboard.fill" 
                   route="/inventarios" 

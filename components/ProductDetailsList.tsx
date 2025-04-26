@@ -131,6 +131,7 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
     
     // Si llegamos aquí, hay una url_foto, intentar cargarla
     try {
+      // Obtener la ruta de la foto
       const imageUri = API_CONFIG.getImageUrl(detail.presentacion.url_foto);
       
       // Si la URL resultante contiene 'null' o es vacía, usar imagen por defecto

@@ -14,4 +14,5 @@ export interface Cliente {
 export interface ClienteSimple {
   id: number;
   nombre: string;
+  telefono?: string;
 }
