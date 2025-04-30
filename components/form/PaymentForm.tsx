@@ -48,6 +48,7 @@ interface PaymentFormProps {
   ventaOptions?: VentaOption[];
   ventaInfo?: { total: string; cliente: string; saldoPendiente: string } | null;
   isEdit?: boolean;
+  isVentaSelectionDisabled?: boolean;
   pickImage?: () => Promise<void>;
   takePhoto?: () => Promise<void>;
   pickDocument?: () => Promise<void>;
@@ -272,71 +273,73 @@ export const PaymentForm = memo(({
   ventaOptions = [],
   ventaInfo,
   isEdit = false,
+  isVentaSelectionDisabled = false,
   pickImage,
   takePhoto,
   pickDocument
 }: PaymentFormProps) => {
   
-  // Manejar cambio de fecha
-  const handleDateChange = useCallback((newDate: string) => {
-    onChange('fecha', newDate);
-  }, [onChange]);
-
   return (
     <ThemedView style={styles.form}>
-      {/* Selección de venta - solo si no está en modo edición */}
-      {!isEdit && (
-        <FormSelect
-          label="Venta"
-          value={formData.venta_id}
-          options={ventaOptions.map(v => ({ label: v.label, value: v.id }))}
-          onChange={(value) => onChange('venta_id', value)}
-          error={errors.venta_id}
-          required
-        />
-      )}
+      {/* Selector de Venta */}
+      <FormSelect
+        label="Venta a la que pertenece el pago"
+        value={formData.venta_id}
+        onChange={(value: string) => onChange('venta_id', value)}
+        options={[
+          { label: "Seleccione una venta", value: "" },
+          ...ventaOptions.map(v => ({ label: v.label, value: v.id }))
+        ]}
+        error={errors.venta_id}
+        required
+        disabled={isSubmitting || isVentaSelectionDisabled}
+      />
       
-      {/* Información de venta si está disponible */}
+      {/* Mostrar información de la venta seleccionada */}
       {ventaInfo && <VentaInfo ventaInfo={ventaInfo} />}
       
-      {/* Monto */}
+      {/* Monto del Pago */}
       <FormField
-        label="Monto"
+        label="Monto del Pago"
         value={formData.monto}
         onChangeText={(value) => onChange('monto', value)}
         placeholder="0.00"
         keyboardType="numeric"
         error={errors.monto}
         required
-      />
-      
-      {/* Método de pago */}
-      <FormSelect
-        label="Método de Pago"
-        value={formData.metodo_pago}
-        options={PAYMENT_METHODS}
-        onChange={(value) => onChange('metodo_pago', value)}
+        disabled={isSubmitting}
       />
       
       {/* Fecha */}
       <DateField 
-        value={formData.fecha} 
-        onChange={handleDateChange}
+        value={formData.fecha}
+        onChange={(date) => onChange('fecha', date)} 
       />
       
-      {/* Referencia - Solo para transferencias o tarjetas */}
-      {(formData.metodo_pago === 'transferencia' || formData.metodo_pago === 'tarjeta') && (
+      {/* Método de Pago */}
+      <FormSelect
+        label="Método de Pago"
+        value={formData.metodo_pago}
+        onChange={(value: string) => onChange('metodo_pago', value)}
+        options={PAYMENT_METHODS}
+        error={errors.metodo_pago}
+        disabled={isSubmitting}
+      />
+      
+      {/* Campo Referencia */}
+      {formData.metodo_pago === 'transferencia' && (
         <FormField
           label="Referencia"
           value={formData.referencia}
           onChangeText={(value) => onChange('referencia', value)}
-          placeholder="Número de referencia"
+          placeholder="Referencia de la transferencia"
           error={errors.referencia}
-          required={formData.metodo_pago === 'transferencia'}
+          required
+          disabled={isSubmitting}
         />
       )}
       
-      {/* Sección de carga de archivos para transferencias */}
+      {/* Sección de carga de comprobante */}
       <FileUploadSection
         metodo_pago={formData.metodo_pago}
         comprobante={comprobante}
@@ -349,12 +352,12 @@ export const PaymentForm = memo(({
         pickDocument={pickDocument}
       />
       
-      {/* Botones de acción */}
+      {/* Botones de Acción */}
       <ActionButtons
         onSave={onSubmit}
         onCancel={onCancel}
         isSubmitting={isSubmitting}
-        saveText={isEdit ? "Guardar Cambios" : "Registrar Pago"}
+        saveText={isEdit ? "Actualizar Pago" : "Registrar Pago"}
       />
     </ThemedView>
   );

@@ -91,8 +91,7 @@ interface HttpError extends Error {
   };
 }
 
-
-async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_CONFIG.baseUrl}${endpoint}`;
   console.log(`API request: ${options.method || 'GET'} ${url}`);
   
@@ -637,7 +636,7 @@ export const presentacionApi = {
 // API methods for Pagos
 export const pagoApi = {
 
-  getPagos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Gasto>> => {
+  getPagos: async (page = 1, perPage = 10, filters = {}): Promise<ApiResponse<Pago>> => {
     // Construir query string con los filtros
     const queryParams = new URLSearchParams({
       page: page.toString(),
@@ -652,20 +651,20 @@ export const pagoApi = {
     });
     
     const queryString = queryParams.toString();
-    console.log(`Consultando gastos con parámetros: ${queryString}`);
+    console.log(`Consultando pagos con parámetros: ${queryString}`);
     
-    return fetchApi<ApiResponse<Gasto>>(`/pagos?${queryString}`);
+    return fetchApi<ApiResponse<Pago>>(`/pagos?${queryString}`);
   },
   
-  getPago: async (id: number): Promise<any> => {
-    return fetchApi<any>(`/pagos/${id}`);
+  getPago: async (id: number): Promise<Pago> => {
+    return fetchApi<Pago>(`/pagos/${id}`);
   },
 
-  // Método para obtener pagos por venta
-  getPagosByVenta: async (ventaId: number): Promise<any[]> => {
-    const response = await pagoApi.getPagos(1, 100, ventaId);
-    return response.data || [];
-  },
+// Método para obtener pagos por venta (Usando endpoint dedicado)
+getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
+  // Llamar al endpoint específico (Asegúrate que la ruta sea correcta)
+  return fetchApi<Pago[]>(`/pagos/venta/${ventaId}`);
+},
 
   createPago: async (pago: {
     venta_id: number;
@@ -698,8 +697,8 @@ export const pagoApi = {
     });
   },
 
-  updatePago: async (id: number, pago: any): Promise<any> => {
-    return fetchApi<any>(`/pagos/${id}`, {
+  updatePago: async (id: number, pago: Partial<Pago>): Promise<Pago> => {
+    return fetchApi<Pago>(`/pagos/${id}`, {
       method: 'PUT',
       body: JSON.stringify(pago),
     });
@@ -711,63 +710,24 @@ export const pagoApi = {
     });
   },
 
-  createPagoWithComprobante: async (pago: any, comprobanteUri: string): Promise<Pago> => {
-    // Crear un FormData para enviar archivos
+  createPagoWithComprobante: async (pago: Partial<Pago>, comprobanteUri: string): Promise<Pago> => {
     const formData = new FormData();
     
-    // Formatear fecha si existe
     if (pago.fecha) {
       const fechaFormateada = `${pago.fecha}T00:00:00Z`;
       pago = { ...pago, fecha: fechaFormateada };
     }
     
-    // Agregar todos los campos del pago al FormData
-    Object.keys(pago).forEach(key => {
-      // Solo agregar si el valor no es undefined o null
-      if (pago[key] !== undefined && pago[key] !== null) {
-        formData.append(key, String(pago[key]));
+    // Usar Object.entries para asegurar tipos
+    Object.entries(pago).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        // Asegurar que value es string antes de añadirlo
+        formData.append(key, String(value));
       }
     });
     
     console.log('Preparando pago con comprobante para venta_id:', pago.venta_id);
     
-    // Agregar el archivo de comprobante
-    const uriParts = comprobanteUri.split('.');
-    const fileType = uriParts[uriParts.length - 1];
-    
-    // @ts-ignore - FormData espera un tipo específico
-    formData.append('comprobante', {
-      uri: comprobanteUri,
-      name: `comprobante.${fileType}`,
-      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
-    });
-    
-    // Usar content-type específico para multipart/form-data
-    return fetchApi<Pago>('/pagos', {
-      method: 'POST',
-      headers: {
-        // No incluir Content-Type para dejar que el navegador lo establezca automáticamente 
-        'Accept': 'application/json',
-      },
-      body: formData,
-    });
-  },
-  
-  updatePagoWithComprobante: async (id: number, pago: any, comprobanteUri: string | null): Promise<any> => {
-    // Si no hay comprobante, usar el método regular
-    if (!comprobanteUri) {
-      return pagoApi.updatePago(id, pago);
-    }
-  
-    // Crear un FormData para enviar archivos
-    const formData = new FormData();
-    
-    // Agregar todos los campos del pago
-    Object.keys(pago).forEach(key => {
-      formData.append(key, pago[key]);
-    });
-    
-    // Agregar el archivo de comprobante
     const uriParts = comprobanteUri.split('.');
     const fileType = uriParts[uriParts.length - 1];
     
@@ -778,13 +738,47 @@ export const pagoApi = {
       type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
     });
     
-    return fetchApi<any>(`/pagos/${id}`, {
+    return fetchApi<Pago>('/pagos', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+      },
+      body: formData,
+    });
+  },
+  
+  updatePagoWithComprobante: async (id: number, pago: Partial<Pago>, comprobanteUri: string | null): Promise<Pago> => {
+    if (!comprobanteUri) {
+      return pagoApi.updatePago(id, pago);
+    }
+  
+    const formData = new FormData();
+    
+    // Usar Object.entries para asegurar tipos
+    Object.entries(pago).forEach(([key, value]) => {
+       if (value !== undefined && value !== null) {
+        // Asegurar que value es string antes de añadirlo
+        formData.append(key, String(value));
+      }
+    });
+    
+    const uriParts = comprobanteUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    
+    // @ts-ignore
+    formData.append('comprobante', {
+      uri: comprobanteUri,
+      name: `comprobante.${fileType}`,
+      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
+    });
+    
+    return fetchApi<Pago>(`/pagos/${id}`, {
       method: 'PUT',
       headers: {
-        'Content-Type': 'multipart/form-data',
+        // Dejar que el navegador establezca Content-Type para multipart
         'Accept': 'application/json'
       },
-      body: formData as any,
+      body: formData,
     });
   }
 };

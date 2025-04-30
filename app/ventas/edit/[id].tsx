@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet, ScrollView, View } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -7,18 +7,19 @@ import { ThemedText } from '@/components/ThemedText';
 import { FormField } from '@/components/form/FormField';
 import { FormSelect } from '@/components/form/FormSelect';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { useVentas } from '@/hooks/crud/useVentas';
+import { useVentaItem } from '@/hooks/crud/useVentaItem';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductDetailsList from '@/components/ProductDetailsList';
 import DateField from '@/components/form/DateField';
+import { capitalize } from '@/utils/formatters';
+import { FormStyles } from '@/styles/Theme';
 
 export default function EditVentaScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const idNumerico = id ? parseInt(id as string) : 0;
   
-  // Referencia para controlar la carga inicial
   const hasLoadedRef = useRef(false);
   
-  // Usar el hook de ventas
   const {
     form,
     isLoading,
@@ -28,35 +29,25 @@ export default function EditVentaScreen() {
     venta,
     loadVentaForEdit,
     updateVenta,
-    loadOptions
-  } = useVentas();
+  } = useVentaItem();
 
-  // Cargar datos de la venta SOLO UNA VEZ
   useEffect(() => {
-    // Solo ejecutar si no se ha cargado ya
-    if (!hasLoadedRef.current && id) {
-      console.log(`⭐ Cargando datos para edición de venta ID: ${id}`);
+    if (!hasLoadedRef.current && idNumerico) {
+      console.log(`⭐ Cargando datos para edición de venta ID: ${idNumerico}`);
       
       const fetchData = async () => {
-        // Primero cargar las opciones (una sola vez)
-        await loadOptions();
-        
-        // Luego cargar la venta específica
-        await loadVentaForEdit(parseInt(id));
-        
-        // Marcar como cargado para evitar múltiples cargas
+        await loadVentaForEdit(idNumerico);
         hasLoadedRef.current = true;
       };
       
       fetchData();
     }
     
-    // Limpieza cuando el componente se desmonta
     return () => {
       console.log("Limpiando componente de edición");
       hasLoadedRef.current = false;
     };
-  }, [id]); // Solo dependemos del ID, ninguna función que cambie en cada renderizado
+  }, [idNumerico]);
 
   if (error) {
     return (
@@ -73,29 +64,33 @@ export default function EditVentaScreen() {
     );
   }
 
-  // Crear opciones para los selectores
   const clienteOptions = clientes.map(cliente => ({
     label: cliente.nombre,
     value: cliente.id.toString(),
   }));
-
-  const almacenOptions = almacenes.map(almacen => ({
-    label: almacen.nombre,
-    value: almacen.id.toString(),
-  }));
   
-  // Opciones para estado de pago
-  const estadoPagoOptions = [
-    { label: 'Pendiente', value: 'pendiente' },
-    { label: 'Parcial', value: 'parcial' },
-    { label: 'Pagado', value: 'pagado' },
-  ];
-  
-  // Opciones para tipo de pago
   const tipoPagoOptions = [
     { label: 'Contado', value: 'contado' },
     { label: 'Crédito', value: 'credito' },
   ];
+  
+  const nombreAlmacenActual = almacenes.find(a => 
+    a.id.toString() === venta?.almacen_id?.toString()
+  )?.nombre || 'N/A';
+
+  const detallesParaLista = (venta?.detalles || []).map(detalle => ({
+    id: detalle.id,
+    presentacion_id: detalle.presentacion_id,
+    cantidad: detalle.cantidad,
+    precio_unitario: detalle.precio_unitario,
+    presentacion: detalle.presentacion ? {
+      id: detalle.presentacion.id,
+      nombre: detalle.presentacion.nombre,
+      url_foto: detalle.presentacion.url_foto || undefined,
+      capacidad_kg: detalle.presentacion.capacidad_kg || undefined,
+      producto: undefined,
+    } : undefined,
+  }));
 
   return (
     <>
@@ -104,7 +99,6 @@ export default function EditVentaScreen() {
       <ScrollView style={styles.container}>
         <ThemedText type="title" style={styles.title}>Editar Venta #{id}</ThemedText>
         
-        {/* Notificación de inmutabilidad de detalles */}
         <ThemedView style={styles.infoBox}>
           <IconSymbol name="info.circle.fill" size={24} color="#2196F3" />
           <ThemedText style={styles.infoText}>
@@ -112,24 +106,19 @@ export default function EditVentaScreen() {
           </ThemedText>
         </ThemedView>
         
-        {/* Formulario de edición */}
         <FormSelect
           label="Cliente"
           value={form.formData.cliente_id}
           options={clienteOptions}
-          onChange={(value) => form.handleChange('cliente_id', value)}
+          onChange={(value: string) => form.handleChange('cliente_id', value)}
           error={form.errors.cliente_id}
           required
         />
         
-        <FormSelect
-          label="Almacén"
-          value={form.formData.almacen_id}
-          options={almacenOptions}
-          onChange={(value) => form.handleChange('almacen_id', value)}
-          error={form.errors.almacen_id}
-          required
-        />
+        <View style={FormStyles.formGroup}>
+           <ThemedText style={FormStyles.label}>Almacén</ThemedText>
+           <ThemedText style={styles.readOnlyField}>{nombreAlmacenActual}</ThemedText>
+        </View>
         
         <DateField
           label="Fecha"
@@ -143,18 +132,15 @@ export default function EditVentaScreen() {
           label="Tipo de Pago"
           value={form.formData.tipo_pago}
           options={tipoPagoOptions}
-          onChange={(value) => form.handleChange('tipo_pago', value)}
+          onChange={(value: string) => form.handleChange('tipo_pago', value)}
           error={form.errors.tipo_pago}
           required
         />
         
-        <FormSelect
-          label="Estado de Pago"
-          value={form.formData.estado_pago || 'pendiente'}
-          options={estadoPagoOptions}
-          onChange={(value) => form.handleChange('estado_pago', value)}
-          error={form.errors.estado_pago}
-        />
+        <View style={FormStyles.formGroup}>
+           <ThemedText style={FormStyles.label}>Estado de Pago</ThemedText>
+           <ThemedText style={styles.readOnlyField}>{capitalize(venta?.estado_pago || 'pendiente')}</ThemedText>
+        </View>
         
         <FormField
           label="Consumo Diario (kg)"
@@ -164,18 +150,16 @@ export default function EditVentaScreen() {
           error={form.errors.consumo_diario_kg}
         />
         
-        {/* Sección de detalles (sólo lectura) */}
-        {venta?.detalles && venta.detalles.length > 0 && (
+        {detallesParaLista.length > 0 && (
           <ThemedView style={styles.detailsSection}>
             <ThemedText type="subtitle">Productos (solo lectura)</ThemedText>
             <ProductDetailsList 
-              details={venta.detalles} 
+              details={detallesParaLista} 
               title="" 
             />
           </ThemedView>
         )}
         
-        {/* Resumen financiero */}
         <ThemedView style={styles.summarySection}>
           <ThemedText type="subtitle">Resumen Financiero</ThemedText>
           
@@ -196,9 +180,8 @@ export default function EditVentaScreen() {
           )}
         </ThemedView>
         
-        {/* Botones de acción */}
         <ActionButtons
-          onSave={updateVenta}
+          onSave={() => updateVenta(idNumerico)}
           onCancel={() => router.back()}
           isSubmitting={isLoading}
           saveText="Guardar Cambios"
@@ -234,6 +217,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 14,
   },
+  readOnlyField: {
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 8,
+    color: '#666',
+    marginTop: 4,
+  },
   detailsSection: {
     marginTop: 24,
     marginBottom: 24,
@@ -248,29 +240,28 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: 8,
     alignItems: 'center',
-    marginTop: 8,
   },
   summaryLabel: {
     fontSize: 16,
     fontWeight: '500',
   },
   summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0a7ea4',
+    fontSize: 16,
+    fontWeight: '600',
   },
   summaryInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    padding: 8,
     backgroundColor: 'rgba(255, 152, 0, 0.1)',
-    borderRadius: 4,
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 12,
   },
   summaryInfoText: {
     marginLeft: 8,
-    fontSize: 14,
-    color: '#FF9800',
+    fontSize: 13,
+    color: '#E65100',
   },
 });

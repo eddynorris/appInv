@@ -9,10 +9,10 @@ import { ProductCardStyles as styles } from '@/styles/Theme';
 
 // Interfaz para el detalle que maneja este grid (podría ser genérico)
 interface DetalleGridItem {
-  presentacion_id: string;
-  cantidad: string;
-  precio_estimado?: string;
-  precio_unitario?: string;
+    presentacion_id: string;
+    cantidad: string;
+    precio_estimado?: string;
+    precio_unitario?: string;
 }
 
 // Hacer UpdateFieldKey más genérico para incluir campos de venta

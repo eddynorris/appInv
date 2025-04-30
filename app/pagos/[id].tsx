@@ -1,6 +1,6 @@
 // app/pagos/[id].tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
@@ -11,14 +11,12 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { usePagoItem } from '@/hooks/crud/usePagoItem';
-import { API_CONFIG } from '@/services/api';
 
 export default function PagoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [pago, setPago] = useState<any | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Usar el hook refactorizado para operaciones CRUD de un pago
   const { 
     getPago, 
     deletePago, 
@@ -26,48 +24,43 @@ export default function PagoDetailScreen() {
     error 
   } = usePagoItem();
 
-  // Cargar datos del pago
   useEffect(() => {
     const fetchPago = async () => {
       if (!id) return;
-      
       const data = await getPago(parseInt(id));
       if (data) {
         setPago(data);
       }
     };
-
     fetchPago();
   }, [id, getPago]);
 
-  // Navegación a pantalla de edición
   const handleEdit = useCallback(() => {
     router.push(`/pagos/edit/${id}`);
   }, [id]);
 
-  // Eliminar pago
   const handleDelete = useCallback(async () => {
     if (!id) return;
-    
     const success = await deletePago(parseInt(id));
-    setShowDeleteDialog(false); // Siempre cerrar el diálogo
-    
+    setShowDeleteDialog(false);
     if (success) {
       router.replace('/pagos');
     }
   }, [id, deletePago]);
 
-  // Ver comprobante
-  const viewReceipt = useCallback(() => {
+  const handleViewComprobante = useCallback(() => {
     if (pago?.url_comprobante) {
-      const receiptUrl = `${API_CONFIG.baseUrl}/uploads/${pago.url_comprobante}`;
-      Linking.openURL(receiptUrl).catch(err => {
+      const presignedUrl = pago.url_comprobante;
+      console.log("Abriendo URL pre-firmada:", presignedUrl);
+      Linking.openURL(presignedUrl).catch(err => {
         console.error('Error al abrir el comprobante:', err);
+        Alert.alert("Error", "No se pudo abrir el enlace del comprobante. Asegúrate de tener una aplicación compatible instalada.")
       });
+    } else {
+        Alert.alert("Info", "Este pago no tiene un comprobante asociado.");
     }
   }, [pago]);
 
-  // Obtener color según método de pago
   const getMethodColor = useCallback((method: string) => {
     switch (method) {
       case 'efectivo':
@@ -169,14 +162,21 @@ export default function PagoDetailScreen() {
           )}
 
           {pago.url_comprobante && (
-            <ThemedView style={styles.comprobante}>
+            <ThemedView style={styles.comprobanteSection}>
               <ThemedText type="subtitle">Comprobante</ThemedText>
+              
               <TouchableOpacity 
                 style={styles.comprobanteButton} 
-                onPress={viewReceipt}
+                onPress={handleViewComprobante}
               >
-                <IconSymbol name="doc.fill" size={24} color="#0a7ea4" />
-                <ThemedText style={styles.comprobanteText}>Ver comprobante</ThemedText>
+                <IconSymbol 
+                  name="doc.text.image.fill"
+                  size={20} 
+                  color="#0a7ea4" 
+                />
+                <ThemedText style={styles.comprobanteText}>
+                  Abrir Comprobante
+                </ThemedText>
               </TouchableOpacity>
             </ThemedView>
           )}
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     color: '#0a7ea4',
     textDecorationLine: 'underline',
   },
-  comprobante: {
+  comprobanteSection: { 
     marginTop: 24,
     gap: 12,
   },
@@ -234,6 +234,7 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: 'rgba(10, 126, 164, 0.1)',
     borderRadius: 8,
+    alignSelf: 'flex-start',
   },
   comprobanteText: {
     color: '#0a7ea4',

@@ -1,387 +1,236 @@
-// app/presentaciones/create.tsx - Versión refactorizada
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, ScrollView, TextInput, TouchableOpacity, Image, Switch } from 'react-native';
+// app/presentaciones/create.tsx - Refactorizado
+import React, { useEffect, useMemo } from 'react';
+import { StyleSheet, View, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import * as ImagePicker from 'expo-image-picker';
 
-import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
+import { usePresentacionItem, TIPOS_PRESENTACION } from '@/hooks/crud/usePresentacionItem'; // Importar hook de item
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Colors } from '@/constants/Colors';
+import { FormField } from '@/components/form/FormField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { usePresentaciones } from '@/hooks/crud/usePresentaciones';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { FormStyles } from '@/styles/Theme';
 
 export default function CreatePresentacionScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
-  
-  // Usar el hook personalizado para presentaciones
+
+  // Usar el hook de item de presentación
   const {
-    formData,
-    errors,
-    isSubmitting,
     isLoading,
-    isLoadingProductos,
+    isLoadingOptions,
+    error,
+    form,
+    validationRules,
     productos,
-    TIPOS_PRESENTACION,
-    selectedImage,
-    handleChange,
-    setSelectedImage,
-    loadProductos,
-    createPresentacion
-  } = usePresentaciones();
-  
-  // Solicitar permisos de cámara y galería al montar el componente
+    tiposPresentacion: TIPOS_PRESENTACION, // Renombrado localmente para claridad
+    imageUploader,
+    prepareForCreate,
+    createPresentacion,
+  } = usePresentacionItem();
+
+  const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
+  const { file, pickImage, takePhoto, clearFile } = imageUploader;
+
+  // Preparar formulario al montar
   useEffect(() => {
-    const requestPermissions = async () => {
-      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
-        console.log('Permisos no concedidos para cámara o galería');
-      }
-    };
-    
-    requestPermissions();
+    prepareForCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  
-  // Cargar productos al iniciar
-  useEffect(() => {
-    loadProductos();
-  }, [loadProductos]);
-  
-  // Seleccionar imagen de la galería
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error al seleccionar imagen:', error);
-    }
+
+  // Función para manejar el envío
+  const submitForm = async () => {
+    // La validación y envío se manejan dentro del hook `createPresentacion`
+    // a través de `form.handleSubmit`
+    await createPresentacion(formData);
   };
-  
-  // Tomar foto con la cámara
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setSelectedImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error al tomar foto:', error);
-    }
-  };
-  
-  // Cancelar la creación
-  const handleCancel = () => {
-    router.back();
-  };
-  
-  // Renderizar pantalla de carga mientras se cargan los productos
-  if (isLoadingProductos) {
-    return (
-      <ScreenContainer 
-        title="Nueva Presentación"
-        isLoading={true}
-        loadingMessage="Cargando datos..."
-      />
-    );
-  }
 
   return (
-    <>
+    <ScreenContainer 
+      title="Nueva Presentación"
+      isLoading={isLoadingOptions && productos.length === 0} // Mostrar carga mientras se cargan productos
+      error={error}
+    >
       <Stack.Screen options={{ 
         title: 'Nueva Presentación',
         headerShown: true 
       }} />
-      
-      <ScrollView style={styles.container}>
-        <ThemedText type="title" style={styles.heading}>Crear Presentación</ThemedText>
 
-        <ThemedView style={styles.form}>
-          {/* Imagen de la presentación */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Foto de la presentación</ThemedText>
-            <ThemedView style={styles.imageContainer}>
-              {selectedImage ? (
-                <Image source={{ uri: selectedImage }} style={styles.previewImage} />
-              ) : (
-                <ThemedView style={styles.imagePlaceholder}>
-                  <ThemedText style={styles.placeholderText}>Sin imagen</ThemedText>
-                </ThemedView>
-              )}
-            </ThemedView>
-            <ThemedView style={styles.imageButtons}>
-              <TouchableOpacity 
-                style={[styles.imageButton, { backgroundColor: '#0a7ea4' }]}
-                onPress={pickImage}
-              >
-                <ThemedText style={styles.buttonText}>Galería</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.imageButton, { backgroundColor: '#4CAF50' }]}
-                onPress={takePhoto}
-              >
-                <ThemedText style={styles.buttonText}>Cámara</ThemedText>
-              </TouchableOpacity>
-              {selectedImage && (
-                <TouchableOpacity 
-                  style={[styles.imageButton, { backgroundColor: '#F44336' }]}
-                  onPress={() => setSelectedImage(null)}
-                >
-                  <ThemedText style={styles.buttonText}>Eliminar</ThemedText>
-                </TouchableOpacity>
-              )}
-            </ThemedView>
-          </ThemedView>
-
-          {/* Producto Selector */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Producto *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-            ]}>
+      <ScrollView keyboardShouldPersistTaps="handled">
+        <ThemedView style={styles.formContainer}>
+          {/* Selector de Producto Base */}
+          <ThemedView style={FormStyles.formGroup}>
+            <ThemedText style={FormStyles.label}>Producto Base *</ThemedText>
+            <View style={[FormStyles.pickerContainer, { backgroundColor: isDark ? Colors.dark.inputBackground : Colors.light.inputBackground }]}>
               <Picker
                 selectedValue={formData.producto_id}
                 onValueChange={(value) => handleChange('producto_id', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
+                style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
+                enabled={!isSubmitting && !isLoadingOptions}
               >
+                <Picker.Item label="Seleccione un producto..." value="" />
                 {productos.map(producto => (
-                  <Picker.Item 
-                    key={producto.id} 
-                    label={producto.nombre} 
-                    value={producto.id.toString()} 
-                  />
+                  <Picker.Item key={producto.id} label={producto.nombre} value={producto.id.toString()} />
                 ))}
               </Picker>
             </View>
-            {errors.producto_id && (
-              <ThemedText style={styles.errorText}>{errors.producto_id}</ThemedText>
-            )}
+            {errors.producto_id && <ThemedText style={FormStyles.errorText}>{errors.producto_id}</ThemedText>}
           </ThemedView>
 
-          {/* Nombre */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Nombre *</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                { color: Colors[colorScheme].text },
-                errors.nombre && styles.inputError
-              ]}
-              value={formData.nombre}
-              onChangeText={(value) => handleChange('nombre', value)}
-              placeholder="Ingresa el nombre de la presentación"
-              placeholderTextColor="#9BA1A6"
-            />
-            {errors.nombre && (
-              <ThemedText style={styles.errorText}>{errors.nombre}</ThemedText>
-            )}
-          </ThemedView>
+          {/* Nombre de la Presentación */}
+          <FormField
+            label="Nombre Presentación *"
+            value={formData.nombre}
+            onChangeText={(value) => handleChange('nombre', value)}
+            placeholder="Ej: Bolsa 1kg, Caja 10kg"
+            error={errors.nombre}
+            required
+            disabled={isSubmitting}
+          />
+
+          {/* Capacidad */}
+          <FormField
+            label="Capacidad (kg) *"
+            value={formData.capacidad_kg}
+            onChangeText={(value) => handleChange('capacidad_kg', value)}
+            placeholder="Ej: 1, 10, 0.5"
+            keyboardType="numeric"
+            error={errors.capacidad_kg}
+            required
+            disabled={isSubmitting}
+          />
+
+          {/* Precio de Venta */}
+          <FormField
+            label="Precio Venta *"
+            value={formData.precio_venta}
+            onChangeText={(value) => handleChange('precio_venta', value)}
+            placeholder="0.00"
+            keyboardType="numeric"
+            error={errors.precio_venta}
+            required
+            disabled={isSubmitting}
+          />
 
           {/* Tipo de Presentación */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Tipo de Presentación *</ThemedText>
-            <View style={[
-              styles.pickerContainer,
-              { backgroundColor: isDark ? '#2C2C2E' : '#F5F5F5' }
-            ]}>
+          <ThemedView style={FormStyles.formGroup}>
+            <ThemedText style={FormStyles.label}>Tipo *</ThemedText>
+            <View style={[FormStyles.pickerContainer, { backgroundColor: isDark ? Colors.dark.inputBackground : Colors.light.inputBackground }]}>
               <Picker
                 selectedValue={formData.tipo}
                 onValueChange={(value) => handleChange('tipo', value)}
-                style={[
-                  styles.picker,
-                  { color: Colors[colorScheme].text }
-                ]}
+                style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
+                enabled={!isSubmitting}
               >
                 {TIPOS_PRESENTACION.map(tipo => (
-                  <Picker.Item 
-                    key={tipo} 
-                    label={tipo.charAt(0).toUpperCase() + tipo.slice(1)} 
-                    value={tipo} 
-                  />
+                  <Picker.Item key={tipo} label={tipo.charAt(0).toUpperCase() + tipo.slice(1)} value={tipo} />
                 ))}
+              </Picker>
+            </View>
+            {errors.tipo && <ThemedText style={FormStyles.errorText}>{errors.tipo}</ThemedText>}
+          </ThemedView>
+
+          {/* Estado Activo/Inactivo */}
+          <ThemedView style={FormStyles.formGroup}>
+            <ThemedText style={FormStyles.label}>Estado</ThemedText>
+            <View style={[FormStyles.pickerContainer, { backgroundColor: isDark ? Colors.dark.inputBackground : Colors.light.inputBackground }]}>
+              <Picker
+                selectedValue={formData.activo}
+                onValueChange={(value) => handleChange('activo', value)}
+                style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
+                enabled={!isSubmitting}
+              >
+                <Picker.Item label="Activo" value={true} />
+                <Picker.Item label="Inactivo" value={false} />
               </Picker>
             </View>
           </ThemedView>
 
-          {/* Capacidad KG */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Capacidad (KG) *</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                { color: Colors[colorScheme].text },
-                errors.capacidad_kg && styles.inputError
-              ]}
-              value={formData.capacidad_kg}
-              onChangeText={(value) => handleChange('capacidad_kg', value)}
-              placeholder="0.00"
-              placeholderTextColor="#9BA1A6"
-              keyboardType="numeric"
-            />
-            {errors.capacidad_kg && (
-              <ThemedText style={styles.errorText}>{errors.capacidad_kg}</ThemedText>
+          {/* Carga de Imagen */}
+          <ThemedView style={FormStyles.formGroup}>
+            <ThemedText style={FormStyles.label}>Imagen (Opcional)</ThemedText>
+            {file ? (
+              <View style={styles.imagePreviewContainer}>
+                <Image source={{ uri: file.uri }} style={styles.imagePreview} resizeMode="contain" />
+                <TouchableOpacity onPress={clearFile} style={styles.removeImageButton}>
+                  <IconSymbol name="xmark.circle.fill" size={24} color={Colors.danger} />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.imageButtonsContainer}>
+                <TouchableOpacity style={styles.imageButton} onPress={pickImage} disabled={isSubmitting}>
+                  <IconSymbol name="photo.on.rectangle" size={24} color={Colors.primary} />
+                  <ThemedText style={styles.imageButtonText}>Galería</ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.imageButton} onPress={takePhoto} disabled={isSubmitting}>
+                   <IconSymbol name="camera.fill" size={24} color={Colors.primary} />
+                   <ThemedText style={styles.imageButtonText}>Cámara</ThemedText>
+                </TouchableOpacity>
+              </View>
             )}
           </ThemedView>
 
-          {/* Precio de Venta */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Precio de Venta *</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                { color: Colors[colorScheme].text },
-                errors.precio_venta && styles.inputError
-              ]}
-              value={formData.precio_venta}
-              onChangeText={(value) => handleChange('precio_venta', value)}
-              placeholder="0.00"
-              placeholderTextColor="#9BA1A6"
-              keyboardType="numeric"
-            />
-            {errors.precio_venta && (
-              <ThemedText style={styles.errorText}>{errors.precio_venta}</ThemedText>
-            )}
-          </ThemedView>
-
-          {/* Estado (Activo/Inactivo) */}
-          <ThemedView style={styles.formGroup}>
-            <ThemedText style={styles.label}>Estado</ThemedText>
-            <View style={styles.switchContainer}>
-              <ThemedText>{formData.activo ? 'Activo' : 'Inactivo'}</ThemedText>
-              <Switch
-                value={formData.activo}
-                onValueChange={(value) => handleChange('activo', value)}
-                trackColor={{ false: '#767577', true: '#81b0ff' }}
-                thumbColor={formData.activo ? '#0a7ea4' : '#f4f3f4'}
-              />
-            </View>
-          </ThemedView>
-
-          {/* Botones de acción */}
-          <ActionButtons
-            onSave={createPresentacion}
-            onCancel={handleCancel}
-            isSubmitting={isSubmitting}
-            saveText="Crear Presentación"
-          />
         </ThemedView>
       </ScrollView>
-    </>
+
+      {/* Botones de Acción */}
+      <ActionButtons
+        onSave={() => handleSubmit(submitForm, validationRules)} // Usar form.handleSubmit
+        onCancel={() => router.back()}
+        isSubmitting={isSubmitting || isLoading} // Considerar ambos loadings
+        saveText="Crear Presentación"
+      />
+
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  formContainer: {
     padding: 16,
   },
-  heading: {
-    marginBottom: 20,
-  },
-  form: {
-    gap: 16,
-  },
-  formGroup: {
-    gap: 4,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-  inputError: {
-    borderColor: '#E53935',
-  },
-  errorText: {
-    color: '#E53935',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  imagePreviewContainer: {
+    position: 'relative',
     alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    borderRadius: 8,
     padding: 8,
   },
-  // Estilos para la sección de imagen
-  imageContainer: {
+  imagePreview: {
     width: '100%',
     height: 200,
-    marginVertical: 10,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E1E3E5',
-    overflow: 'hidden',
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: 12,
+    padding: 2,
   },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-  },
-  placeholderText: {
-    color: '#9BA1A6',
-    fontSize: 16,
-  },
-  imageButtons: {
+  imageButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     marginTop: 8,
   },
   imageButton: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    borderRadius: 8,
+    minWidth: 120,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '500',
+  imageButtonText: {
+    marginTop: 4,
+    color: Colors.primary,
+    fontSize: 14,
   },
 });

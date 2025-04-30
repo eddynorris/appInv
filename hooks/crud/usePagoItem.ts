@@ -1,7 +1,8 @@
 // hooks/crud/usePagoItem.ts
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { pagoApi, API_CONFIG, ventaApi } from '@/services/api';
+import { pagoApi, ventaApi } from '@/services/api';
+import { API_CONFIG } from '@/services/httpClient';
 import { Pago } from '@/models';
 import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';
 

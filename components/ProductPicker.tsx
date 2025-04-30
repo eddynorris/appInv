@@ -98,15 +98,18 @@ export function ProductPicker({
   const renderItem = ({ item }: { item: Presentacion }) => {
     const isSelected = selectedId === item.id.toString();
     const imageUrl = getImageUrl(item.url_foto);
-    
+    const stock = parseInt(String(item.stock_disponible ?? '0'), 10);
+
     return (
       <TouchableOpacity
         style={[
           styles.itemContainer,
           isSelected && styles.selectedItem,
-          { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }
+          { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' },
+          stock <= 0 && !isSelected && styles.outOfStockItem
         ]}
         onPress={() => handleSelect(item)}
+        disabled={stock <= 0 && !isSelected}
       >
         <View style={styles.productInfo}>
           <View style={styles.imageContainer}>
@@ -131,6 +134,12 @@ export function ProductPicker({
             <ThemedText style={styles.productPrice}>
               ${parseFloat(item.precio_venta || '0').toFixed(2)}
             </ThemedText>
+            <ThemedText style={[
+                styles.stockText, 
+                stock <= 0 ? styles.stockZero : styles.stockAvailable
+            ]}>
+              Stock: {stock}
+            </ThemedText>
           </View>
         </View>
         
@@ -144,7 +153,11 @@ export function ProductPicker({
                   { color: isDark ? '#FFFFFF' : '#000000' }
                 ]}
                 value={cantidad}
-                onChangeText={setCantidad}
+                onChangeText={(value) => {
+                    const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 1;
+                    const validQty = Math.min(numValue, stock > 0 ? stock : 1);
+                    setCantidad(validQty.toString());
+                }}
                 keyboardType="numeric"
                 selectTextOnFocus
                 autoFocus
@@ -303,6 +316,10 @@ const styles = StyleSheet.create({
     borderColor: '#0a7ea4',
     borderWidth: 2,
   },
+  outOfStockItem: {
+    opacity: 0.5,
+    backgroundColor: '#EEEEEE',
+  },
   productInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -338,6 +355,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#0a7ea4',
+  },
+  stockText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  stockAvailable: {
+    color: Colors.success,
+  },
+  stockZero: {
+    color: Colors.danger,
   },
   selectedOptions: {
     marginTop: 12,

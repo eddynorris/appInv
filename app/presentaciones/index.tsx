@@ -1,5 +1,5 @@
 // app/presentaciones/index.tsx - Versión refactorizada
-import React, { useEffect, useMemo } from 'react';
+import React from 'react';
 import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 
@@ -8,32 +8,20 @@ import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
-import { usePresentaciones } from '@/hooks/crud/usePresentaciones';
+import { usePresentacionesList } from '@/hooks/crud/usePresentacionesList';
 
 export default function PresentacionesScreen() {
-  // Usar nuestro custom hook para la gestión completa de presentaciones
-  const { 
-    presentaciones, 
-    isLoading, 
-    error, 
-    pagination, 
+  // Usar el nuevo hook para la lista
+  const {
+    presentaciones,
+    isLoading,
+    error,
     columns,
+    pagination,
     refresh,
-    handlePageChange,
-    handleItemsPerPageChange,
-    confirmDelete,
-    getEstadisticas
-  } = usePresentaciones();
-  
-  // Memoizar las estadísticas para evitar cálculos innecesarios
-  const estadisticas = useMemo(() => getEstadisticas(), [getEstadisticas]);
+    deletePresentacion,
+  } = usePresentacionesList();
 
-  // Cargar datos al montar el componente
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Navegar a la pantalla de creación
   const handleAddPresentacion = () => {
     router.push('/presentaciones/create');
   };
@@ -43,19 +31,24 @@ export default function PresentacionesScreen() {
       title="Presentaciones"
       scrollable={false}
     >
+      <Stack.Screen options={{ 
+        title: 'Presentaciones',
+        headerShown: true 
+      }} />
+      
       <ThemedView style={styles.container}>
         {/* Panel de resumen/estadísticas */}
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Total Presentaciones:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : estadisticas.totalPresentaciones}
+              {isLoading ? 'Cargando...' : presentaciones.length}
             </ThemedText>
           </ThemedView>
           <ThemedView style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Presentaciones Activas:</ThemedText>
             <ThemedText style={styles.summaryValue}>
-              {estadisticas.presentacionesActivas} de {presentaciones.length}
+              {presentaciones.length}
             </ThemedText>
           </ThemedView>
         </ThemedView>
@@ -69,21 +62,21 @@ export default function PresentacionesScreen() {
           baseRoute="/presentaciones"
           pagination={pagination}
           sorting={{
-            sortColumn: 'nombre',
-            sortOrder: 'asc',
-            onSort: () => {} // Implementar si se necesita ordenación en servidor
+            sortColumn: pagination.sortColumn,
+            sortOrder: pagination.sortOrder,
+            onSort: pagination.onSort,
           }}
           actions={{
             onView: true,
             onEdit: true,
-            onDelete: true
+            onDelete: true,
           }}
           deleteOptions={{
             title: 'Eliminar Presentación',
-            message: '¿Está seguro que desea eliminar esta presentación?',
+            message: '¿Está seguro que desea eliminar esta presentación? Los productos asociados podrían verse afectados.',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
-            onDelete: confirmDelete
+            onDelete: async (id) => await deletePresentacion(Number(id)),
           }}
           emptyMessage="No hay presentaciones disponibles"
           onRefresh={refresh}

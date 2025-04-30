@@ -174,7 +174,7 @@ export function useLoteItem() {
       if (isNaN(loteData.producto_id) || (loteData.proveedor_id !== undefined && isNaN(loteData.proveedor_id)) ){
            throw new Error("Producto o Proveedor inválido.");
       }
-
+      
       return await loteApi.createLote(loteData as any);
     } catch (err) {
       console.error('Error creating lote item:', err);

@@ -15,7 +15,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 interface ClienteSearchModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelectCliente: (cliente: ClienteSimple) => void;
+  onSelectCliente: (clienteId: string) => void;
   onClienteCreated: (cliente: Cliente) => void; // Callback cuando se crea un nuevo cliente
   initialClientes: ClienteSimple[]; // Recibir lista inicial de clientes
 }
@@ -69,7 +69,7 @@ export function ClienteSearchModal({
   const renderItem = ({ item }: { item: ClienteSimple }) => (
     <TouchableOpacity
       style={[styles.itemContainer, { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }]}
-      onPress={() => onSelectCliente(item)}
+      onPress={() => onSelectCliente(item.id.toString())}
     >
       <View style={styles.itemContent}>
           <IconSymbol name="person.fill" size={24} color={isDark ? Colors.dark.text : Colors.light.text} />

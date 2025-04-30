@@ -50,7 +50,7 @@ export default function PedidosScreen() {
 
   // Ya no necesitamos cargar opciones de filtros
   // useEffect(() => { ... }, []);
-
+  
   const handleAddPedido = () => {
     router.push('/pedidos/create');
   };
@@ -123,11 +123,11 @@ export default function PedidosScreen() {
 
   return (
     <>
-      <Stack.Screen options={{
+      <Stack.Screen options={{ 
         title: 'Proyecciones',
-        headerShown: true
+        headerShown: true 
       }} />
-
+      
       <ThemedView style={styles.container}>
         <Collapsible title="Filtrar por Fecha">
           <ThemedView style={styles.filterContainer}>
@@ -210,10 +210,10 @@ export default function PedidosScreen() {
           emptyMessage="No hay proyecciones disponibles"
           onRefresh={refresh}
         />
-
-        <FloatingActionButton
-          icon="plus.circle.fill"
-          onPress={handleAddPedido}
+        
+        <FloatingActionButton 
+          icon="plus.circle.fill" 
+          onPress={handleAddPedido} 
         />
       </ThemedView>
     </>

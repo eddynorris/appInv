@@ -1,7 +1,7 @@
 // app/pagos/create.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -9,23 +9,19 @@ import { PaymentForm } from '@/components/form/PaymentForm';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { usePagoItem } from '@/hooks/crud/usePagoItem';
-import { useVentasPendientes } from '@/hooks/crud/useVentasPendientes';
 import { useForm } from '@/hooks/useForm';
+import { ventaApi } from '@/services/api';
+import { Venta } from '@/models';
 
 export default function CreatePagoScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const params = useLocalSearchParams<{ ventaId?: string; clienteId?: string }>();
+  const initialVentaId = params.ventaId;
+
+  const [ventaEspecifica, setVentaEspecifica] = useState<Venta | null>(null);
+  const [isLoadingVenta, setIsLoadingVenta] = useState(false);
+  const [ventaError, setVentaError] = useState<string | null>(null);
   
-  // Hook para gestión de ventas pendientes
-  const { 
-    ventaOptions, 
-    selectedVentaId, 
-    selectedVentaInfo, 
-    setSelectedVentaId, 
-    isLoading: isLoadingVentas, 
-    error: ventasError 
-  } = useVentasPendientes();
-  
-  // Hook para operaciones CRUD de pagos
   const { 
     createPago, 
     isLoading: isPagoLoading, 
@@ -39,7 +35,6 @@ export default function CreatePagoScreen() {
     pickDocument
   } = usePagoItem();
   
-  // Hook para manejo del formulario
   const { 
     formData, 
     errors, 
@@ -47,41 +42,63 @@ export default function CreatePagoScreen() {
     handleChange, 
     handleSubmit, 
     validate,
-    setErrors 
+    setErrors,
+    setValues
   } = useForm({
-    venta_id: selectedVentaId,
+    venta_id: initialVentaId || '', 
     monto: '',
     fecha: new Date().toISOString().split('T')[0],
     metodo_pago: 'efectivo',
     referencia: '',
   });
 
-  // Actualizar el ID de venta cuando cambie la selección
   useEffect(() => {
-    if (selectedVentaId) {
-      handleChange('venta_id', selectedVentaId);
-    }
-  }, [selectedVentaId, handleChange]);
+    const loadVentaData = async (id: number) => {
+      setIsLoadingVenta(true);
+      setVentaError(null);
+      try {
+        const ventaData = await ventaApi.getVenta(id);
+        setVentaEspecifica(ventaData);
+        setValues({ venta_id: id.toString() });
+      } catch (err) {
+        console.error("Error cargando venta específica:", err);
+        setVentaError(err instanceof Error ? err.message : "No se pudo cargar la venta");
+        setVentaEspecifica(null);
+      } finally {
+        setIsLoadingVenta(false);
+      }
+    };
 
-  // Reglas de validación para el formulario
+    if (initialVentaId) {
+      const idNum = parseInt(initialVentaId);
+      if (!isNaN(idNum)) {
+        loadVentaData(idNum);
+      } else {
+        setVentaError("ID de venta inválido.");
+      }
+    } else {
+      console.log("No se recibió ventaId, el usuario deberá seleccionar una (funcionalidad pendiente).");
+    }
+  }, [initialVentaId, setValues]);
+
   const validationRules = {
     venta_id: (value: string) => !value.trim() ? 'La venta es requerida' : null,
     monto: (value: string) => {
       if (!value.trim()) return 'El monto es requerido';
-      if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un monto válido';
-      if (selectedVentaInfo && parseFloat(value) > parseFloat(selectedVentaInfo.saldoPendiente)) {
-        return `El monto supera el saldo pendiente (${selectedVentaInfo.saldoPendiente})`;
+      const montoNum = parseFloat(value);
+      if (isNaN(montoNum) || montoNum <= 0) return 'Ingrese un monto válido';
+      const saldoPendiente = ventaEspecifica?.saldo_pendiente ? parseFloat(ventaEspecifica.saldo_pendiente) : null;
+      if (saldoPendiente !== null && montoNum > saldoPendiente) {
+        return `El monto supera el saldo pendiente (${saldoPendiente.toFixed(2)})`;
       }
       return null;
     },
-    // Solo para transferencias exigimos referencia y comprobante
     referencia: (value: string) => {
       if (formData.metodo_pago !== 'transferencia') return null;
       return !value.trim() ? 'La referencia es requerida para transferencias' : null;
     }
   };
 
-  // Validación adicional para comprobante
   const validateComprobante = () => {
     if (formData.metodo_pago === 'transferencia' && !comprobante) {
       setErrors(prev => ({
@@ -90,34 +107,37 @@ export default function CreatePagoScreen() {
       }));
       return false;
     }
+    if (formData.metodo_pago !== 'transferencia' || comprobante) {
+       setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors.comprobante;
+          return newErrors;
+        });
+    }
     return true;
   };
 
-  // Manejar envío del formulario
   const submitForm = async () => {
-    // Validar reglas del formulario y comprobante
     if (!validate(validationRules) || !validateComprobante()) {
       return;
     }
     
     try {
-      // Preparar los datos del pago
       const pagoData = {
         venta_id: parseInt(formData.venta_id),
         monto: formData.monto.replace(',', '.'),
         fecha: formData.fecha,
-        metodo_pago: formData.metodo_pago,
+        metodo_pago: formData.metodo_pago as 'efectivo' | 'transferencia' | 'tarjeta',
         referencia: formData.referencia || undefined
       };
       
-      // Crear el pago
       const response = await createPago(pagoData);
       
       if (response) {
         Alert.alert(
           'Pago Registrado',
           'El pago ha sido registrado exitosamente',
-          [{ text: 'OK', onPress: () => router.replace('/pagos') }]
+          [{ text: 'OK', onPress: () => router.replace(`/ventas/${formData.venta_id}`) }]
         );
         return true;
       } else {
@@ -130,35 +150,41 @@ export default function CreatePagoScreen() {
     }
   };
 
-  // Manejar cambio de venta seleccionada
-  const handleVentaChange = (value: string) => {
-    setSelectedVentaId(value);
-    handleChange('venta_id', value); // Actualizar el formulario con el nuevo ID de venta
-  };
-
-  // Mostrar pantalla de carga mientras se cargan las ventas
-  if (isLoadingVentas) {
+  if (isLoadingVenta) {
     return (
       <>
         <Stack.Screen options={{ title: 'Registrar Pago', headerShown: true }} />
         <ThemedView style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
-          <ThemedText>Cargando ventas disponibles...</ThemedText>
+          <ThemedText>Cargando datos de la venta...</ThemedText>
         </ThemedView>
       </>
     );
   }
 
-  // Mostrar mensaje si no hay ventas disponibles
-  if (ventaOptions.length === 0) {
+  if (ventaError) {
     return (
+      <>
+        <Stack.Screen options={{ title: 'Error', headerShown: true }} />
+        <ThemedView style={styles.container}>
+          <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
+          <ThemedView style={styles.errorContainer}>
+            <ThemedText style={styles.errorText}>{ventaError}</ThemedText>
+          </ThemedView>
+        </ThemedView>
+      </>
+    );
+  }
+
+  if (!initialVentaId && !ventaEspecifica) {
+     return (
       <>
         <Stack.Screen options={{ title: 'Registrar Pago', headerShown: true }} />
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
           <ThemedView style={styles.errorContainer}>
             <ThemedText style={styles.errorText}>
-              No hay ventas con pagos pendientes
+              Funcionalidad de selección de venta pendiente.
             </ThemedText>
           </ThemedView>
         </ThemedView>
@@ -166,8 +192,13 @@ export default function CreatePagoScreen() {
     );
   }
 
-  // Determinar si se está procesando
   const isProcessing = isSubmitting || isPagoLoading;
+
+  const ventaInfoParaForm = ventaEspecifica ? {
+      cliente: ventaEspecifica.cliente?.nombre || 'Desconocido',
+      total: ventaEspecifica.total || '0',
+      saldoPendiente: ventaEspecifica.saldo_pendiente || '0'
+  } : null;
 
   return (
     <>
@@ -176,7 +207,7 @@ export default function CreatePagoScreen() {
         headerShown: true 
       }} />
       
-      <ScrollView>
+      <ScrollView keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.container}>
           <ThemedText type="title" style={styles.heading}>Registrar Pago</ThemedText>
 
@@ -190,13 +221,10 @@ export default function CreatePagoScreen() {
             formData={formData}
             errors={errors}
             isSubmitting={isProcessing}
+            isVentaSelectionDisabled={!!initialVentaId}
             onChange={(field, value) => {
-              // Manejar el cambio de venta_id de forma especial
-              if (field === 'venta_id') {
-                handleVentaChange(value);
-              } else {
-                handleChange(field, value);
-              }
+              if (field === 'venta_id' && initialVentaId) return;
+              handleChange(field as keyof typeof formData, value);
             }}
             onSubmit={() => handleSubmit(submitForm)}
             onCancel={() => router.back()}
@@ -204,8 +232,8 @@ export default function CreatePagoScreen() {
             setComprobante={setComprobante}
             existingComprobante={existingComprobante}
             setExistingComprobante={setExistingComprobante}
-            ventaOptions={ventaOptions}
-            ventaInfo={selectedVentaInfo}
+            ventaOptions={initialVentaId ? [] : []} 
+            ventaInfo={ventaInfoParaForm}
             pickImage={pickImage}
             takePhoto={takePhoto}
             pickDocument={pickDocument}

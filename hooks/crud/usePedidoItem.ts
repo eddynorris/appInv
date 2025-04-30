@@ -277,8 +277,8 @@ export function usePedidoItem() {
 
     if (!form.validate(updateValidationRules)) {
         Alert.alert('Error de Validación', 'Por favor revise los campos marcados.');
-        return null;
-    }
+         return null;
+     }
     setIsLoading(true);
     setError(null);
     try {
@@ -291,8 +291,8 @@ export function usePedidoItem() {
         notas: formData.notas || '',
       };
        if (isNaN(pedidoDataToUpdate.cliente_id) || isNaN(pedidoDataToUpdate.almacen_id)) {
-            throw new Error("Cliente o Almacén inválido.");
-        }
+           throw new Error("Cliente o Almacén inválido.");
+       }
       const response = await pedidoApi.updatePedido(id, pedidoDataToUpdate);
       Alert.alert('Éxito', 'Proyección actualizada correctamente.', [
           { text: 'OK', onPress: () => router.push(`/pedidos/${id}`) }
