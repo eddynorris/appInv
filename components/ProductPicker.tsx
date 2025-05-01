@@ -150,6 +150,12 @@ export function ProductPicker({
               Cap: {item.capacidad_kg ?? 'N/A'}kg
               | P.Venta: ${item.precio_venta ?? 'N/A'}
             </ThemedText>
+
+            {!isPedidoMode && ( 
+              <ThemedText style={[styles.productSubDetail, { color: hasStock ? (isDark ? Colors.dark.textSecondary : Colors.light.textSecondary) : Colors.danger }]}>
+                Stock: {stock} unidades
+              </ThemedText>
+            )}
           </View>
         </View>
         
