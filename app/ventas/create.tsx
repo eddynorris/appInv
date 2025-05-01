@@ -49,6 +49,7 @@ export default function CreateVentaScreen() {
     handleDateSelection,
     handleSelectCliente,
     handleClienteCreated,
+    handleAlmacenChange,
     isAdmin
   } = useVentaItem();
 
@@ -145,7 +146,7 @@ export default function CreateVentaScreen() {
             <View style={[FormStyles.pickerContainer, { backgroundColor: isDark ? Colors.dark.inputBackground : Colors.light.inputBackground }]}>
               <Picker
                 selectedValue={formData.almacen_id}
-                onValueChange={(value) => handleChange('almacen_id', value)}
+                onValueChange={(value) => handleAlmacenChange(value)}
                 style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
                 enabled={isAdmin && !isSubmitting && !isLoadingOptions} // Solo admin puede cambiar si hay > 1
               >

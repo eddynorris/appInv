@@ -16,7 +16,7 @@ import { ClienteSearchModal } from '@/components/ClienteSearchModal';
 import { ProductPicker } from '@/components/ProductPicker';
 import ProductGrid from '@/components/ProductGrid';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { ClienteSimple } from '@/models'; // Importar ClienteSimple
+import { ClienteSimple } from '@/models'; // Asegurar que ClienteSimple esté importado
 import { FormStyles, Spacing, Shadows } from '@/styles/Theme'; // Importar todo desde Theme
 
 export default function CreatePedidoScreen() {
@@ -30,9 +30,9 @@ export default function CreatePedidoScreen() {
     form,
     detalles,
     validationRules,
-    clientes, // Lista de clientes para el modal de búsqueda
+    clientes,
     almacenes,
-    presentaciones,
+    presentaciones, // <= Ahora son las filtradas por almacén
     showDatePicker,
     setShowDatePicker,
     showClienteModal,
@@ -48,10 +48,11 @@ export default function CreatePedidoScreen() {
     handleDateSelection,
     handleSelectCliente,
     handleClienteCreated,
-    isAdmin // Para control de almacén
+    handleAlmacenChange,
+    isAdmin
   } = usePedidoItem();
 
-  const { formData, errors, setErrors, isSubmitting, handleChange } = form;
+  const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
 
   // Preparar el formulario al montar
   useEffect(() => {
@@ -59,7 +60,7 @@ export default function CreatePedidoScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Encontrar el cliente seleccionado para mostrar su nombre
+  // Encontrar el cliente seleccionado
   const selectedCliente = useMemo(() => {
     if (!formData.cliente_id) return null;
     return clientes.find(c => c.id.toString() === formData.cliente_id);
@@ -68,20 +69,41 @@ export default function CreatePedidoScreen() {
   // Calcular total estimado
   const totalEstimado = useMemo(() => calcularTotal(), [calcularTotal]);
 
-  // Renombrar la función local para evitar confusión con form.handleSubmit
+  // Función de envío (usa form.handleSubmit)
   const submitPedido = async () => {
-    // La validación se delega a form.handleSubmit
-    // Ya no se necesita la validación manual aquí:
-    // const newErrors: Record<string, string> = {};
-    // if (!formData.cliente_id) newErrors.cliente_id = 'El cliente es requerido';
-    // ... (resto de validaciones manuales eliminadas)
-    // if (Object.keys(newErrors).length > 0) { ... }
-
-    // Simplemente llama a la función del hook que envía a la API
-    // createPedido ya maneja las alertas de éxito/error internamente
     await createPedido();
-    // No necesitamos devolver nada aquí, createPedido maneja la lógica post-submit
   };
+
+  // --- RENDERIZADO CONDICIONAL: Carga Inicial ---
+  if (isLoadingOptions) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Nueva Proyección', headerShown: true }} />
+        <ThemedView style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors[colorScheme ?? 'light'].tint} />
+          <ThemedText style={{ marginTop: 10 }}>Cargando datos...</ThemedText>
+        </ThemedView>
+      </>
+    );
+  }
+
+  // --- RENDERIZADO CONDICIONAL: Error de Carga ---
+  if (error && !isLoading) {
+     return (
+       <>
+        <Stack.Screen options={{ title: 'Error', headerShown: true }} />
+        <ThemedView style={styles.errorContainer}>
+           <IconSymbol name="exclamationmark.triangle" size={48} color={Colors[colorScheme ?? 'light'].icon} />
+          <ThemedText style={styles.errorText}>
+             Error cargando datos: {error}
+          </ThemedText>
+           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+             <ThemedText style={styles.backButtonText}>Volver</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+      </>
+    );
+  }
 
   return (
     <>
@@ -107,52 +129,43 @@ export default function CreatePedidoScreen() {
           {errors.cliente_id && (
             <ThemedText style={FormStyles.errorText}>{errors.cliente_id}</ThemedText>
           )}
-          <TouchableOpacity style={styles.inlineButton} onPress={() => setShowClienteModal(true)}>
+          <TouchableOpacity style={styles.inlineButton} onPress={() => setShowClienteModal(true)} disabled={isSubmitting}>
              <IconSymbol name="magnifyingglass" size={16} color={Colors.primary} />
-             <ThemedText style={styles.inlineButtonText}>Buscar Cliente</ThemedText>
+             <ThemedText style={styles.inlineButtonText}>Buscar/Crear Cliente</ThemedText>
           </TouchableOpacity>
         </ThemedView>
 
         {/* Sección Detalles Proyección */}
         <ThemedView style={styles.cardContainer}>
-          {/* Almacén Selector (Solo visible/editable para admin si se necesita) */}
+          {/* Almacén Selector (Usar handleAlmacenChange) */}
           <ThemedView style={FormStyles.formGroup}>
             <ThemedText style={FormStyles.label}>Almacén *</ThemedText>
             <View style={[
               FormStyles.pickerContainer,
               { backgroundColor: isDark ? Colors.dark.inputBackground : Colors.light.inputBackground },
-              !isAdmin && FormStyles.disabledContainer // Deshabilitar si no es admin
+              !isAdmin && FormStyles.disabledContainer
             ]}>
               <Picker
                 selectedValue={formData.almacen_id}
-                // Permitir cambio solo si es admin, sino usar el del usuario por defecto
-                onValueChange={(value) => isAdmin && handleChange('almacen_id', value)}
+                onValueChange={(value) => handleAlmacenChange(value)}
                 style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={isAdmin} // Habilitar solo para admin
+                enabled={isAdmin && !isSubmitting && !isLoadingOptions}
               >
-                {/* Mostrar almacén del usuario o lista si es admin */}
-                {isAdmin ? (
-                  almacenes.map(almacen => (
+                <Picker.Item label={isLoadingOptions ? "Cargando..." : "Seleccione..."} value="" />
+                {almacenes.map(almacen => (
                     <Picker.Item
                       key={almacen.id.toString()}
                       label={almacen.nombre}
                       value={almacen.id.toString()}
                     />
-                  ))
-                ) : (
-                  // Si no es admin, mostrar solo el almacén asignado (si existe)
-                  almacenes.filter(a => a.id.toString() === formData.almacen_id).map(almacen => (
-                     <Picker.Item
-                      key={almacen.id.toString()}
-                      label={almacen.nombre}
-                      value={almacen.id.toString()}
-                    />
-                  ))
-                )}
+                  ))}
               </Picker>
             </View>
              {errors.almacen_id && (
                 <ThemedText style={FormStyles.errorText}>{errors.almacen_id}</ThemedText>
+             )}
+             {!isAdmin && formData.almacen_id && (
+                  <ThemedText style={FormStyles.infoText}>Almacén asignado: {almacenes.find(a => a.id.toString() === formData.almacen_id)?.nombre ?? ''}</ThemedText>
              )}
           </ThemedView>
 
@@ -225,8 +238,10 @@ export default function CreatePedidoScreen() {
             {errors.detalles && (
                 <ThemedText style={[FormStyles.errorText, {marginTop: 8, marginBottom: 8}]}>{errors.detalles}</ThemedText>
              )}
-             {isLoadingOptions ? (
+             {isLoadingOptions && !presentaciones.length ? (
                 <ActivityIndicator />
+             ) : !formData.almacen_id ? (
+                 <ThemedText style={FormStyles.infoText}>Seleccione un almacén para ver/agregar productos.</ThemedText>
              ) : (
                 <ProductGrid
                     detalles={detalles}
@@ -248,9 +263,9 @@ export default function CreatePedidoScreen() {
 
         {/* Botones de Acción */}
         <ActionButtons
-          onSave={() => form.handleSubmit(submitPedido, validationRules)}
+          onSave={() => handleSubmit(submitPedido, validationRules)}
           onCancel={() => router.back()}
-          isSubmitting={form.isSubmitting || isLoading || isLoadingOptions}
+          isSubmitting={isSubmitting || isLoading || isLoadingOptions}
           saveText="Registrar Proyección"
         />
 
@@ -272,6 +287,7 @@ export default function CreatePedidoScreen() {
         isLoading={isLoadingOptions}
         onClose={() => setShowProductModal(false)}
         onSelectProduct={agregarProducto}
+        isPedidoMode={true}
       />
     </>
   );
@@ -334,6 +350,35 @@ const styles = StyleSheet.create({
     padding: Spacing.lg, // Usar espaciado consistente
     marginBottom: Spacing.lg,
     ...Shadows.small, // Aplicar sombra si se desea
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  errorText: {
+    marginTop: Spacing.md,
+    fontSize: 14,
+    textAlign: 'center',
+    color: Colors.danger,
+  },
+  backButton: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.primary,
+    borderRadius: FormStyles.input.borderRadius,
+  },
+  backButtonText: {
+     color: 'white',
+     fontWeight: 'bold',
   },
   // ... otros estilos si son necesarios
 });

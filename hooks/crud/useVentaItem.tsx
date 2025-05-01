@@ -232,8 +232,13 @@ export function useVentaItem() {
     }
   }, [handleChange]);
 
-  const handleSelectCliente = useCallback((clienteId: string) => {
-    handleChange('cliente_id', clienteId);
+  const handleSelectCliente = useCallback((cliente: ClienteSimple) => {
+    if (!cliente || typeof cliente.id === 'undefined') {
+      console.error("handleSelectCliente (Ventas): cliente inválido o sin ID:", cliente);
+      Alert.alert("Error", "No se pudo seleccionar el cliente.");
+      return;
+    }
+    handleChange('cliente_id', cliente.id.toString());
     setShowClienteModal(false);
   }, [handleChange]);
 
@@ -242,6 +247,33 @@ export function useVentaItem() {
     handleChange('cliente_id', nuevoCliente.id.toString());
     setShowClienteModal(false);
   }, [handleChange]);
+
+  const handleAlmacenChange = useCallback((newAlmacenId: string) => {
+    if (!newAlmacenId) return;
+
+    const proceedWithChange = () => {
+      handleChange('almacen_id', newAlmacenId);
+      handleChange('detalles', []);
+      filterPresentacionesByAlmacen(newAlmacenId, allPresentaciones);
+      setErrors((currentErrors: typeof errors) => {
+         const { detalles, ...rest } = currentErrors;
+         return rest;
+       });
+    };
+
+    if (formData.detalles.length > 0) {
+      Alert.alert(
+        "Cambiar Almacén",
+        "Cambiar el almacén eliminará los productos agregados. ¿Desea continuar?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Confirmar", onPress: proceedWithChange }
+        ]
+      );
+    } else {
+      proceedWithChange();
+    }
+  }, [handleChange, filterPresentacionesByAlmacen, allPresentaciones, formData.detalles, setErrors]);
 
   const applyChange = useCallback((changeFn: (prevDetalles: VentaDetalleForm[]) => VentaDetalleForm[]) => {
     const newDetalles = changeFn(formData.detalles);
@@ -404,6 +436,7 @@ export function useVentaItem() {
     handleDateSelection,
     handleSelectCliente,
     handleClienteCreated,
+    handleAlmacenChange,
     agregarProducto,
     actualizarProducto,
     eliminarProducto,

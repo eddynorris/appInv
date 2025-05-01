@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
-import { pedidoApi, clienteApi, productoApi, almacenApi, presentacionApi } from '@/services/api';
-import { Pedido, PedidoDetalle, ClienteSimple, Presentacion, AlmacenSimple, ESTADOS_PEDIDO } from '@/models';
+import { pedidoApi, PedidoFormDataResponse } from '@/services/api';
+import { Pedido, PedidoDetalle, ClienteSimple, Presentacion, AlmacenSimple, ESTADOS_PEDIDO, StockPorAlmacen } from '@/models';
 import { useForm } from '../useForm';
 import { useAuth } from '@/context/AuthContext';
 
@@ -21,11 +21,13 @@ interface PedidoFormValues {
   fecha_entrega: string;
   estado: 'programado' | 'confirmado' | 'entregado' | 'cancelado';
   notas: string;
-  // 'detalles' se maneja en un estado separado, no aquí
+  // 'detalles' NO VA AQUÍ
 }
 
-// Tipo para los campos editables en ProductGrid para pedidos
-type EditableDetallePedidoField = 'cantidad' | 'precio_estimado';
+// --- TIPO DE CAMPO EDITABLE ---
+// Usar un tipo más genérico compatible con ProductGrid, pero ignorar campos no relevantes para Pedido
+type UpdateFieldKey = 'cantidad' | 'precio_estimado' | 'precio_unitario';
+type EditableDetallePedidoField = Extract<UpdateFieldKey, 'cantidad' | 'precio_estimado'>;
 
 // Valores iniciales del formulario principal
 const initialFormValues: PedidoFormValues = {
@@ -39,6 +41,7 @@ const initialFormValues: PedidoFormValues = {
 export function usePedidoItem() {
   const { user } = useAuth();
   const isAdmin = user?.rol === 'admin';
+  const defaultUserAlmacenId = user?.almacen_id?.toString();
 
   // Estados generales
   const [isLoading, setIsLoading] = useState(false);
@@ -48,7 +51,7 @@ export function usePedidoItem() {
   // Estados para opciones de selectores
   const [clientes, setClientes] = useState<ClienteSimple[]>([]);
   const [almacenes, setAlmacenes] = useState<AlmacenSimple[]>([]);
-  const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
+  const [allPresentaciones, setAllPresentaciones] = useState<Presentacion[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
 
   // Estado para detalles (manejado fuera de useForm)
@@ -61,45 +64,136 @@ export function usePedidoItem() {
 
   // Hook de formulario para datos principales
   const form = useForm<PedidoFormValues>(initialFormValues);
+  const { formData, errors, setErrors, handleChange, setValues /* ya no se necesita? */ } = form;
 
   // Reglas de validación - MOVIDAS DENTRO DEL HOOK
   const validationRules = {
     cliente_id: (value: string) => !value ? 'El cliente es requerido' : null,
     almacen_id: (value: string) => !value ? 'El almacén es requerido' : null,
     fecha_entrega: (value: string) => !value ? 'La fecha de entrega es requerida' : null,
-    // Validación de detalles ahora usa el estado 'detalles' que está en scope
     detalles: () => detalles.length === 0 ? 'Debe agregar al menos un producto' : null
   };
 
-  // --- Carga de Datos ---
-
-  // Cargar opciones (clientes, almacenes, presentaciones)
-  const loadOptions = useCallback(async (forceReload = false) => {
-    // Evitar recargas innecesarias si ya hay datos
-    if (!forceReload && clientes.length > 0 && almacenes.length > 0 && presentaciones.length > 0) {
-      return;
-    }
-
+  // --- Carga de Datos Simplificada ---
+  const loadFormData = useCallback(async () => {
     setIsLoadingOptions(true);
     setError(null);
+    console.log(`🚀 Iniciando carga de datos para formulario Pedido`);
     try {
-      const [clientesRes, almacenesRes, presentacionesRes] = await Promise.all([
-        forceReload || clientes.length === 0 ? clienteApi.getClientes() : Promise.resolve({ data: clientes }),
-        forceReload || almacenes.length === 0 ? almacenApi.getAlmacenes() : Promise.resolve({ data: almacenes }), // Asumiendo existe getAlmacenesSimple
-        forceReload || presentaciones.length === 0 ? presentacionApi.getPresentaciones() : Promise.resolve({ data: presentaciones }) // Asumiendo existe getPresentaciones
-      ]);
+      const data = await pedidoApi.getFormData();
+      console.log("📦 Datos recibidos:", data);
 
-      if (clientesRes) setClientes(clientesRes.data || []);
-      if (almacenesRes) setAlmacenes(almacenesRes.data || []);
-      if (presentacionesRes) setPresentaciones(presentacionesRes.data || []);
+      setClientes(data.clientes || []);
+
+      // CORRECCIÓN LINTER: Usar type guards para acceder a propiedades específicas
+      let fetchedAlmacenes: AlmacenSimple[] = [];
+      if ('almacenes' in data && data.almacenes) {
+        fetchedAlmacenes = data.almacenes;
+      }
+      setAlmacenes(fetchedAlmacenes);
+
+      let fetchedPresentaciones: Presentacion[] = [];
+      if ('presentaciones_activas' in data && data.presentaciones_activas) {
+        fetchedPresentaciones = data.presentaciones_activas;
+      } else if ('presentaciones_con_stock_global' in data && data.presentaciones_con_stock_global) {
+        // Aunque la API ahora solo devuelve activas, mantenemos esto por si acaso
+        fetchedPresentaciones = data.presentaciones_con_stock_global;
+      }
+      setAllPresentaciones(fetchedPresentaciones);
+
+      console.log(`   -> Clientes: ${data.clientes?.length ?? 0}`);
+      console.log(`   -> Almacenes: ${fetchedAlmacenes.length}`);
+      console.log(`   -> Presentaciones: ${fetchedPresentaciones.length}`);
+
+      // CORRECCIÓN LINTER: Acceder a fetchedAlmacenes que ya está definida
+      const initialAlmacenId = defaultUserAlmacenId || (isAdmin && fetchedAlmacenes.length > 0 ? fetchedAlmacenes[0].id.toString() : '');
+      console.log(`🏭 Almacén inicial ID para form: ${initialAlmacenId || 'Ninguno'}`);
+
+      form.resetForm({
+          ...initialFormValues,
+          almacen_id: initialAlmacenId,
+      });
 
     } catch (err) {
-      console.error('Error al cargar opciones:', err);
-      setError('No se pudieron cargar los datos necesarios (clientes/almacenes/productos)');
+      console.error('❌ Error al cargar datos del formulario:', err);
+      setError('No se pudieron cargar los datos necesarios.');
+      setClientes([]);
+      setAlmacenes([]);
+      setAllPresentaciones([]);
     } finally {
       setIsLoadingOptions(false);
     }
-  }, [clientes, almacenes, presentaciones]); // Dependencias para evitar recargas si no cambian
+  }, [isAdmin, defaultUserAlmacenId, form.resetForm]);
+
+  // --- Manejar cambio de almacén SIMPLIFICADO ---
+  const handleAlmacenChange = useCallback((newAlmacenId: string) => {
+    if (!newAlmacenId) return;
+
+    const proceedWithChange = () => {
+      handleChange('almacen_id', newAlmacenId);
+      // CORRECCIÓN LINTER: Limpiar el estado de detalles, no el formulario
+      setDetalles([]);
+      // Limpiar error de detalles si existía
+      setErrors((currentErrors) => {
+         if (currentErrors && 'detalles' in currentErrors) {
+           const { detalles, ...rest } = currentErrors;
+           return rest;
+         }
+         return currentErrors;
+       });
+    };
+
+    // CORRECCIÓN LINTER: Usar el estado `detalles` para la comprobación
+    if (detalles.length > 0) {
+      Alert.alert(
+        "Cambiar Almacén",
+        "Esto eliminará los productos agregados. ¿Continuar?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Confirmar", onPress: proceedWithChange }
+        ]
+      );
+    } else {
+      proceedWithChange();
+    }
+  }, [handleChange, detalles, setErrors, setDetalles]);
+
+  // --- Cargar Pedido para Editar SIMPLIFICADO ---
+  const loadPedidoForEdit = useCallback(async (id: number): Promise<Pedido | null> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await loadFormData(); // Cargar opciones primero (clientes, almacenes, presentaciones)
+      const pedidoData = await pedidoApi.getPedido(id);
+
+      if (pedidoData) {
+        setPedido(pedidoData);
+        form.setValues({
+          cliente_id: pedidoData.cliente_id?.toString() || '',
+          almacen_id: pedidoData.almacen_id?.toString() || '',
+          fecha_entrega: pedidoData.fecha_entrega?.split('T')[0] || new Date().toISOString().split('T')[0],
+          estado: pedidoData.estado || 'programado',
+          notas: pedidoData.notas || '',
+        });
+        setDetalles(pedidoData.detalles ? pedidoData.detalles.map(d => ({
+          id: d.id,
+          presentacion_id: d.presentacion_id.toString(),
+          cantidad: d.cantidad.toString(),
+          precio_estimado: d.precio_estimado?.toString() ?? '0'
+        })) : []);
+        return pedidoData;
+      } else {
+        setError('No se pudo cargar el pedido para editar');
+        return null;
+      }
+    } catch (err) {
+      console.error('Error al cargar pedido para edición:', err);
+      setError('No se pudo cargar la información necesaria');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadFormData, form, setDetalles]);
 
   // Obtener un pedido específico
   const getPedido = useCallback(async (id: number): Promise<Pedido | null> => {
@@ -121,55 +215,17 @@ export function usePedidoItem() {
   // Preparar formulario para creación
   const prepareForCreate = useCallback(async () => {
     setIsLoading(true);
-    await loadOptions(); // Asegura que las opciones estén cargadas
+    await loadFormData();
+    const initialAlmacen = defaultUserAlmacenId || (isAdmin && almacenes.length > 0 ? almacenes[0].id.toString() : '');
     form.resetForm({
       ...initialFormValues,
-      almacen_id: user?.almacen_id?.toString() || '', // Preseleccionar almacén del usuario
+      almacen_id: initialAlmacen,
     });
-    setDetalles([]); // Limpiar detalles
+    setDetalles([]);
     setPedido(null);
     setError(null);
     setIsLoading(false);
-  }, [loadOptions, form, user]);
-
-  // Cargar pedido para edición
-  const loadPedidoForEdit = useCallback(async (id: number): Promise<Pedido | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      await loadOptions(); // Cargar opciones primero
-      const pedidoData = await pedidoApi.getPedido(id);
-
-      if (pedidoData) {
-        setPedido(pedidoData);
-        form.setValues({
-          cliente_id: pedidoData.cliente_id?.toString() || '',
-          // Solo permitir cambiar almacén si es admin, sino usar el del pedido
-          almacen_id: isAdmin ? pedidoData.almacen_id?.toString() : (pedidoData.almacen_id?.toString() || ''),
-          fecha_entrega: pedidoData.fecha_entrega?.split('T')[0] || new Date().toISOString().split('T')[0],
-          estado: pedidoData.estado || 'programado',
-          notas: pedidoData.notas || '',
-        });
-        // Cargar detalles existentes
-        setDetalles(pedidoData.detalles ? pedidoData.detalles.map(d => ({
-          id: d.id,
-          presentacion_id: d.presentacion_id.toString(),
-          cantidad: d.cantidad.toString(),
-          precio_estimado: d.precio_estimado.toString() // Asegurar string
-        })) : []);
-        return pedidoData;
-      } else {
-        setError('No se pudo cargar el pedido para editar');
-        return null;
-      }
-    } catch (err) {
-      console.error('Error al cargar pedido para edición:', err);
-      setError('No se pudo cargar la información necesaria');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadOptions, form, isAdmin]);
+  }, [loadFormData, form, defaultUserAlmacenId, isAdmin, almacenes]);
 
   // --- Gestión de Detalles ---
 
@@ -196,19 +252,25 @@ export function usePedidoItem() {
     }
   }, [detalles]);
 
-  // CORREGIDO: Usar el tipo correcto y el nombre de parámetro 'field'
-  const actualizarProducto = useCallback((index: number, field: EditableDetallePedidoField, value: string) => {
-    const nuevosDetalles = [...detalles];
-    if (index >= 0 && index < nuevosDetalles.length) {
-        // Validaciones simples para cantidad y precio
-        if (field === 'cantidad') {
-            const numValue = parseInt(value.replace(/[^0-9]/g, ''));
-            nuevosDetalles[index] = { ...nuevosDetalles[index], [field]: isNaN(numValue) || numValue < 1 ? '1' : numValue.toString() };
-        } else if (field === 'precio_estimado') {
-            const precio = value.replace(/[^0-9.]/g, ''); // Permitir solo números y punto
-            nuevosDetalles[index] = { ...nuevosDetalles[index], [field]: precio };
-        } // Ya no hay 'else' porque solo manejamos 'cantidad' y 'precio_estimado'
-        setDetalles(nuevosDetalles);
+  // --- Gestión de Detalles --- (Ajustar firma de actualizarProducto)
+  const actualizarProducto = useCallback((index: number, field: UpdateFieldKey, value: string) => {
+    // Solo procesar si el campo es relevante para Pedido
+    if (field === 'cantidad' || field === 'precio_estimado') {
+      const typedField = field as EditableDetallePedidoField; // Hacer type assertion seguro aquí
+      const nuevosDetalles = [...detalles];
+      if (index >= 0 && index < nuevosDetalles.length) {
+          if (typedField === 'cantidad') {
+              const numValue = parseInt(value.replace(/[^0-9]/g, ''));
+              nuevosDetalles[index] = { ...nuevosDetalles[index], [typedField]: isNaN(numValue) || numValue < 1 ? '1' : numValue.toString() };
+          } else if (typedField === 'precio_estimado') {
+              const precio = value.replace(/[^0-9.]/g, '');
+              nuevosDetalles[index] = { ...nuevosDetalles[index], [typedField]: precio };
+          }
+          setDetalles(nuevosDetalles);
+      }
+    } else {
+      // Ignorar otros campos como 'precio_unitario' que pueden venir de ProductGrid
+      console.log(`Campo '${field}' ignorado en actualizarProducto para Pedidos.`);
     }
   }, [detalles]);
 
@@ -355,10 +417,16 @@ export function usePedidoItem() {
     }
   }, [form]);
 
-  // Seleccionar cliente desde el modal de búsqueda
-   const handleSelectCliente = useCallback((cliente: ClienteSimple) => {
+  // CORRECCIÓN LINTER: La firma debe aceptar ClienteSimple
+  const handleSelectCliente = useCallback((cliente: ClienteSimple) => {
+    if (!cliente || typeof cliente.id === 'undefined') {
+      console.error("handleSelectCliente: cliente inválido o sin ID:", cliente);
+      Alert.alert("Error", "No se pudo seleccionar el cliente.");
+      return;
+    }
+    console.log("Cliente seleccionado:", cliente);
     form.handleChange('cliente_id', cliente.id.toString());
-    setShowClienteModal(false); // Cerrar modal de búsqueda
+    setShowClienteModal(false);
   }, [form]);
 
   // Cliente creado desde el modal de creación dentro del modal de búsqueda
@@ -394,7 +462,7 @@ export function usePedidoItem() {
     // Opciones para selectores
     clientes,
     almacenes,
-    presentaciones, // Para ProductPicker
+    presentaciones: allPresentaciones,
     isLoadingOptions,
 
     // Estado UI
@@ -429,7 +497,7 @@ export function usePedidoItem() {
     canEditOrDelete,
 
     // Otras utilidades
-    loadOptions, // Permitir recargar opciones si es necesario
+    handleAlmacenChange, // Exportar el nuevo handler
     setError, // Permitir setear errores desde fuera
   };
 } 

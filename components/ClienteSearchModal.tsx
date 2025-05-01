@@ -11,11 +11,13 @@ import { ClienteSimple, Cliente } from '@/models';
 import { ClienteFormModal } from './ClienteModal'; // Para crear nuevo cliente
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { ActionButtons } from './buttons/ActionButtons';
+import { FormStyles, Spacing } from '@/styles/Theme';
 
 interface ClienteSearchModalProps {
   visible: boolean;
   onClose: () => void;
-  onSelectCliente: (clienteId: string) => void;
+  onSelectCliente: (cliente: ClienteSimple) => void;
   onClienteCreated: (cliente: Cliente) => void; // Callback cuando se crea un nuevo cliente
   initialClientes: ClienteSimple[]; // Recibir lista inicial de clientes
 }
@@ -66,11 +68,16 @@ export function ClienteSearchModal({
       onClienteCreated(newCliente); // Notificar al padre (usePedidoItem)
   };
 
-  const renderItem = ({ item }: { item: ClienteSimple }) => (
-    <TouchableOpacity
-      style={[styles.itemContainer, { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' }]}
-      onPress={() => onSelectCliente(item.id.toString())}
-    >
+  // Función para manejar la selección de un cliente de la lista
+  const handleSelect = (cliente: ClienteSimple) => {
+    console.log('Cliente seleccionado en Modal (Re-check):', cliente);
+    // *** RE-ASEGURARSE DE PASAR EL OBJETO COMPLETO ***
+    onSelectCliente(cliente); // <-- Pasar el objeto cliente
+    onClose();
+  };
+
+  const renderClienteItem = ({ item }: { item: ClienteSimple }) => (
+    <TouchableOpacity style={styles.itemContainer} onPress={() => handleSelect(item)}>
       <View style={styles.itemContent}>
           <IconSymbol name="person.fill" size={24} color={isDark ? Colors.dark.text : Colors.light.text} />
           <View style={styles.itemTextContainer}>
@@ -116,7 +123,7 @@ export function ClienteSearchModal({
 
           <FlatList
             data={clientesFiltrados}
-            renderItem={renderItem}
+            renderItem={renderClienteItem}
             keyExtractor={(item) => item.id.toString()}
             ListEmptyComponent={
                <View style={styles.emptyContainer}>

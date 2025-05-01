@@ -14,7 +14,11 @@ import {
   Pago,
   Lote,
   ProductoSimple,
-  ProveedorSimple
+  ProveedorSimple,
+  ClienteSimple,
+  AlmacenSimple,
+  Presentacion,
+  User
 } from '@/models';
 import { authService } from './auth';
 
@@ -903,6 +907,16 @@ export const pedidoApi = {
       throw error;
     }
   },
+
+  // --- INICIO: Añadir/Asegurar getFormData ---
+  /**
+   * Obtiene los datos necesarios para el formulario de creación/edición de pedidos.
+   * La respuesta varía según el rol del usuario.
+   */
+  getFormData: async (): Promise<PedidoFormDataResponse> => {
+    return await fetchApi<PedidoFormDataResponse>('/pedidos/form-data');
+  },
+  // --- FIN: Añadir/Asegurar getFormData ---
 };
 
 // API methods for Movimientos
@@ -1009,3 +1023,24 @@ export const loteApi = {
     }
   },
 };
+
+// --- INICIO: Añadir/Asegurar Tipos para /pedidos/form-data ---
+// Tipos de respuesta específicos para el nuevo endpoint
+interface PedidoFormDataBaseResponse {
+  clientes: ClienteSimple[];
+}
+
+interface PedidoFormDataAdminResponse extends PedidoFormDataBaseResponse {
+  almacenes: AlmacenSimple[];
+  // Usar la clave que devuelve tu API para admin (según el ejemplo JSON es presentaciones_con_stock_global)
+  presentaciones_con_stock_global: (Presentacion & { stock_por_almacen?: any[] })[];
+}
+
+interface PedidoFormDataUserResponse extends PedidoFormDataBaseResponse {
+  // Usar la clave que devuelve tu API para no-admin (según el ejemplo JSON es presentaciones_activas)
+  presentaciones_activas: Presentacion[];
+}
+
+// Tipo unión para la respuesta
+export type PedidoFormDataResponse = PedidoFormDataAdminResponse | PedidoFormDataUserResponse;
+// --- FIN: Añadir/Asegurar Tipos ---

@@ -26,6 +26,8 @@ interface ProductPickerProps {
   isLoading?: boolean;
   onClose: () => void;
   onSelectProduct: (presentacionId: string, cantidad: string, precio: string) => void;
+  allowZeroStockSelection?: boolean;
+  isPedidoMode?: boolean;
 }
 
 export function ProductPicker({
@@ -33,7 +35,9 @@ export function ProductPicker({
   presentaciones,
   isLoading = false,
   onClose,
-  onSelectProduct
+  onSelectProduct,
+  allowZeroStockSelection = false,
+  isPedidoMode = false
 }: ProductPickerProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -43,6 +47,7 @@ export function ProductPicker({
   const [cantidad, setCantidad] = useState('1');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [customPrice, setCustomPrice] = useState<string>('');
+  const [precioEstimado, setPrecioEstimado] = useState<string>('0');
   
   // Filtrar productos según la búsqueda
   const productosFiltrados = useMemo(() => {
@@ -66,28 +71,39 @@ export function ProductPicker({
     setCantidad('1');
     setSelectedId(null);
     setCustomPrice('');
+    setPrecioEstimado('0');
     onClose();
   };
   
-  // Seleccionar un producto
-  const handleSelect = (presentacion: Presentacion) => {
-    const id = presentacion.id.toString();
-    
-    if (selectedId === id) {
-      // Ya está seleccionado, confirmar selección
-      const precio = customPrice || presentacion.precio_venta || '0';
-      onSelectProduct(id, cantidad, precio);
-      handleClose();
-    } else {
-      // Seleccionar para configurar cantidad
-      setSelectedId(id);
-      // Precargar precio actual
-      setCustomPrice(presentacion.precio_venta || '');
+  // Manejar selección de producto - SOLO SELECCIONA, NO AGREGA
+  const handleSelect = (item: Presentacion) => {
+    setSelectedId(item.id.toString());
+    if (isPedidoMode) {
+      setPrecioEstimado(item.precio_venta ?? '0');
+    }
+    setCantidad('1'); // Resetear cantidad al seleccionar
+    // NO LLAMAR a onSelectProduct aquí
+  };
+  
+  // Botón "Agregar Producto" - LLAMA a onSelectProduct
+  const handleAddProductButtonClick = () => {
+    if (selectedId) {
+      let precioParaPasar = '0';
+      if (isPedidoMode) {
+        precioParaPasar = precioEstimado;
+      } else {
+        // CORRECCIÓN: Buscar la presentación seleccionada y obtener su precio_venta
+        const selectedPresentacion = presentaciones.find(p => p.id.toString() === selectedId);
+        precioParaPasar = selectedPresentacion?.precio_venta ?? '0';
+      }
+      // Llamar a onSelectProduct con el precio correcto
+      onSelectProduct(selectedId, cantidad, precioParaPasar);
+      handleClose(); // Cerrar modal después de agregar
     }
   };
   
   // Construir la URL completa de la imagen
-  const getImageUrl = (urlFoto?: string) => {
+  const getImageUrl = (urlFoto?: string | null) => {
     if (!urlFoto) return null;
     
     // Usar la función helper de API_CONFIG
@@ -99,17 +115,21 @@ export function ProductPicker({
     const isSelected = selectedId === item.id.toString();
     const imageUrl = getImageUrl(item.url_foto);
     const stock = parseInt(String(item.stock_disponible ?? '0'), 10);
+    const hasStock = stock > 0;
+    const isDisabled = !isPedidoMode && !allowZeroStockSelection && !hasStock && !isSelected;
+
+    const containerStyle = [
+      styles.itemContainer,
+      isSelected && styles.selectedItem,
+      isDisabled && styles.outOfStockItem,
+      { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' },
+    ];
 
     return (
       <TouchableOpacity
-        style={[
-          styles.itemContainer,
-          isSelected && styles.selectedItem,
-          { backgroundColor: isDark ? '#2C2C2E' : '#F9F9F9' },
-          stock <= 0 && !isSelected && styles.outOfStockItem
-        ]}
-        onPress={() => handleSelect(item)}
-        disabled={stock <= 0 && !isSelected}
+        style={containerStyle}
+        onPress={() => !isDisabled && handleSelect(item)}
+        disabled={isDisabled}
       >
         <View style={styles.productInfo}>
           <View style={styles.imageContainer}>
@@ -124,73 +144,42 @@ export function ProductPicker({
             )}
           </View>
           
-          <View style={styles.textContainer}>
-            <ThemedText style={styles.productName}>
-              {item.nombre}
-            </ThemedText>
-            <ThemedText style={styles.productDetail}>
-              {item.producto?.nombre || 'Sin producto'} • {item.capacidad_kg}kg
-            </ThemedText>
-            <ThemedText style={styles.productPrice}>
-              ${parseFloat(item.precio_venta || '0').toFixed(2)}
-            </ThemedText>
-            <ThemedText style={[
-                styles.stockText, 
-                stock <= 0 ? styles.stockZero : styles.stockAvailable
-            ]}>
-              Stock: {stock}
+          <View style={styles.productNameContainer}>
+            <ThemedText style={styles.productName}>{item.nombre}</ThemedText>
+            <ThemedText style={styles.productSubDetail}>
+              Cap: {item.capacidad_kg ?? 'N/A'}kg
+              | P.Venta: ${item.precio_venta ?? 'N/A'}
             </ThemedText>
           </View>
         </View>
         
         {isSelected && (
-          <View style={styles.selectedOptions}>
-            <View style={styles.inputRow}>
-              <ThemedText style={styles.inputLabel}>Cantidad:</ThemedText>
+          <View style={styles.inputsContainer}>
+            <View style={styles.inputGroup}>
+              <ThemedText style={styles.label}>Cantidad:</ThemedText>
               <TextInput
-                style={[
-                  styles.input,
-                  { color: isDark ? '#FFFFFF' : '#000000' }
-                ]}
+                style={styles.input}
                 value={cantidad}
-                onChangeText={(value) => {
-                    const numValue = parseInt(value.replace(/[^0-9]/g, ''), 10) || 1;
-                    const validQty = Math.min(numValue, stock > 0 ? stock : 1);
-                    setCantidad(validQty.toString());
-                }}
+                onChangeText={setCantidad}
                 keyboardType="numeric"
                 selectTextOnFocus
-                autoFocus
               />
             </View>
             
-            <View style={styles.inputRow}>
-              <ThemedText style={styles.inputLabel}>Precio:</ThemedText>
-              <TextInput
-                style={[
-                  styles.input,
-                  { color: isDark ? '#FFFFFF' : '#000000' }
-                ]}
-                value={customPrice}
-                onChangeText={setCustomPrice}
-                keyboardType="numeric"
-                selectTextOnFocus
-                placeholder={item.precio_venta}
-                placeholderTextColor="#9E9E9E"
-              />
-            </View>
-            
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={() => {
-                const precio = customPrice || item.precio_venta || '0';
-                onSelectProduct(item.id.toString(), cantidad, precio);
-                handleClose();
-              }}
-            >
-              <IconSymbol name="checkmark" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.confirmText}>Confirmar</ThemedText>
-            </TouchableOpacity>
+            {isPedidoMode && (
+              <View style={styles.inputGroup}>
+                <ThemedText style={styles.label}>Precio Est.:</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={precioEstimado}
+                  onChangeText={setPrecioEstimado}
+                  keyboardType="numeric"
+                  selectTextOnFocus
+                  placeholder={item.precio_venta ?? '0'}
+                  placeholderTextColor="#9E9E9E"
+                />
+              </View>
+            )}
           </View>
         )}
       </TouchableOpacity>
@@ -256,7 +245,14 @@ export function ProductPicker({
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={styles.listContainer}
               showsVerticalScrollIndicator={false}
+              extraData={{ selectedId, cantidad, precioEstimado }}
             />
+          )}
+          
+          {selectedId && (
+            <TouchableOpacity style={styles.addButton} onPress={handleAddProductButtonClick}>
+              <ThemedText style={styles.addButtonText}>Agregar Producto</ThemedText>
+            </TouchableOpacity>
           )}
         </ThemedView>
       </ThemedView>
@@ -338,7 +334,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  textContainer: {
+  productNameContainer: {
     flex: 1,
   },
   productName: {
@@ -346,52 +342,35 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 2,
   },
-  productDetail: {
+  productSubDetail: {
     fontSize: 14,
     color: '#757575',
     marginBottom: 2,
   },
-  productPrice: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#0a7ea4',
+  inputsContainer: {
+    marginTop: 10,
+    paddingHorizontal: 5,
   },
-  stockText: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  stockAvailable: {
-    color: Colors.success,
-  },
-  stockZero: {
-    color: Colors.danger,
-  },
-  selectedOptions: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
-  inputRow: {
+  inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  inputLabel: {
-    width: 70,
+  label: {
+    width: 80,
     fontSize: 14,
+    marginRight: 5,
   },
   input: {
     flex: 1,
-    height: 40,
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
   },
-  confirmButton: {
+  addButton: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -400,7 +379,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 8,
   },
-  confirmText: {
+  addButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
