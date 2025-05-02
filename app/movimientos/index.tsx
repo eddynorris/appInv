@@ -6,7 +6,7 @@ import { Picker } from '@react-native-picker/picker';
 import { movimientoApi } from '@/services/api';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { DataTable, Column } from '@/components/data/DataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -37,59 +37,6 @@ export default function MovimientosScreen() {
     fecha_hasta: '',
     motivo: '',
   });
-
-  // Definimos las columnas de la tabla
-  const columns: Column[] = [
-    {
-      id: 'id',
-      label: 'ID',
-      width: 0.5,
-    },
-    {
-      id: 'fecha',
-      label: 'Fecha',
-      width: 1,
-      render: (item: Movimiento) => <ThemedText>{new Date(item.fecha).toLocaleDateString()}</ThemedText>,
-    },
-    {
-      id: 'tipo',
-      label: 'Tipo',
-      width: 0.8,
-      render: (item: Movimiento) => (
-        <ThemedView 
-          style={[
-            styles.tipoBadge, 
-            { backgroundColor: item.tipo === 'entrada' ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)' }
-          ]}
-        >
-          <ThemedText style={[
-            styles.tipoText, 
-            { color: item.tipo === 'entrada' ? '#4CAF50' : '#F44336' }
-          ]}>
-            {item.tipo === 'entrada' ? 'Entrada' : 'Salida'}
-          </ThemedText>
-        </ThemedView>
-      ),
-    },
-    {
-      id: 'presentacion',
-      label: 'Presentación',
-      width: 1.5,
-      render: (item: Movimiento) => <ThemedText>{item.presentacion?.nombre || '-'}</ThemedText>,
-    },
-    {
-      id: 'cantidad',
-      label: 'Cantidad',
-      width: 0.8,
-      render: (item: Movimiento) => <ThemedText>{parseInt(item.cantidad)}</ThemedText>,
-    },
-    {
-      id: 'motivo',
-      label: 'Motivo',
-      width: 1.2,
-      render: (item: Movimiento) => <ThemedText>{item.motivo || '-'}</ThemedText>,
-    },
-  ];
 
   const loadMovimientos = useCallback(async (page = currentPage, perPage = itemsPerPage) => {
     try {
@@ -177,12 +124,6 @@ export default function MovimientosScreen() {
     }, 0);
   };
 
-  // Ver detalles de un movimiento
-  const handleViewMovimiento = (id: string) => {
-    // En versión completa se puede implementar una pantalla de detalle
-    // Por ahora, mostramos datos en consola
-    console.log(`Ver movimiento ID: ${id}`);
-  };
 
   return (
     <>
@@ -274,26 +215,82 @@ export default function MovimientosScreen() {
           </ThemedView>
         </ThemedView>
         
-        {/* Tabla de movimientos */}
-        <DataTable<Movimiento>
+        {/* Lista de tarjetas de movimientos */}
+        <EnhancedCardList
           data={movimientos}
-          columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/movimientos"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
+          baseRoute="/movimientos"
+          pagination={{
+            currentPage,
+            totalPages,
+            itemsPerPage,
+            totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn,
+            sortOrder,
+            onSort: handleSort
+          }}
+          actions={{
+            onView: false,
+            onEdit: false,
+            onDelete: false
+          }}
           emptyMessage="No hay movimientos registrados con los filtros actuales"
-          // En esta pantalla de solo visualización, no tenemos acciones de edición/eliminación
+          onRefresh={handleRefresh}
+          renderCard={(movimiento) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>
+                  {new Date(movimiento.fecha).toLocaleDateString()}
+                </ThemedText>
+                <View style={styles.badgeContainer}>
+                  <ThemedView 
+                    style={[
+                      styles.badge, 
+                      movimiento.tipo === 'entrada' ? styles.entradaBadge : styles.salidaBadge
+                    ]}
+                  >
+                    <ThemedText style={[
+                      styles.badgeText, 
+                      { color: movimiento.tipo === 'entrada' ? '#4CAF50' : '#F44336' }
+                    ]}>
+                      {movimiento.tipo === 'entrada' ? 'Entrada' : 'Salida'}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="cube.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Presentación: {movimiento.presentacion?.nombre || '-'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="number" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Cantidad: {parseInt(movimiento.cantidad)}
+                  </ThemedText>
+                </View>
+                
+                {movimiento.motivo && (
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText} numberOfLines={2}>
+                      Motivo: {movimiento.motivo}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
       </ThemedView>
     </>
@@ -392,5 +389,51 @@ const styles = StyleSheet.create({
   tipoText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  entradaBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  salidaBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

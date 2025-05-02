@@ -8,7 +8,7 @@ import { Picker } from '@react-native-picker/picker';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { useVentasList } from '@/hooks/crud/useVentasList'; // Hook refactorizado
 import { Collapsible } from '@/components/Collapsible';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -183,10 +183,9 @@ export default function VentasScreen() {
           </ThemedView>
         </ThemedView>
 
-        {/* Tabla */} 
-        <EnhancedDataTable
+        {/* Lista de tarjetas */} 
+        <EnhancedCardList
           data={ventas}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/ventas"
@@ -211,6 +210,55 @@ export default function VentasScreen() {
           }}
           emptyMessage="No hay ventas disponibles" 
           onRefresh={refresh}
+          renderCard={(venta) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>Venta #{venta.id} por {venta.vendedor?.username} en {venta.almacen?.nombre}</ThemedText>
+                <View style={styles.badgeContainer}>
+                  <ThemedView style={[styles.badge, 
+                    venta.estado_pago === 'pagado' ? styles.pagadoBadge : 
+                    venta.estado_pago === 'parcial' ? styles.parcialBadge : 
+                    styles.pendienteBadge]}>
+                    <ThemedText style={styles.badgeText}>
+                      {venta.estado_pago === 'pagado' ? 'Pagado' : 
+                       venta.estado_pago === 'parcial' ? 'Parcial' : 'Pendiente'}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Fecha: {venta.fecha ? formatDate(venta.fecha) : 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="person.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Cliente: {venta.cliente?.nombre || 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="tag.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Total: {venta.total ? formatCurrency(parseFloat(venta.total)) : '$0.00'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="shippingbox.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText} numberOfLines={2}>
+                    Productos: {venta.detalles?.length || 0}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
 
         <FloatingActionButton
@@ -289,5 +337,54 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  pagadoBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  parcialBadge: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  pendienteBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

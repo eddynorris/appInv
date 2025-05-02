@@ -1,14 +1,16 @@
 // app/proveedores/index.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+import { StyleSheet, Alert, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/data/DataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { proveedorApi } from '@/services/api';
 import { Proveedor } from '@/models';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 
 export default function ProveedoresScreen() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -154,32 +156,84 @@ export default function ProveedoresScreen() {
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Proveedor>
+        <EnhancedCardList
           data={proveedores}
-          columns={columns}
-          keyExtractor={(item) => item.id.toString()}
-          baseRoute="/proveedores"
           isLoading={isLoading}
           error={error}
-          onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay proveedores disponibles"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          baseRoute="/proveedores"
+          pagination={{
+            currentPage,
+            totalPages,
+            itemsPerPage,
+            totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange
+          }}
+          sorting={{
+            sortColumn,
+            sortOrder,
+            onSort: handleSort
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true
+          }}
+          deleteOptions={{
             title: 'Eliminar Proveedor',
             message: '¿Está seguro que desea eliminar este proveedor?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: async (id) => {
+              try {
+                await proveedorApi.deleteProveedor(parseInt(id.toString()));
+                loadProveedores(
+                  proveedores.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
+                  itemsPerPage
+                );
+                return true;
+              } catch (error) {
+                console.error('Error al eliminar proveedor:', error);
+                return false;
+              }
+            }
           }}
+          emptyMessage="No hay proveedores disponibles"
+          onRefresh={handleRefresh}
+          renderCard={(proveedor) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>{proveedor.nombre}</ThemedText>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="phone.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>{proveedor.telefono || 'No disponible'}</ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="location.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText} numberOfLines={2}>{proveedor.direccion || 'No disponible'}</ThemedText>
+                </View>
+                
+                {proveedor.email && (
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="envelope.fill" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText}>{proveedor.email}</ThemedText>
+                  </View>
+                )}
+                
+                {proveedor.contacto && (
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="person.fill" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText}>Contacto: {proveedor.contacto}</ThemedText>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -215,5 +269,32 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

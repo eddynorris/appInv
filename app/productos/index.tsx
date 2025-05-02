@@ -226,4 +226,50 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  inactiveBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
+  },
 });

@@ -1,15 +1,17 @@
 // app/clientes/index.tsx
 import React, { useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useClientesList } from '@/hooks/crud/useClientesList'; 
 import { Cliente } from '@/models';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 
 
 export default function ClientesScreen() {
@@ -57,9 +59,9 @@ export default function ClientesScreen() {
           </ThemedView>
         </ThemedView>
         
-        <EnhancedDataTable
+        {/* Renderizar clientes como tarjetas */}
+        <EnhancedCardList
           data={clientes}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/clientes"
@@ -90,6 +92,38 @@ export default function ClientesScreen() {
           }}
           emptyMessage="No hay clientes disponibles"
           onRefresh={refresh}
+          renderCard={(cliente) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>{cliente.nombre}</ThemedText>
+                <View style={styles.badgeContainer}>
+                  <View style={[styles.badge, parseFloat(cliente.saldo_pendiente || '0') > 0 ? styles.warningBadge : styles.successBadge]}>
+                    <ThemedText style={styles.badgeText}>
+                      {parseFloat(cliente.saldo_pendiente || '0') > 0 ? 'Con saldo' : 'Al día'}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="phone.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>{cliente.telefono || 'No disponible'}</ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="location.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText} numberOfLines={2}>{cliente.direccion || 'No disponible'}</ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="dollarsign.circle.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>Saldo: S/.{parseFloat(cliente.saldo_pendiente || '0').toFixed(2)}</ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -125,5 +159,51 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  warningBadge: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  successBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

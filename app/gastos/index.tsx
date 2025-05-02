@@ -1,14 +1,16 @@
 // app/gastos/index.tsx
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useGastosList } from '@/hooks/crud/useGastosList';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 
 export default function GastosScreen() {
   // Usar el hook refactorizado para la lista con control de permisos
@@ -53,9 +55,8 @@ export default function GastosScreen() {
           </ThemedView>
         </ThemedView>
         
-        <EnhancedDataTable
+        <EnhancedCardList
           data={gastos}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/gastos"
@@ -77,7 +78,6 @@ export default function GastosScreen() {
             onEdit: isAdmin, // Solo admin puede editar directamente desde la tabla
             onDelete: isAdmin // Solo admin puede eliminar directamente desde la tabla
           }}
-
           deleteOptions={{
             title: 'Eliminar Gasto',
             message: '¿Está seguro que desea eliminar este gasto?',
@@ -87,6 +87,56 @@ export default function GastosScreen() {
           }}
           emptyMessage="No hay gastos disponibles"
           onRefresh={refresh}
+          renderCard={(gasto) => {
+            // Obtener color para la categoría
+            const getCategoryColor = (category: string) => {
+              switch (category.toLowerCase()) {
+                case 'servicios': return '#2196F3'; // Azul
+                case 'personal': return '#4CAF50'; // Verde
+                case 'alquiler': return '#FFC107'; // Amarillo
+                case 'marketing': return '#9C27B0'; // Púrpura
+                case 'logistica': return '#FF5722'; // Naranja
+                default: return '#757575'; // Gris
+              }
+            };
+            
+            const categoryColor = getCategoryColor(gasto.categoria);
+            
+            return (
+              <View style={styles.cardContent}>
+                <View style={styles.cardHeader}>
+                  <ThemedText style={styles.cardTitle} numberOfLines={1}>{gasto.descripcion}</ThemedText>
+                  <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, { backgroundColor: `${categoryColor}20` }]}>
+                      <ThemedText style={[styles.badgeText, { color: categoryColor }]}>
+                        {gasto.categoria.charAt(0).toUpperCase() + gasto.categoria.slice(1)}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.cardDetails}>
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="dollarsign.circle.fill" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText}>Monto: S/.{parseFloat(gasto.monto).toFixed(2)}</ThemedText>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText}>Fecha: {new Date(gasto.fecha).toLocaleDateString()}</ThemedText>
+                  </View>
+                  
+                  {gasto.almacen?.nombre && (
+                    <View style={styles.detailRow}>
+                      <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
+                      <ThemedText style={styles.detailText} numberOfLines={2}>{gasto.almacen?.nombre}</ThemedText>
+                    </View>
+                  )} || "Sin almacén asociado"
+                </View>
+              </View>
+            );
+          }}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -122,5 +172,45 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

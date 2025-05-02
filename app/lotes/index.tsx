@@ -1,15 +1,17 @@
-// app/lotes/index.tsx
+// app/lotes/index.tsx - Versión refactorizada
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { Stack, router } from 'expo-router';
 
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { Divider } from '@/components/layout/Divider';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useLotesList } from '@/hooks/crud/useLotesList';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 
 export default function LotesScreen() {
   // Usar el hook refactorizado para la lista
@@ -42,6 +44,11 @@ export default function LotesScreen() {
       loadingMessage="Cargando lotes..."
       scrollable={false}
     >
+      <Stack.Screen options={{ 
+        title: 'Lotes',
+        headerShown: true 
+      }} />
+      
       <ThemedView style={styles.container}>
         {/* Resumen */}
         <ThemedView style={styles.summary}>
@@ -63,21 +70,13 @@ export default function LotesScreen() {
           </View>
         </ThemedView>
         
-        {/* Tabla de lotes */}
-        <EnhancedDataTable
+        {/* Lista de tarjetas */}
+        <EnhancedCardList
           data={lotes}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/lotes"
-          pagination={{
-            currentPage: pagination.currentPage,
-            totalPages: pagination.totalPages,
-            itemsPerPage: pagination.itemsPerPage,
-            totalItems: pagination.totalItems,
-            onPageChange: pagination.onPageChange,
-            onItemsPerPageChange: pagination.onItemsPerPageChange
-          }}
+          pagination={pagination}
           sorting={{
             sortColumn: sortBy,
             sortOrder: sortOrder,
@@ -97,6 +96,44 @@ export default function LotesScreen() {
           }}
           emptyMessage="No hay lotes disponibles"
           onRefresh={refresh}
+          renderCard={(lote) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>{lote.descripcion}</ThemedText>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="leaf.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Producto: {lote.producto?.nombre || 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Fecha: {lote.fecha_ingreso || 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="scalemass.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Proveedor: {lote.proveedor?.nombre || '0'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="scalemass" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Disponible: {lote.cantidad_disponible_kg || '0'} kg
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
       </ThemedView>
       
@@ -133,5 +170,51 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  inactiveBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

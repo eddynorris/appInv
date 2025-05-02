@@ -49,7 +49,7 @@ export default function MoreScreen() {
             <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Pedidos</ThemedText>
             <MenuItem 
               title="Ventas" 
-              icon="bag.fill" 
+              icon="cart.fill" 
               route="/ventas" 
             />
             <MenuItem 
@@ -62,12 +62,12 @@ export default function MoreScreen() {
                 <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
                 <MenuItem 
                   title="Gastos" 
-                  icon="banknote" 
+                  icon="arrow.down.fill" 
                   route="/gastos" 
                 />
                 <MenuItem 
                   title="Pagos" 
-                  icon="creditcard" 
+                  icon="creditcard.fill" 
                   route="/pagos" 
                 />
               </ThemedView>
@@ -92,27 +92,27 @@ export default function MoreScreen() {
                 />
                 <MenuItem 
                   title="Movimientos" 
-                  icon="arrow.left.arrow.right" 
+                  icon="doc.fill" 
                   route="/movimientos" 
                 />
                 <MenuItem 
                   title="Presentaciones" 
-                  icon="arrow.left.arrow.right" 
+                  icon="tag.fill" 
                   route="/presentaciones" 
                 />
                 <MenuItem 
                   title="Lotes" 
-                  icon="arrow.left.arrow.right" 
+                  icon="folder.fill" 
                   route="/lotes" 
                 />
                 <MenuItem 
                   title="Productos" 
-                  icon="list.clipboard.fill" 
+                  icon="doc.fill" 
                   route="/productos" 
                 />
                 <MenuItem 
                   title="Inventarios" 
-                  icon="list.clipboard.fill" 
+                  icon="chart.bar.fill" 
                   route="/inventarios" 
                 />
               </ThemedView>

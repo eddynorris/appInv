@@ -1,14 +1,17 @@
-// app/pagos/index.tsx
+// app/pagos/index.tsx - Versión refactorizada
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
+import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { usePagosList } from '@/hooks/crud/usePagosList';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 export default function PagosScreen() {
   // Usar el hook refactorizado para la lista con control de permisos
@@ -35,6 +38,11 @@ export default function PagosScreen() {
       title="Pagos"
       scrollable={false}
     >
+      <Stack.Screen options={{ 
+        title: 'Pagos',
+        headerShown: true 
+      }} />
+      
       <ThemedView style={styles.container}>
         <ThemedView style={styles.summary}>
           <ThemedView style={styles.summaryRow}>
@@ -60,9 +68,8 @@ export default function PagosScreen() {
           )}
         </ThemedView>
         
-        <EnhancedDataTable
+        <EnhancedCardList
           data={pagos}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/pagos"
@@ -86,6 +93,45 @@ export default function PagosScreen() {
           }}
           emptyMessage="No hay pagos registrados"
           onRefresh={refresh}
+          renderCard={(pago) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>Pago #{pago.id} por {pago.usuario?.username} </ThemedText>
+
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Fecha: {pago.fecha ? formatDate(pago.fecha) : 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="creditcard.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Monto: {pago.monto ? formatCurrency(parseFloat(pago.monto)) : '$0.00'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="person.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Total: {pago.venta?.total || 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText} numberOfLines={2}>
+                    Metodo: {pago.metodo_pago || 'Sin metodo'}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -133,5 +179,54 @@ const styles = StyleSheet.create({
     color: '#F57C00',
     textAlign: 'center',
     fontWeight: '500',
-  }
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  pendingBadge: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  inactiveBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
+  },
 });

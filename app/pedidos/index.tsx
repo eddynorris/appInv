@@ -1,21 +1,20 @@
-// app/pedidos/index.tsx - Refactorizado
+// app/pedidos/index.tsx - Refactorizado con tarjetas
 import React, { useMemo, useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Alert, View, TextInput, Button, TouchableOpacity, Platform } from 'react-native';
 import { Stack, router } from 'expo-router';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-// Ya no necesitamos Picker
-// import { Picker } from '@react-native-picker/picker';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { usePedidosList } from '@/hooks/crud/usePedidosList';
 import { Collapsible } from '@/components/Collapsible';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 export default function PedidosScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -186,10 +185,9 @@ export default function PedidosScreen() {
           </ThemedView>
         </Collapsible>
 
-        {/* Tabla de Datos (sin cambios) */}
-        <EnhancedDataTable
+        {/* Lista de tarjetas */}
+        <EnhancedCardList
           data={pedidos}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/pedidos"
@@ -209,6 +207,64 @@ export default function PedidosScreen() {
           }}
           emptyMessage="No hay proyecciones disponibles"
           onRefresh={refresh}
+          renderCard={(pedido) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>Pedido #{pedido.id}</ThemedText>
+                <View style={styles.badgeContainer}>
+                  <ThemedView style={[styles.badge, 
+                    pedido.estado === 'entregado' ? styles.entregadoBadge : 
+                    pedido.estado === 'confirmado' ? styles.procesoBadge :
+                    pedido.estado === 'cancelado'? styles.canceladoBadge :
+                    styles.pendienteBadge]}>
+                    <ThemedText style={styles.badgeText}>
+                      {pedido.estado === 'entregado' ? 'Entregado' : 
+                       pedido.estado === 'confirmado' ? 'Confirmado' :
+                       pedido.estado === 'programado' ? 'Programado' : 'Cancelado'}
+                    </ThemedText>
+                  </ThemedView>
+                </View>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Fecha de pedido: {pedido.fecha_creacion ? formatDate(pedido.fecha_creacion) : 'N/A'}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <IconSymbol name="calendar" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Fecha de entrega: {pedido.fecha_entrega ? formatDate(pedido.fecha_entrega) : 'N/A'}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <IconSymbol name="person.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Cliente: {pedido.cliente?.nombre || 'N/A'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="tag.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    Total: {pedido.total_estimado ? formatCurrency(parseFloat(pedido.total_estimado)) : '$0.00'}
+                  </ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <IconSymbol name="shippingbox.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText} numberOfLines={2}>
+                    Productos: {pedido.detalles?.length || 0}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -261,5 +317,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 16,
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  entregadoBadge: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  procesoBadge: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  pendienteBadge: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  canceladoBadge: {
+    backgroundColor: 'rgba(209, 9, 9, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });

@@ -1,14 +1,16 @@
 // app/almacenes/index.tsx
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useAlmacenesList } from '@/hooks/crud/useAlmacenesList';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
 
 export default function AlmacenesScreen() {
   // Usar el hook refactorizado para la LISTA
@@ -41,9 +43,8 @@ export default function AlmacenesScreen() {
           </ThemedView>
         </ThemedView>
         
-        <EnhancedDataTable
+        <EnhancedCardList
           data={almacenes}
-          columns={columns}
           isLoading={isLoading}
           error={error}
           baseRoute="/almacenes"
@@ -74,6 +75,37 @@ export default function AlmacenesScreen() {
           }}
           emptyMessage="No hay almacenes disponibles"
           onRefresh={refresh}
+          renderCard={(almacen) => (
+            <View style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle}>{almacen.nombre}</ThemedText>
+                <View style={styles.badgeContainer}>
+                  <ThemedView style={[styles.badge, styles.activeBadge]}>
+                    <ThemedText style={styles.badgeText}>Activo</ThemedText>
+                  </ThemedView>
+                </View>
+              </View>
+              
+              <View style={styles.cardDetails}>
+                <View style={styles.detailRow}>
+                  <IconSymbol name="location.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>
+                    {almacen.direccion || 'Sin ubicación especificada'}
+                  </ThemedText>
+                </View>
+                
+                {almacen.ciudad && (
+                  <View style={styles.detailRow}>
+                    <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
+                    <ThemedText style={styles.detailText} numberOfLines={2}>
+                      {almacen.ciudad}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+          numColumns={1}
         />
         
         <FloatingActionButton 
@@ -109,5 +141,51 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Estilos para las tarjetas
+  cardContent: {
+    padding: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  inactiveBadge: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  cardDetails: {
+    gap: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
   },
 });
