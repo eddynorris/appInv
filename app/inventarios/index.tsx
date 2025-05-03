@@ -1,358 +1,294 @@
-// app/inventarios/index.tsx - Versión actualizada
-import React, { useEffect } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Text, FlatList, RefreshControl } from 'react-native';
-import { router } from 'expo-router';
+// app/inventarios/index.tsx - Refactorizado a EnhancedCardList
+import React, { useState, useCallback, useMemo } from 'react';
+import { StyleSheet, View, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Stack, router } from 'expo-router';
 
-import { ThemedView } from '@/components/ThemedView';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import AlmacenPickerDialog from '@/components/data/AlmacenPickerDialog';
+import { EnhancedCardList } from '@/components/data/EnhancedCardList'; // Re-importar
 import { useInventarios } from '@/hooks/crud/useInventarios';
-import { Inventario } from '@/models';
-import { FloatingActionButton } from '@/components/FloatingActionButton';
+import { Inventario, AlmacenSimple } from '@/models';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import AlmacenPickerDialog from '@/components/data/AlmacenPickerDialog';
 
-export default function InventarioScreen() {
-  // Estados locales de UI
-  const [showAlmacenPicker, setShowAlmacenPicker] = React.useState(false);
-  
-  // Usar el hook personalizado
-  const {
-    inventarios,
-    almacenes,
-    selectedAlmacen,
-    searchText,
-    showOnlyLowStock,
-    isLoading,
-    error,
-    filtrarPorAlmacen,
-    filtrarPorTexto,
-    toggleStockBajo,
-    getInventariosFiltrados,
-    getEstadisticas,
-    refresh,
-    confirmDelete
-  } = useInventarios();
+export default function InventarioIndexScreen() {
+    const [showAlmacenPicker, setShowAlmacenPicker] = useState(false);
 
-  // Cargar datos al montar
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const {
+        inventarios,
+        isLoading,
+        error,
+        almacenes,
+        isAdmin,
+        filters,
+        handleAlmacenFilterChange,
+        handleSearchFilterChange,
+        toggleLowStockFilter,
+        clearFilters,
+        refresh,
+        deleteInventario,
+    } = useInventarios();
 
-  // Obtener inventarios filtrados
-  const filteredInventarios = getInventariosFiltrados();
-  
-  // Obtener estadísticas
-  const estadisticas = getEstadisticas();
+    const handleSearchSubmit = useCallback(() => {
+        // No action needed for local filtering
+    }, []);
 
-  // Renderizar cada item de inventario
-  const renderInventarioItem = ({ item }: { item: Inventario }) => {
-    const isLowStock = item.cantidad <= item.stock_minimo;
-    
+    const handleSelectAlmacen = useCallback((almacen: AlmacenSimple) => {
+        handleAlmacenFilterChange(almacen ? almacen.id.toString() : '');
+        setShowAlmacenPicker(false);
+    }, [handleAlmacenFilterChange]);
+
+    const selectedAlmacenNombre = useMemo(() => {
+        if (!filters.almacen_id) return 'Todos';
+        return almacenes.find(a => a.id.toString() === filters.almacen_id)?.nombre || 'Desconocido';
+    }, [filters.almacen_id, almacenes]);
+
+    // Render card para EnhancedCardList (sin TouchableOpacity exterior)
+    const renderInventarioCardInternal = useCallback((item: Inventario) => {
+        const isLowStock = item.cantidad <= item.stock_minimo;
+        return (
+            // El View exterior es manejado por EnhancedCardList, solo renderizamos el contenido
+            <View style={styles.cardContent}>
+                <View style={styles.cardHeader}>
+                    <ThemedText style={styles.cardTitle} numberOfLines={1}>
+                        {item.presentacion?.nombre || 'Producto sin nombre'}
+                    </ThemedText>
+                    {/* El botón de borrado se maneja a través de actions en EnhancedCardList */}
+                </View>
+                <ThemedText style={styles.cardSubtitle} numberOfLines={1}>
+                    {item.presentacion?.producto?.nombre || 'Sin descripción'}
+                </ThemedText>
+                <View style={styles.cardDetailsRow}>
+                    <IconSymbol name="shippingbox.fill" size={14} color={Colors.light.textSecondary} />
+                    <ThemedText style={styles.cardDetailText} numberOfLines={1}>
+                        Almacén: {item.almacen?.nombre || 'N/A'}
+                    </ThemedText>
+                </View>
+                <View style={styles.cardDetailsRow}>
+                    <IconSymbol name={isLowStock ? "exclamationmark.triangle.fill" : "archivebox.fill"} size={14} color={isLowStock ? Colors.danger : Colors.success} />
+                    <ThemedText style={[styles.cardDetailText, isLowStock && styles.lowStockText]}>
+                        Stock: <ThemedText>{String(item.cantidad ?? 0)}</ThemedText> (Mín: <ThemedText>{String(item.stock_minimo ?? 0)}</ThemedText>)
+                    </ThemedText>
+                </View>
+                {item.lote && (
+                    <View style={styles.cardDetailsRow}>
+                        <IconSymbol name="tag.fill" size={14} color={Colors.light.textSecondary} />
+                        <ThemedText style={styles.cardDetailText} numberOfLines={1}>
+                            Lote: #{String(item.lote.id ?? 'N/A')} - {item.lote.descripcion || 'Sin desc.'}
+                        </ThemedText>
+                    </View>
+                )}
+            </View>
+        );
+    }, []); // Dependencias vacías si no usa estado/props externos directamente
+
+    // --- Renderizado Condicional del Contenido ---
+    const renderContent = () => {
+        // Mostrar filtros siempre
+        return (
+            <ThemedView style={styles.container}>
+                {/* Sección de Filtros (sin cambios) */}
+                <View style={styles.filterSection}>
+                     <View style={styles.searchRow}>
+                        <View style={styles.searchInputContainer}>
+                            <IconSymbol name="magnifyingglass" size={20} color={Colors.light.icon} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Buscar producto, almacén..."
+                                value={filters.search}
+                                onChangeText={handleSearchFilterChange}
+                                placeholderTextColor={Colors.light.placeholder}
+                                returnKeyType="search"
+                                onSubmitEditing={handleSearchSubmit}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                            {filters.search !== '' && (
+                                <TouchableOpacity onPress={() => handleSearchFilterChange('')}>
+                                    <IconSymbol name="xmark.circle.fill" size={20} color={Colors.light.icon} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                     </View>
+                     <View style={styles.filterButtonsRow}>
+                        {isAdmin && (
+                            <TouchableOpacity style={styles.filterButton} onPress={() => setShowAlmacenPicker(true)} disabled={isLoading}>
+                                <IconSymbol name="shippingbox" size={16} color={Colors.light.textSecondary}/>
+                                <ThemedText style={styles.filterButtonText} numberOfLines={1}>{selectedAlmacenNombre}</ThemedText>
+                            </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                            style={[styles.filterButton, filters.stock_bajo && styles.filterButtonActive]}
+                            onPress={toggleLowStockFilter}
+                            disabled={isLoading}
+                        >
+                            <IconSymbol name="exclamationmark.triangle" size={16} color={filters.stock_bajo ? Colors.warning : Colors.light.textSecondary} />
+                            <ThemedText style={styles.filterButtonText}>Bajo Stock</ThemedText>
+                        </TouchableOpacity>
+                         <TouchableOpacity style={styles.filterButton} onPress={clearFilters} disabled={isLoading}>
+                             <IconSymbol name="arrow.counterclockwise" size={16} color={Colors.light.textSecondary} />
+                            <ThemedText style={styles.filterButtonText}>Limpiar</ThemedText>
+                         </TouchableOpacity>
+                     </View>
+                </View>
+
+                {/* Usar EnhancedCardList */}
+                <EnhancedCardList
+                    data={inventarios}
+                    isLoading={isLoading}
+                    error={error}
+                    baseRoute="/inventarios" // Ruta base para acciones
+                    renderCard={renderInventarioCardInternal}
+                    pagination={{ // Simular paginación local o deshabilitarla
+                        currentPage: 1,
+                        totalPages: 1,
+                        itemsPerPage: inventarios.length, // Mostrar todos los filtrados
+                        totalItems: inventarios.length,
+                        onPageChange: () => {}, // No aplica para local
+                        // onItemsPerPageChange: () => {}, // No aplica para local
+                    }}
+                    // Sorting no aplica con filtrado local simple
+                    actions={{
+                        // Acción 'View' redirige a 'ajustar'
+                        onView: true,
+                        onEdit: false, // No hay pantalla de edición para inventario
+                        onDelete: isAdmin, // Permitir borrar si es admin
+                    }}
+                    deleteOptions={ isAdmin ? { // Solo si es admin
+                        title: 'Eliminar Registro de Inventario',
+                        message: '¿Está seguro que desea eliminar este registro? Esta acción no se puede deshacer.',
+                        confirmText: 'Eliminar',
+                        cancelText: 'Cancelar',
+                        onDelete: async (id) => await deleteInventario(Number(id)) // Usar la función del hook
+                    } : undefined }
+                    emptyMessage="No se encontraron registros con los filtros actuales."
+                    onRefresh={refresh}
+                    onCardPress={(item) => router.push({ pathname: '/inventarios/ajustar', params: { id: item.id } })} // Navegar al ajustar al presionar tarjeta
+                    numColumns={1}
+                />
+            </ThemedView>
+        );
+    };
+
     return (
-      <TouchableOpacity 
-        style={[styles.itemCard, isLowStock && styles.lowStockCard]}
-        onPress={() => router.push(`/inventarios/${item.id}`)}
-      >
-        <View style={styles.itemHeader}>
-          <Text style={styles.itemName}>
-            {item.presentacion?.nombre || 'Producto sin nombre'}
-          </Text>
-          <Text style={styles.itemDescription}>
-            {item.presentacion?.producto?.nombre || 'Sin descripción'}
-          </Text>
-        </View>
-        
-        <View style={styles.itemDetails}>
-          <Text style={styles.almacenText}>
-            Almacén: {item.almacen?.nombre || 'No especificado'}
-          </Text>
-          
-          <View style={styles.stockInfo}>
-            <View style={styles.stockValue}>
-              <Text style={styles.stockLabel}>Stock:</Text>
-              <Text style={[
-                styles.stockNumber,
-                item.cantidad <= item.stock_minimo && styles.lowStockText
-              ]}>
-                {item.cantidad}
-              </Text>
-            </View>
-            
-            <View style={styles.stockValue}>
-              <Text style={styles.stockLabel}>Mínimo:</Text>
-              <Text style={styles.stockNumber}>{item.stock_minimo}</Text>
-            </View>
-            
-            <View style={styles.actions}>
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.decreaseButton]}
-                onPress={() => router.push({
-                  pathname: '/inventarios/ajustar',
-                  params: { id: item.id, accion: 'disminuir' }
-                })}
-              >
-                <Text style={styles.actionButtonText}>-</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.increaseButton]}
-                onPress={() => router.push({
-                  pathname: '/inventarios/ajustar',
-                  params: { id: item.id, accion: 'aumentar' }
-                })}
-              >
-                <Text style={styles.actionButtonText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+        <ScreenContainer
+            title="Inventario"
+            scrollable={false} // EnhancedCardList maneja su propio scroll
+        >
+            <Stack.Screen options={{ title: 'Inventario' }} />
 
-  return (
-    <ScreenContainer 
-      title="Inventario" 
-      scrollable={false}
-      error={error}
-    >
-      <View style={styles.container}>
-        {/* Búsqueda */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <IconSymbol name="magnifyingglass" size={20} color="#757575" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Buscar productos..."
-              value={searchText}
-              onChangeText={(text) => filtrarPorTexto(text)}
-              placeholderTextColor="#757575"
-            />
-          </View>
-          
-          {/* Filtros */}
-          <View style={styles.filtersRow}>
-            <TouchableOpacity 
-              style={styles.filterButton}
-              onPress={() => setShowAlmacenPicker(true)}
-            >
-              <Text style={styles.filterButtonText}>
-                Almacén {selectedAlmacen ? `✓ ${almacenes.find(a => a.id.toString() === selectedAlmacen)?.nombre || ''}` : '▼'}
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.filterButton, 
-                showOnlyLowStock && styles.activeFilterButton
-              ]}
-              onPress={toggleStockBajo}
-            >
-              <Text style={styles.filterButtonText}>
-                Stock bajo {showOnlyLowStock && '✓'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        
-        {/* Resumen */}
-        <View style={styles.summaryContainer}>
-          <Text style={styles.summaryText}>
-            <Text style={styles.summaryLabel}>Total: </Text>
-            {estadisticas.totalItems} productos 
-            {showOnlyLowStock ? '' : ` | Stock bajo: ${estadisticas.stockBajo} productos`}
-          </Text>
-        </View>
-        
-        {/* Lista de productos */}
-        <FlatList
-          data={filteredInventarios}
-          renderItem={renderInventarioItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={isLoading} onRefresh={refresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {isLoading 
-                  ? 'Cargando inventario...' 
-                  : 'No hay productos en este almacén'}
-              </Text>
-            </View>
-          }
-        />
-        
-        {/* Botón flotante para agregar */}
-        <FloatingActionButton 
-          icon="plus"
-          onPress={() => router.push('/inventarios/create')}
-        />
-      </View>
-      
-      {/* Selector de almacén */}
-      <AlmacenPickerDialog 
-        visible={showAlmacenPicker}
-        almacenes={almacenes}
-        onSelect={(almacen) => {
-          filtrarPorAlmacen(almacen.id.toString());
-          setShowAlmacenPicker(false);
-        }}
-        onCancel={() => {
-          setShowAlmacenPicker(false);
-        }}
-      />
-    </ScreenContainer>
-  );
+            {renderContent()}
+
+            {isAdmin && (
+                <AlmacenPickerDialog
+                    visible={showAlmacenPicker}
+                    almacenes={almacenes}
+                    onSelect={handleSelectAlmacen}
+                    onCancel={() => setShowAlmacenPicker(false)}
+                />
+            )}
+        </ScreenContainer>
+    );
 }
 
+// --- ESTILOS --- (Mantener los estilos relevantes)
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  searchContainer: {
-    padding: 16,
-    backgroundColor: '#4CAF50',
-  },
-  searchInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 25,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#333333',
-  },
-  filtersRow: {
-    flexDirection: 'row',
-    marginTop: 12,
-    justifyContent: 'space-between',
-  },
-  filterButton: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  activeFilterButton: {
-    backgroundColor: '#E8F5E9',
-  },
-  filterButtonText: {
-    color: '#333333',
-    fontSize: 14,
-  },
-  summaryContainer: {
-    padding: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  summaryText: {
-    fontSize: 14,
-    color: '#333333',
-  },
-  summaryLabel: {
-    fontWeight: 'bold',
-  },
-  listContent: {
-    padding: 12,
-    paddingBottom: 80, // Para evitar que el botón flotante tape contenido
-  },
-  itemCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-  },
-  lowStockCard: {
-    backgroundColor: '#FFF8E1', // Color amarillo suave para destacar stock bajo
-  },
-  itemHeader: {
-    marginBottom: 12,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  itemDescription: {
-    fontSize: 14,
-    color: '#666666',
-    marginTop: 4,
-  },
-  itemDetails: {
-    marginTop: 4,
-  },
-  almacenText: {
-    fontSize: 14,
-    color: '#666666',
-    marginBottom: 8,
-  },
-  stockInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stockValue: {
-    marginRight: 16,
-  },
-  stockLabel: {
-    fontSize: 12,
-    color: '#666666',
-  },
-  stockNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333333',
-  },
-  lowStockText: {
-    color: '#F44336',
-  },
-  actions: {
-    flexDirection: 'row',
-    marginLeft: 'auto',
-  },
-  actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  actionButtonText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  decreaseButton: {
-    backgroundColor: '#F44336',
-  },
-  increaseButton: {
-    backgroundColor: '#4CAF50',
-  },
-  emptyContainer: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#666666',
-    textAlign: 'center',
-  },
+    container: {
+        flex: 1,
+    },
+    filterSection: {
+        padding: 16,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.light.border,
+    },
+    searchRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    searchInputContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.light.inputBackground,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+    },
+    searchInput: {
+        flex: 1,
+        height: 44,
+        paddingHorizontal: 8,
+        fontSize: 16,
+        color: Colors.light.text,
+    },
+    filterButtonsRow: {
+        flexDirection: 'row',
+        marginTop: 12,
+        gap: 8,
+    },
+    filterButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.light.inputBackground,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        minWidth: 100,
+        gap: 6,
+        borderWidth: 1,
+        borderColor: Colors.light.inputBackground,
+    },
+    filterButtonActive: {
+        backgroundColor: Colors.light.tint + '1A',
+        borderColor: Colors.light.tint,
+    },
+    filterButtonText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: Colors.light.textSecondary,
+    },
+    // Estilos de la tarjeta interna (cardContent y sub-elementos)
+     cardContent: {
+        padding: 12, // Padding interno de la tarjeta
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start', // Alinea el título y el botón (si existiera)
+        marginBottom: 4,
+    },
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: Colors.light.text,
+        flex: 1, // Ocupa el espacio disponible
+        marginRight: 8, // Espacio si hubiera un botón
+    },
+    cardSubtitle: {
+        fontSize: 14,
+        color: Colors.light.textSecondary,
+        marginBottom: 8,
+    },
+    cardDetailsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 4,
+    },
+    cardDetailText: {
+        fontSize: 13,
+        color: Colors.light.textSecondary,
+        flex: 1, // Permite que el texto se ajuste
+    },
+    lowStockText: {
+        color: Colors.danger,
+        fontWeight: 'bold',
+    },
+    // Quitar estilos de FlatList y summary que ya no se usan directamente
+    // listContentContainer, cardContainer (exterior), summaryContainer, summaryText
+    // emptyContainer, errorContainer, loadingContainer (EnhancedCardList los maneja internamente)
 });

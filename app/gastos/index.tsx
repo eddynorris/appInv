@@ -126,12 +126,17 @@ export default function GastosScreen() {
                     <ThemedText style={styles.detailText}>Fecha: {new Date(gasto.fecha).toLocaleDateString()}</ThemedText>
                   </View>
                   
-                  {gasto.almacen?.nombre && (
+                  {gasto.almacen?.nombre ? (
                     <View style={styles.detailRow}>
                       <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
                       <ThemedText style={styles.detailText} numberOfLines={2}>{gasto.almacen?.nombre}</ThemedText>
                     </View>
-                  )} || "Sin almacén asociado"
+                  ) : (
+                    <View style={styles.detailRow}>
+                      <IconSymbol name="doc.text.fill" size={16} color={Colors.primary} />
+                      <ThemedText style={styles.detailText}>Sin almacén asociado</ThemedText>
+                    </View>
+                  )}
                 </View>
               </View>
             );

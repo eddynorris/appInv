@@ -1,591 +1,376 @@
-// hooks/crud/useInventarios.tsx - Versión optimizada
-import { useState, useCallback, useEffect } from 'react';
+// hooks/crud/useInventarios.tsx - Versión Optimizada y Simplificada
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 
-import { useApiResource } from '@/hooks/useApiResource';
-import { Inventario, Almacen, Presentacion, Lote } from '@/models';
+// Quitar useApiResource ya que manejaremos la lista principal manualmente
+// import { useApiResource } from '@/hooks/useApiResource';
+import { Inventario, AlmacenSimple, Presentacion, Lote, Almacen } from '@/models'; // Añadir AlmacenSimple y Almacen
 import { inventarioApi, almacenApi, presentacionApi, loteApi } from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
+import { useForm } from '../useForm'; // Asumiendo que useForm existe
 
-// Interface para los datos del formulario de inventario
-interface InventarioFormData {
-  presentacion_id: string;
-  almacen_id: string;
-  cantidad: string;
-  stock_minimo: string;
-  lote_id?: string;
+// Interface para los datos del formulario de ajuste
+interface AjusteStockForm {
+    cantidad: string;
+    motivo: string;
+    tipo_ajuste: 'entrada' | 'salida';
+    lote_origen_id?: string; // Para entradas desde lote
 }
 
-// Interface para los parámetros de ajuste simplificado
-interface AjusteSimplificadoParams {
-  inventarioId: number;
-  accion: 'aumentar' | 'disminuir';
-  cantidad: number;
-  motivo: string;
-  loteId?: number;
-}
-
-// Estado inicial del formulario
-const initialFormData: InventarioFormData = {
-  presentacion_id: '',
-  almacen_id: '',
-  cantidad: '',
-  stock_minimo: '',
-  lote_id: '',
+// Estado inicial del formulario de ajuste
+const initialAjusteForm: AjusteStockForm = {
+    cantidad: '1',
+    motivo: '',
+    tipo_ajuste: 'salida',
+    lote_origen_id: '',
 };
 
-export function useInventarios() {
-  const { user } = useAuth();
-  
-  // Usar el hook genérico para operaciones CRUD
-  const {
-    data: inventarios,
-    isLoading,
-    error,
-    pagination,
-    fetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteItem,
-    getItem
-  } = useApiResource<Inventario>({
-    initialParams: { page: 1, perPage: 10 },
-    fetchFn: inventarioApi.getInventarios,
-    deleteFn: inventarioApi.deleteInventario,
-    getFn: inventarioApi.getInventario
-  });
+export function useInventarios(inventarioIdParaAjuste?: number | null) {
+    const { user } = useAuth();
+    const isAdmin = user?.rol === 'admin';
 
-  // Estados para formulario y datos relacionados
-  const [formData, setFormData] = useState<InventarioFormData>(initialFormData);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
-  
-  // Estados para datos relacionados
-  const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
-  const [presentaciones, setPresentaciones] = useState<Presentacion[]>([]);
-  const [lotes, setLotes] = useState<Lote[]>([]);
-  const [selectedAlmacen, setSelectedAlmacen] = useState<string | null>(null);
-  const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
-  const [searchText, setSearchText] = useState('');
+    // Estados para la lista principal
+    const [allInventarios, setAllInventarios] = useState<Inventario[]>([]); // Todos los datos
+    const [filteredInventarios, setFilteredInventarios] = useState<Inventario[]>([]); // Datos filtrados para mostrar
+    const [isLoadingList, setIsLoadingList] = useState(false);
+    const [listError, setListError] = useState<string | null>(null);
 
-  // Cargar opciones (almacenes y presentaciones)
-  const loadOptions = useCallback(async () => {
-    try {
-      setIsLoadingOptions(true);
-      
-      // Cargar almacenes
-      const almacenesResponse = await almacenApi.getAlmacenes();
-      if (almacenesResponse?.data) {
-        setAlmacenes(almacenesResponse.data);
-        
-        // Si el usuario tiene un almacén asignado, seleccionarlo automáticamente
-        if (user?.almacen_id) {
-          setSelectedAlmacen(user.almacen_id.toString());
-          setFormData(prev => ({
-            ...prev,
-            almacen_id: user.almacen_id.toString()
-          }));
-        }
-      }
-      
-      // Cargar presentaciones
-      const presentacionesResponse = await presentacionApi.getPresentaciones();
-      if (presentacionesResponse?.data) {
-        setPresentaciones(presentacionesResponse.data);
-      }
-      
-      // Cargar lotes
-      const lotesResponse = await loteApi.getLotes();
-      if (lotesResponse?.data) {
-        setLotes(lotesResponse.data);
-      }
-    } catch (error) {
-      console.error('Error loading options:', error);
-      Alert.alert('Error', 'No se pudieron cargar los datos necesarios');
-    } finally {
-      setIsLoadingOptions(false);
-    }
-  }, [user?.almacen_id]);
-
-  // Efecto para cargar opciones al montar
-  useEffect(() => {
-    loadOptions();
-  }, [loadOptions]);
-
-  // Formatear lote para mostrar
-  const formatLoteForDisplay = useCallback((lote: Lote) => {
-    if (!lote) return '';
-    const fechaIngreso = new Date(lote.fecha_ingreso).toLocaleDateString();
-    return `Lote #${lote.id} (${fechaIngreso})${lote.proveedor ? ` - ${lote.proveedor.nombre}` : ''}`;
-  }, []);
-
-  // Filtrar inventario por almacén
-  const filtrarPorAlmacen = useCallback(async (almacenId: string) => {
-    try {
-      setSelectedAlmacen(almacenId);
-      
-      // Convertir a número o usar undefined si está vacío
-      const almacenIdParam = almacenId ? parseInt(almacenId) : undefined;
-      
-      await fetchData({
-        page: 1,
-        perPage: pagination.perPage,
-        almacenId: almacenIdParam
-      });
-    } catch (error) {
-      console.error('Error filtering by warehouse:', error);
-    }
-  }, [fetchData, pagination.perPage]);
-
-  // Filtrar inventario por texto
-  const filtrarPorTexto = useCallback((texto: string) => {
-    setSearchText(texto);
-  }, []);
-
-  // Alternar filtro de stock bajo
-  const toggleStockBajo = useCallback(() => {
-    setShowOnlyLowStock(prev => !prev);
-  }, []);
-
-  // Obtener inventario filtrado
-  const getInventariosFiltrados = useCallback(() => {
-    if (!inventarios) return [];
-    
-    return inventarios.filter((item) => {
-      const matchesSearch = !searchText || 
-        (item.presentacion?.nombre?.toLowerCase().includes(searchText.toLowerCase()) ||
-         item.presentacion?.producto?.nombre?.toLowerCase().includes(searchText.toLowerCase()));
-      
-      const matchesAlmacen = !selectedAlmacen || 
-        item.almacen_id.toString() === selectedAlmacen;
-      
-      const matchesLowStock = !showOnlyLowStock || 
-        (item.cantidad <= item.stock_minimo);
-      
-      return matchesSearch && matchesAlmacen && matchesLowStock;
-    });
-  }, [inventarios, searchText, selectedAlmacen, showOnlyLowStock]);
-  
-  // Obtener presentaciones que no están en el inventario para el almacén seleccionado
-  const getAvailablePresentaciones = useCallback(() => {
-    if (!presentaciones.length || !inventarios.length) return presentaciones;
-    
-    // Si no hay almacén seleccionado, devolver todas las presentaciones
-    if (!selectedAlmacen) return presentaciones;
-    
-    // Obtener todos los presentacion_id que ya están en el almacén seleccionado
-    const existingPresentacionIds = inventarios
-      .filter(inv => inv.almacen_id.toString() === selectedAlmacen)
-      .map(inv => inv.presentacion_id);
-    
-    // Devolver solo las presentaciones que no están en el almacén
-    return presentaciones.filter(
-      presentacion => !existingPresentacionIds.includes(presentacion.id)
+    // Estados para filtros (aplicados localmente)
+    const [selectedAlmacenId, setSelectedAlmacenId] = useState<string>(() =>
+        !isAdmin && user?.almacen_id ? user.almacen_id.toString() : ''
     );
-  }, [presentaciones, inventarios, selectedAlmacen]);
+    const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
+    const [searchText, setSearchText] = useState('');
 
-  // Manejar cambio de campo de formulario
-  const handleChange = useCallback((field: keyof InventarioFormData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Limpiar error cuando se cambia el campo
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
-  }, [errors]);
+    // Estados para la pantalla de ajuste
+    const [inventarioActual, setInventarioActual] = useState<Inventario | null>(null);
+    const [isLoadingItem, setIsLoadingItem] = useState(false);
+    const [itemError, setItemError] = useState<string | null>(null);
+    const [lotesDisponibles, setLotesDisponibles] = useState<Lote[]>([]);
+    const [isLoadingLotes, setIsLoadingLotes] = useState(false);
+    const [isAdjusting, setIsAdjusting] = useState(false);
 
-  // Validar formulario
-  const validate = useCallback(() => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.presentacion_id) {
-      newErrors.presentacion_id = 'La presentación es requerida';
-    }
-    
-    if (!formData.almacen_id) {
-      newErrors.almacen_id = 'El almacén es requerido';
-    }
-    
-    if (!formData.cantidad.trim()) {
-      newErrors.cantidad = 'La cantidad es requerida';
-    } else if (isNaN(parseInt(formData.cantidad)) || parseInt(formData.cantidad) < 0) {
-      newErrors.cantidad = 'Ingrese una cantidad válida';
-    }
-    
-    if (!formData.stock_minimo.trim()) {
-      newErrors.stock_minimo = 'El stock mínimo es requerido';
-    } else if (isNaN(parseInt(formData.stock_minimo)) || parseInt(formData.stock_minimo) < 0) {
-      newErrors.stock_minimo = 'Ingrese un valor válido';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData]);
+    // Estado para almacenes (picker admin)
+    const [almacenesParaPicker, setAlmacenesParaPicker] = useState<AlmacenSimple[]>([]);
+    const [isLoadingAlmacenes, setIsLoadingAlmacenes] = useState(false);
 
-  // Crear nuevo registro de inventario
-  const createInventario = useCallback(async () => {
-    if (!validate()) {
-      return false;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      // Asegurar que todos los valores se convierten correctamente a sus tipos esperados
-      const inventarioData = {
-        presentacion_id: parseInt(formData.presentacion_id),
-        almacen_id: parseInt(formData.almacen_id),
-        cantidad: parseInt(formData.cantidad),
-        stock_minimo: parseInt(formData.stock_minimo),
-        // Solo incluir lote_id si tiene un valor
-        ...(formData.lote_id && formData.lote_id.trim() !== '' 
-           ? { lote_id: parseInt(formData.lote_id) } 
-           : {})
-      };
-      
-      console.log("Sending inventory data:", JSON.stringify(inventarioData, null, 2));
-      
-      const response = await inventarioApi.createInventario(inventarioData);
-      
-      if (response) {
-        Alert.alert(
-          'Inventario Actualizado',
-          'El inventario ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace('/inventarios') 
+    // Hook de formulario para el ajuste - CORREGIDO: useForm solo con estado inicial
+    const ajusteForm = useForm<AjusteStockForm>(initialAjusteForm);
+
+    // --- Funciones para la Lista (INDEX) ---
+
+    // Cargar todos los inventarios (llamada única)
+    const loadAllInventarios = useCallback(async () => {
+        setIsLoadingList(true);
+        setListError(null);
+        try {
+            // Intentar obtener todos con perPage muy grande o un flag si la API lo soporta
+            // Aquí asumimos perPage grande. Ajustar si la API tiene otra forma.
+            const response = await inventarioApi.getInventarios(1, 10000); // TODO: Ajustar límite o usar flag si existe
+            setAllInventarios(response.data || []);
+        } catch (err: any) {
+            console.error('Error loading all inventarios:', err);
+            setListError(err.message || 'Error al cargar el inventario');
+            setAllInventarios([]); // Asegurar que esté vacío en caso de error
+        } finally {
+            setIsLoadingList(false);
+        }
+    }, []);
+
+    // Cargar almacenes para el picker (solo admin)
+    const loadAlmacenesParaPicker = useCallback(async () => {
+        if (!isAdmin || almacenesParaPicker.length > 0) return;
+        setIsLoadingAlmacenes(true);
+        try {
+            const response = await almacenApi.getAlmacenes(1, 100); // Suficientes para un picker
+            setAlmacenesParaPicker(response.data || []);
+        } catch (err: any) {
+            console.error("Error cargando almacenes para picker:", err);
+            // No establecer error global, solo afecta al picker
+        } finally {
+            setIsLoadingAlmacenes(false);
+        }
+    }, [isAdmin, almacenesParaPicker.length]);
+
+    // Aplicar filtros localmente
+    const applyLocalFilters = useCallback(() => {
+        let result = allInventarios;
+
+        // Filtrar por almacén
+        if (selectedAlmacenId) {
+            result = result.filter(item => item.almacen_id.toString() === selectedAlmacenId);
+        }
+
+        // Filtrar por stock bajo
+        if (showOnlyLowStock) {
+            result = result.filter(item => item.cantidad <= item.stock_minimo);
+        }
+
+        // Filtrar por texto de búsqueda (nombre presentación o producto)
+        if (searchText) {
+            const lowerSearchText = searchText.toLowerCase();
+            result = result.filter(item =>
+                item.presentacion?.nombre?.toLowerCase().includes(lowerSearchText) ||
+                item.presentacion?.producto?.nombre?.toLowerCase().includes(lowerSearchText)
+            );
+        }
+
+        setFilteredInventarios(result);
+    }, [allInventarios, selectedAlmacenId, showOnlyLowStock, searchText]);
+
+    // Efecto para aplicar filtros cuando cambian los datos o los filtros
+    useEffect(() => {
+        // Aplicar filtros solo si no estamos cargando un item específico
+        // (los filtros se aplican sobre allInventarios, que solo se carga para la lista)
+        if (!inventarioIdParaAjuste) {
+            applyLocalFilters();
+        }
+    }, [applyLocalFilters, inventarioIdParaAjuste]); // Añadir dependencia
+
+    // Efecto para carga inicial de lista y almacenes picker
+    useEffect(() => {
+        // Cargar solo si no es para ajuste
+        if (!inventarioIdParaAjuste) {
+            console.log("useInventarios: Cargando datos para VISTA DE LISTA (useEffect principal)");
+            loadAllInventarios();
+            loadAlmacenesParaPicker(); // Llamar aquí
+        }
+        // CORREGIDO: Quitar loadAlmacenesParaPicker del array de dependencias
+    }, [loadAllInventarios, inventarioIdParaAjuste]);
+
+    // --- Funciones para el Item (AJUSTAR) ---
+
+    // Cargar datos del inventario específico para ajustar
+    const loadInventarioParaAjuste = useCallback(async (id: number) => {
+        setIsLoadingItem(true);
+        setItemError(null);
+        setInventarioActual(null);
+        try {
+            const data = await inventarioApi.getInventario(id);
+            setInventarioActual(data);
+            // Podríamos pre-llenar algo del form aquí si fuera necesario
+        } catch (err: any) {
+            console.error(`Error loading inventario ${id}:`, err);
+            setItemError(err.message || 'Error al cargar los detalles del inventario');
+        } finally {
+            setIsLoadingItem(false);
+        }
+    }, []);
+
+    // Cargar lotes disponibles (solo si es una entrada y hay un inventario cargado)
+    const loadLotesDisponibles = useCallback(async () => {
+        if (!inventarioActual || ajusteForm.formData.tipo_ajuste !== 'entrada') {
+            setLotesDisponibles([]);
+            return;
+        }
+        setIsLoadingLotes(true);
+        try {
+            // Idealmente filtrar por producto_id si la API lo permite
+            const productoId = inventarioActual.presentacion?.producto_id;
+            // TODO: Verificar si loteApi.getLotes acepta filtro producto_id y disponible=true
+            const response = await loteApi.getLotes(1, 500); // Cargar suficientes lotes
+            // Filtrar adicionalmente si es necesario (ej: por producto si la API no lo hizo)
+            let lotesFiltrados = response.data || [];
+            if (productoId) {
+                 lotesFiltrados = lotesFiltrados.filter(lote => lote.producto_id === productoId);
             }
-          ]
-        );
-        
-        // Actualizar la lista
-        await fetchData();
-        
-        return true;
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar el inventario');
-        return false;
-      }
-    } catch (error) {
-      console.error('Error creating inventory:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al actualizar el inventario';
-      Alert.alert('Error', errorMessage);
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [formData, validate, fetchData]);
+            // Podríamos filtrar también lotes con cantidad_disponible > 0
+             lotesFiltrados = lotesFiltrados.filter(lote => parseFloat(String(lote.cantidad_disponible_kg ?? 0)) > 0);
 
-  // Actualizar registro de inventario existente
-  const updateInventario = useCallback(async (id: number) => {
-    if (!validate()) {
-      return false;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      // Asegurar que todos los valores se convierten correctamente
-      const inventarioData = {
-        presentacion_id: parseInt(formData.presentacion_id),
-        almacen_id: parseInt(formData.almacen_id),
-        cantidad: parseInt(formData.cantidad),
-        stock_minimo: parseInt(formData.stock_minimo),
-        // Solo incluir lote_id si tiene un valor
-        ...(formData.lote_id && formData.lote_id.trim() !== '' 
-           ? { lote_id: parseInt(formData.lote_id) } 
-           : {})
-      };
-      
-      console.log("Updating inventory with data:", JSON.stringify(inventarioData, null, 2));
-      
-      const response = await inventarioApi.updateInventario(id, inventarioData);
-      
-      if (response) {
-        Alert.alert(
-          'Inventario Actualizado',
-          'El inventario ha sido actualizado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.back() 
-            }
-          ]
-        );
-        
-        // Actualizar la lista
-        await fetchData();
-        
-        return true;
-      } else {
-        Alert.alert('Error', 'No se pudo actualizar el inventario');
-        return false;
-      }
-    } catch (error) {
-      console.error('Error updating inventory:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al actualizar el inventario';
-      Alert.alert('Error', errorMessage);
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [formData, validate, fetchData]);
+            setLotesDisponibles(lotesFiltrados);
+        } catch (err: any) {
+            console.error("Error loading lotes disponibles:", err);
+        } finally {
+            setIsLoadingLotes(false);
+        }
+    }, [inventarioActual, ajusteForm.formData.tipo_ajuste]);
 
-  // Cargar registro de inventario para editar
-  const loadInventarioForEdit = useCallback(async (id: number) => {
-    try {
-      setIsSubmitting(true);
-      
-      // Asegurar que las opciones están cargadas
-      await loadOptions();
-      
-      const inventario = await getItem(id);
-      
-      if (inventario) {
-        setFormData({
-          presentacion_id: inventario.presentacion_id.toString(),
-          almacen_id: inventario.almacen_id.toString(),
-          cantidad: inventario.cantidad.toString(),
-          stock_minimo: inventario.stock_minimo.toString(),
-          lote_id: inventario.lote_id ? inventario.lote_id.toString() : '',
-        });
-        
-        return inventario;
-      } else {
-        Alert.alert('Error', 'No se pudo cargar el inventario');
-        return null;
-      }
-    } catch (error) {
-      console.error('Error loading inventory for edit:', error);
-      Alert.alert('Error', 'No se pudo cargar el inventario');
-      return null;
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [getItem, loadOptions]);
+    // Efecto para cargar el item de ajuste si se proporciona ID
+    useEffect(() => {
+        if (inventarioIdParaAjuste) {
+            console.log(`useInventarios: Cargando datos para AJUSTE (ID: ${inventarioIdParaAjuste})`);
+            loadInventarioParaAjuste(inventarioIdParaAjuste);
+        }
+    }, [inventarioIdParaAjuste, loadInventarioParaAjuste]);
 
-// Versión optimizada de la función de ajuste de inventario que considera los lotes
-const ajustarInventarioSimplificado = useCallback(async ({ 
-  inventarioId, 
-  accion, 
-  cantidad, 
-  motivo,
-  loteId
-}: AjusteSimplificadoParams) => {
-  try {
-    setIsSubmitting(true);
-    
-    // Validar cantidad
-    if (cantidad <= 0) {
-      throw new Error('La cantidad debe ser mayor a cero');
-    }
-    
-    // Obtener inventario actual para validación
-    const inventario = await getItem(inventarioId);
-    
-    if (!inventario) {
-      throw new Error('No se pudo cargar el inventario. No se encontró el registro.');
-    }
-    
-    // Validación adicional para operación de disminución
-    if (accion === 'disminuir' && cantidad > inventario.cantidad) {
-      throw new Error('No puede restar más unidades de las disponibles');
-    }
-    
-    // Calcular nueva cantidad según la acción
-    const nuevaCantidad = accion === 'aumentar' 
-      ? inventario.cantidad + cantidad
-      : inventario.cantidad - cantidad;
-    
-    // Preparar datos para la actualización
-    const updatedData: any = {
-      cantidad: nuevaCantidad,
-      motivo: motivo || 'Ajuste de inventario'
-    };
-    
-    // Solo incluir lote_id si se está aumentando stock y se especificó un lote diferente
-    if (accion === 'aumentar' && loteId && loteId !== inventario.lote_id) {
-      console.log(`Cambiando lote de ${inventario.lote_id} a ${loteId} para aumento de inventario`);
-      updatedData.lote_id = loteId;
-    }
-    
-    console.log("Enviando datos de ajuste:", JSON.stringify(updatedData, null, 2));
-    
-    // Llamar al método de actualización
-    const response = await inventarioApi.updateInventario(inventarioId, updatedData);
-    
-    if (response) {
-      // Actualizar los datos
-      await fetchData({
-        page: pagination.page,
-        perPage: pagination.perPage,
-        almacenId: selectedAlmacen ? parseInt(selectedAlmacen) : undefined
-      });
-      
-      return true;
-    }
-    
-    throw new Error('No se pudo actualizar el inventario');
-  } catch (error) {
-    console.error('Error ajustando inventario:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error al ajustar el inventario';
-    Alert.alert('Error', errorMessage);
-    return false;
-  } finally {
-    setIsSubmitting(false);
-  }
-}, [getItem, fetchData, pagination, selectedAlmacen, inventarioApi]);
+    // Efecto para cargar lotes cuando se cambia a 'entrada' o cambia el inventario
+     useEffect(() => {
+         // Solo cargar lotes si estamos en modo ajuste y es entrada
+        if (inventarioIdParaAjuste && inventarioActual && ajusteForm.formData.tipo_ajuste === 'entrada') {
+             loadLotesDisponibles();
+        } else {
+            setLotesDisponibles([]); // Limpiar si no es entrada o no estamos en ajuste
+        }
+    }, [inventarioActual, ajusteForm.formData.tipo_ajuste, loadLotesDisponibles, inventarioIdParaAjuste]); // Añadir dependencia
 
-  // Versión compatible con el código existente (pero delegando a la versión simplificada)
-  const ajustarInventario = useCallback(async (
-    id: number, 
-    accion: 'aumentar' | 'disminuir', 
-    cantidad: number, 
-    motivo: string,
-    loteId?: number
-  ) => {
-    return ajustarInventarioSimplificado({
-      inventarioId: id,
-      accion,
-      cantidad,
-      motivo,
-      loteId
-    });
-  }, [ajustarInventarioSimplificado]);
 
-  // Resetear formulario
-  const resetForm = useCallback(() => {
-    setFormData(initialFormData);
-    setErrors({});
-  }, []);
+    // Realizar el ajuste de stock
+    const adjustStock = useCallback(async (): Promise<boolean> => {
+        // CORREGIDO: Validar aquí directamente
+        const currentFormData = ajusteForm.formData;
+        const errors: Record<string, string> = {};
+        if (!currentFormData.cantidad || isNaN(parseInt(currentFormData.cantidad)) || parseInt(currentFormData.cantidad) <= 0) {
+            errors.cantidad = 'Ingrese una cantidad válida mayor a 0.';
+        }
+        if (!currentFormData.motivo.trim()) {
+            errors.motivo = 'El motivo es requerido.';
+        }
+        if (currentFormData.tipo_ajuste === 'entrada' && !currentFormData.lote_origen_id) {
+            errors.lote_origen_id = 'Debe seleccionar un lote de origen para la entrada.';
+        }
+        if (currentFormData.tipo_ajuste === 'salida' && inventarioActual) {
+           const cantidadAjuste = parseInt(currentFormData.cantidad);
+           if (!isNaN(cantidadAjuste) && cantidadAjuste > inventarioActual.cantidad) {
+               errors.cantidad = `No puede restar más de ${inventarioActual.cantidad} (stock actual).`;
+           }
+        }
 
-  // Obtener estadísticas de inventario
-  const getEstadisticas = useCallback(() => {
-    if (!inventarios || inventarios.length === 0) {
-      return {
-        totalItems: 0,
-        stockBajo: 0,
-        sinStock: 0,
-        valorTotal: 0
-      };
-    }
-    
-    const totalItems = inventarios.length;
-    const stockBajo = inventarios.filter(inv => inv.cantidad <= inv.stock_minimo && inv.cantidad > 0).length;
-    const sinStock = inventarios.filter(inv => inv.cantidad === 0).length;
-    
-    // Calcular valor total del inventario (si los productos tienen precio)
-    const valorTotal = inventarios.reduce((sum, inv) => {
-      const precio = inv.presentacion?.precio_venta || 0;
-      return sum + (precio * inv.cantidad);
-    }, 0);
-    
+        if (Object.keys(errors).length > 0 || !inventarioActual) {
+            ajusteForm.setErrors(errors);
+            return false;
+        }
+
+        setIsAdjusting(true);
+        setItemError(null); // Limpiar error previo
+        // Usar currentFormData en lugar de ajusteForm.formData directamente aquí
+        const { cantidad, motivo, tipo_ajuste, lote_origen_id } = currentFormData;
+        const cantidadNum = parseInt(cantidad);
+        const cantidadAjuste = tipo_ajuste === 'entrada' ? cantidadNum : -cantidadNum;
+        const nuevaCantidad = inventarioActual.cantidad + cantidadAjuste;
+
+        try {
+            const payload: any = {
+                cantidad: nuevaCantidad, // Enviar la cantidad final
+                // Otros campos que permita la API PUT de inventario, si son necesarios
+                // Por ejemplo, si la API necesita el motivo o el lote_id directamente aquí:
+                // motivo_ajuste: motivo,
+                // tipo_ajuste: tipo_ajuste,
+            };
+
+            // Si es entrada desde un lote, asociar el lote al registro de inventario si es necesario
+            // (Depende de si tu modelo Inventario guarda el lote_id directamente O si el ajuste se registra en otra tabla)
+            // Asumiendo que el PUT a /inventarios/{id} puede actualizar el lote_id
+             if (tipo_ajuste === 'entrada' && lote_origen_id) {
+                 payload.lote_id = parseInt(lote_origen_id);
+                 // Podríamos necesitar llamar a un endpoint de lote para decrementar su cantidad
+                 // await loteApi.ajustarStockLote(parseInt(lote_origen_id), -cantidadNum * capacidadPresentacion); // Ejemplo
+             } else if (tipo_ajuste === 'salida') {
+                 // Si es una salida y el inventario estaba asociado a un lote, quizás necesitemos desasociarlo
+                 // payload.lote_id = null; // OJO: Esto depende totalmente de tu lógica de negocio y backend
+                 // También podríamos necesitar llamar a un endpoint de lote para incrementar su cantidad disponible si la salida fue por merma/descarte
+             }
+
+
+            console.log(`Ajustando stock para inventario ${inventarioActual.id}. Payload:`, payload);
+
+            // Llamar a la API para actualizar el inventario
+            await inventarioApi.updateInventario(inventarioActual.id, payload);
+
+            Alert.alert('Éxito', 'Stock ajustado correctamente');
+            // Opcional: Recargar datos de la lista si estamos en index, o volver atrás si estamos en ajustar
+            await loadAllInventarios(); // Recargar la lista principal
+            router.back(); // Volver si estamos en la pantalla de ajuste
+            return true;
+
+        } catch (err: any) {
+            console.error('Error adjusting stock:', err);
+            const apiError = err.response?.data?.error || err.message || 'Error al ajustar el stock';
+             setItemError(apiError);
+            // Mantener el formulario para que el usuario vea el error
+            // setErrors(prev => ({ ...prev, api: apiError }));
+            Alert.alert('Error', apiError);
+            return false;
+        } finally {
+            setIsAdjusting(false);
+        }
+    }, [inventarioActual, ajusteForm, loadAllInventarios]); // ajusteForm ahora incluye setErrors
+
+
+     // Borrar item (con confirmación) - Adaptado sin useApiResource
+     const deleteInventario = useCallback(async (id: number): Promise<boolean> => {
+         return new Promise((resolve) => {
+             Alert.alert("Eliminar Registro", "¿Está seguro?", [
+                 { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+                 { text: "Eliminar", style: "destructive", onPress: async () => {
+                     try {
+                         await inventarioApi.deleteInventario(id);
+                         // Eliminar localmente y refrescar filtros
+                         setAllInventarios(prev => prev.filter(item => item.id !== id));
+                         // applyLocalFilters(); // Se disparará automáticamente por el cambio en allInventarios
+                         resolve(true);
+                     } catch (e: any) {
+                         Alert.alert('Error', e.message || 'No se pudo eliminar el registro.');
+                         resolve(false);
+                     }
+                 }}
+             ]);
+         });
+     }, [/* No depende de allInventarios directamente aquí para evitar re-creación */]);
+
+
+    // Refrescar lista principal
+    const refreshList = useCallback(() => {
+        loadAllInventarios();
+        loadAlmacenesParaPicker(); // También refrescar almacenes por si acaso
+    }, [loadAllInventarios, loadAlmacenesParaPicker]);
+
+    // Handlers para filtros locales
+    const handleAlmacenFilterChange = useCallback((id: string) => {
+        setSelectedAlmacenId(id);
+    }, []);
+    const handleSearchFilterChange = useCallback((text: string) => {
+        setSearchText(text);
+    }, []);
+    const toggleLowStockFilter = useCallback(() => {
+        setShowOnlyLowStock(prev => !prev);
+    }, []);
+     const clearFilters = useCallback(() => {
+        setSelectedAlmacenId(!isAdmin && user?.almacen_id ? user.almacen_id.toString() : '');
+        setShowOnlyLowStock(false);
+        setSearchText('');
+    }, [isAdmin, user?.almacen_id]);
+
+     // Estadísticas calculadas localmente
+    const estadisticas = useMemo(() => {
+        const stockBajoCount = filteredInventarios.filter(item => item.cantidad <= item.stock_minimo).length;
+        return {
+            totalItems: filteredInventarios.length, // O allInventarios.length si quieres el total general
+            stockBajo: stockBajoCount,
+        };
+    }, [filteredInventarios]);
+
+
+    // Exponer estado y funciones
     return {
-      totalItems,
-      stockBajo,
-      sinStock,
-      valorTotal
+        // Para la lista (index)
+        inventarios: filteredInventarios, // La lista filtrada para mostrar
+        isLoading: isLoadingList || (isAdmin && isLoadingAlmacenes), // Estado de carga combinado
+        error: listError, // Error de carga de lista
+        almacenes: almacenesParaPicker,
+        isAdmin,
+        filters: { // Estado actual de los filtros locales
+            almacen_id: selectedAlmacenId,
+            search: searchText,
+            stock_bajo: showOnlyLowStock,
+        },
+        handleAlmacenFilterChange, // Cambiar filtro almacén
+        handleSearchFilterChange, // Cambiar filtro búsqueda
+        toggleLowStockFilter, // Cambiar filtro stock bajo
+        clearFilters, // Limpiar filtros locales
+        refresh: refreshList, // Refrescar la lista completa
+        deleteInventario, // Borrar un item
+        estadisticas, // Estadísticas basadas en la lista filtrada
+
+        // Para el item (ajustar)
+        inventarioActual, // El item que se está ajustando
+        isLoadingItem, // Cargando detalles del item
+        itemError, // Error al cargar/ajustar item
+        isAdjusting, // Estado de submitting del ajuste
+        ajusteForm, // Hook del formulario de ajuste
+        lotesDisponibles, // Lotes para el picker de entrada
+        isLoadingLotes, // Cargando lotes
+        adjustStock, // Función para ejecutar el ajuste
+        // loadInventarioParaAjuste, // Exponer si es necesario llamarla manualmente
     };
-  }, [inventarios]);
-
-  // Actualizar datos de inventario
-  const refresh = useCallback(async () => {
-    try {
-      // Convertir a número o usar undefined si está vacío
-      const almacenIdParam = selectedAlmacen ? parseInt(selectedAlmacen) : undefined;
-      
-      await fetchData({
-        page: pagination.page,
-        perPage: pagination.perPage,
-        almacenId: almacenIdParam
-      });
-    } catch (error) {
-      console.error('Error refreshing inventory:', error);
-    }
-  }, [fetchData, pagination.page, pagination.perPage, selectedAlmacen]);
-
-  // Confirmar eliminación de inventario
-  const confirmDelete = useCallback((id: number) => {
-    Alert.alert(
-      'Confirmar eliminación',
-      '¿Está seguro que desea eliminar este registro de inventario?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteItem(id);
-              await refresh();
-              Alert.alert('Éxito', 'Registro eliminado correctamente');
-            } catch (error) {
-              console.error('Error deleting inventory:', error);
-              Alert.alert('Error', 'No se pudo eliminar el registro');
-            }
-          }
-        }
-      ]
-    );
-  }, [deleteItem, refresh]);
-
-  return {
-    // Estados
-    inventarios,
-    almacenes,
-    presentaciones,
-    lotes,
-    selectedAlmacen,
-    isLoading,
-    isLoadingOptions,
-    error,
-    formData,
-    errors,
-    isSubmitting,
-    pagination,
-    searchText,
-    showOnlyLowStock,
-    
-    // Acciones de formulario
-    handleChange,
-    setFormData,
-    setErrors,
-    validate,
-    
-    // Operaciones CRUD
-    loadOptions,
-    filtrarPorAlmacen,
-    filtrarPorTexto,
-    toggleStockBajo,
-    createInventario,
-    updateInventario,
-    ajustarInventario,
-    ajustarInventarioSimplificado, // Nueva función simplificada
-    deleteInventario: deleteItem,
-    confirmDelete,
-    loadInventarioForEdit,
-    getItem,
-    
-    // Operaciones de paginación
-    handlePageChange,
-    handleItemsPerPageChange,
-    refresh,
-    
-    // Utilidades
-    getInventariosFiltrados,
-    getEstadisticas,
-    resetForm,
-    getAvailablePresentaciones,
-    formatLoteForDisplay
-  };
 }

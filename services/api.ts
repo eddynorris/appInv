@@ -18,7 +18,8 @@ import {
   ClienteSimple,
   AlmacenSimple,
   Presentacion,
-  User
+  User,
+  Inventario
 } from '@/models';
 import { authService } from './auth';
 
@@ -466,21 +467,29 @@ export const ventaApi = {
 
 // Fixed Inventory API methods in services/api.ts
 export const inventarioApi = {
-  getInventarios: async (page = 1, perPage = 10, almacenId?: number): Promise<ApiResponse<any>> => {
-    let endpoint = `/inventarios?page=${page}&per_page=${perPage}`;
-    
-    // Only add almacenId parameter if it's a valid number
-    if (almacenId !== undefined && !isNaN(almacenId)) {
-      endpoint += `&almacen_id=${almacenId}`;
+  getInventarios: async (page = 1, perPage = 10, filters?: Record<string, any>): Promise<ApiResponse<Inventario>> => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString(),
+    });
+    if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+            // Asegurarse de no añadir page/per_page dos veces si vienen en filters
+            if (key !== 'page' && key !== 'per_page' && value !== undefined && value !== null && value !== '') {
+                params.append(key, value.toString());
+            }
+        });
     }
-    
+
+    const endpoint = `/inventarios?${params.toString()}`;
     console.log('Fetching inventarios with endpoint:', endpoint);
-    return fetchApi<ApiResponse<any>>(endpoint);
+    // Especificar el tipo de retorno como Inventario
+    return fetchApi<ApiResponse<Inventario>>(endpoint);
   },
   
-  getInventario: async (id: number): Promise<any> => {
+  getInventario: async (id: number): Promise<Inventario> => {
     console.log(`Obteniendo inventario ID: ${id}`);
-    return fetchApi<any>(`/inventarios/${id}`);
+    return fetchApi<Inventario>(`/inventarios/${id}`);
   },
 
   createInventario: async (inventario: {
