@@ -1,18 +1,19 @@
 // models/index.ts
-export * from './cliente';
-export * from './producto';
-export * from './proveedor';
 export * from './almacen';
+export * from './cliente';
 export * from './gasto';
-export * from './movimiento';
-export * from './venta';
-export * from './ventadetalle';
-export * from './pago';
-export * from './presentacion';
-export * from './lote';
-export * from './merma';
 export * from './inventario';
-export * from './apiResponses';
-export * from './user';
+export * from './lote';
+// export * from './merma'; // Comentado si no se usa
+export * from './movimiento';
+export * from './pago';
 export * from './pedido';
 export * from './pedidoDetalle';
+export * from './presentacion';
+export * from './producto';
+export * from './proveedor';
+export * from './user'; // Contiene User, UserSimple, UsuarioPayload
+export * from './venta';
+export * from './ventadetalle';
+export * from './depositobancario'; // Contiene DepositoBancario, DepositoPayload
+export * from './apiResponses';

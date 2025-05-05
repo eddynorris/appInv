@@ -19,7 +19,10 @@ import {
   AlmacenSimple,
   Presentacion,
   User,
-  Inventario
+  Inventario,
+  DepositoBancario,
+  DepositoPayload,
+  UsuarioPayload
 } from '@/models';
 import { authService } from './auth';
 
@@ -1053,3 +1056,162 @@ interface PedidoFormDataUserResponse extends PedidoFormDataBaseResponse {
 // Tipo unión para la respuesta
 export type PedidoFormDataResponse = PedidoFormDataAdminResponse | PedidoFormDataUserResponse;
 // --- FIN: Añadir/Asegurar Tipos ---
+
+// --- API methods for DepositoBancario ---
+export const depositoApi = {
+  getDepositos: async (page = 1, perPage = 10, filters?: Record<string, any>): Promise<ApiResponse<DepositoBancario>> => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString(),
+    });
+    if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+            if (key !== 'page' && key !== 'per_page' && value !== undefined && value !== null && value !== '') {
+                params.append(key, value.toString());
+            }
+        });
+    }
+    const endpoint = `/depositos?${params.toString()}`;
+    console.log('Fetching depositos with endpoint:', endpoint);
+    return fetchApi<ApiResponse<DepositoBancario>>(endpoint);
+  },
+
+  getDeposito: async (id: number): Promise<DepositoBancario> => {
+    return fetchApi<DepositoBancario>(`/depositos/${id}`);
+  },
+
+  // Crear depósito (maneja comprobante opcional)
+  createDeposito: async (depositoData: DepositoPayload, comprobanteUri?: string | null): Promise<DepositoBancario> => {
+    if (!comprobanteUri) {
+      // Sin comprobante, enviar como JSON
+      return fetchApi<DepositoBancario>('/depositos', {
+        method: 'POST',
+        body: JSON.stringify(depositoData),
+      });
+    }
+
+    // Con comprobante, usar FormData
+    const formData = new FormData();
+    Object.entries(depositoData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+
+    const uriParts = comprobanteUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    // @ts-ignore
+    formData.append('comprobante_deposito', {
+      uri: comprobanteUri,
+      name: `comprobante.${fileType}`,
+      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
+    });
+
+    return fetchApi<DepositoBancario>('/depositos', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        // No 'Content-Type': 'multipart/form-data' aquí, fetch lo infiere
+      },
+      body: formData,
+    });
+  },
+
+  // Actualizar depósito (maneja comprobante opcional)
+  updateDeposito: async (id: number, depositoData: Partial<DepositoPayload>, comprobanteUri?: string | null): Promise<DepositoBancario> => {
+    if (!comprobanteUri) {
+      // Sin comprobante nuevo, enviar como JSON
+      return fetchApi<DepositoBancario>(`/depositos/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(depositoData),
+      });
+    }
+
+    // Con comprobante, usar FormData
+    const formData = new FormData();
+    Object.entries(depositoData).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value));
+      }
+    });
+
+    const uriParts = comprobanteUri.split('.');
+    const fileType = uriParts[uriParts.length - 1];
+    // @ts-ignore
+    formData.append('comprobante_deposito', {
+      uri: comprobanteUri,
+      name: `comprobante.${fileType}`,
+      type: fileType === 'pdf' ? 'application/pdf' : `image/${fileType}`
+    });
+
+    // Importante: Flask a menudo espera PUT/PATCH con FormData a través de un POST simulado
+    // O podrías necesitar un paquete como `react-native-fetch-blob` para PUT con FormData.
+    // Consulta la documentación de tu backend Flask sobre cómo maneja PUT con multipart.
+    // Por ahora, intentaremos con PUT directamente, pero podría fallar.
+    return fetchApi<DepositoBancario>(`/depositos/${id}`, {
+      method: 'PUT', // O 'POST' con _method='PUT' si Flask lo requiere
+      headers: {
+        'Accept': 'application/json',
+      },
+      body: formData,
+    });
+  },
+
+  deleteDeposito: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/depositos/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// --- API methods for User --- (Asumiendo que User ya tiene interfaz en models)
+export const usuarioApi = {
+  getUsuarios: async (page = 1, perPage = 10, filters?: Record<string, any>): Promise<ApiResponse<User>> => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString(),
+    });
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (key !== 'page' && key !== 'per_page' && value !== undefined && value !== null && value !== '') {
+          params.append(key, value.toString());
+        }
+      });
+    }
+    const endpoint = `/usuarios?${params.toString()}`;
+    console.log('Fetching usuarios with endpoint:', endpoint);
+    return fetchApi<ApiResponse<User>>(endpoint);
+  },
+
+  getUsuario: async (id: number): Promise<User> => {
+    return fetchApi<User>(`/usuarios/${id}`);
+  },
+
+  createUsuario: async (usuarioData: UsuarioPayload): Promise<User> => {
+    // Asegurar que el password se envía solo en la creación
+    if (!usuarioData.password) {
+      throw new Error('La contraseña es requerida para crear un usuario.');
+    }
+    return fetchApi<User>('/usuarios', {
+      method: 'POST',
+      body: JSON.stringify(usuarioData),
+    });
+  },
+
+  updateUsuario: async (id: number, usuarioData: Partial<UsuarioPayload>): Promise<User> => {
+    // ¡IMPORTANTE! No enviar la contraseña en la actualización general.
+    // Se necesitaría un endpoint/lógica separada para cambiar contraseña.
+    const { password, ...dataToUpdate } = usuarioData;
+
+    return fetchApi<User>(`/usuarios/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(dataToUpdate),
+    });
+  },
+
+  deleteUsuario: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/usuarios/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};

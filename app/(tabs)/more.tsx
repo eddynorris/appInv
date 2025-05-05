@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, Href } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -13,7 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 interface MenuItemProps {
   title: string;
   icon: React.ComponentProps<typeof IconSymbol>['name'];
-  route: string;
+  route: Href;
   color?: string;
 }
 
@@ -70,16 +70,26 @@ export default function MoreScreen() {
                   icon="creditcard.fill" 
                   route="/pagos" 
                 />
+                <MenuItem 
+                  title="Depósitos" 
+                  icon="arrow.up.fill" 
+                  route="/depositos" 
+                />
               </ThemedView>
           {/* Show all sections for admin users */}
           {user?.rol === 'admin' && (
             <>
               <ThemedView style={styles.section}>
-                <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Clientes</ThemedText>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Usuarios</ThemedText>
                 <MenuItem 
                   title="Clientes" 
                   icon="person.fill" 
                   route="/clientes" 
+                />
+                <MenuItem 
+                  title="Usuarios" 
+                  icon="person.fill" 
+                  route="/usuarios" 
                 />
               </ThemedView>
               

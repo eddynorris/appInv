@@ -150,11 +150,11 @@ export default function DashboardScreen() {
 
 // Funciones auxiliares
 function ventasTotal(salesData) {
-  return `$${salesData.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`;
+  return `S/.${salesData.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`;
 }
 
 function gastosTotal(expensesData) {
-  return `$${expensesData.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`;
+  return `S/.${expensesData.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`;
 }
 
 const styles = StyleSheet.create({

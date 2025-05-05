@@ -137,13 +137,17 @@ const token = {
 export const authService = {
   async login(username: string, password: string): Promise<User> {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/auth`, {
+      const url = `${API_CONFIG.baseUrl}/auth`;
+      const body = { username, password };
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+        headers: headers,
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -170,6 +174,17 @@ export const authService = {
       await storage.saveUser(user);
       return user;
     } catch (error) {
+
+      if (error instanceof Error) {
+        console.error('Error Message:', error.message);
+        const errorDetails: any = error;
+        if (errorDetails.response) {
+          console.error('Error Status:', errorDetails.response.status);
+          console.error('Error Data:', errorDetails.response.data);
+        }
+      }
+
+
       throw error instanceof Error ? error : new Error('Error al iniciar sesión');
     }
   },
