@@ -4,6 +4,7 @@ export interface Cliente {
   nombre: string;
   telefono: string;
   direccion: string;
+  ciudad?: string;
   created_at: string;
   frecuencia_compra_dias?: number;
   ultima_fecha_compra?: string;

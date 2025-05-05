@@ -21,6 +21,7 @@ export default function EditClienteScreen() {
     nombre: '',
     telefono: '',
     direccion: '',
+    ciudad: '',
   });  
 
   // Función para cargar datos iniciales en el formulario
@@ -33,11 +34,15 @@ export default function EditClienteScreen() {
         nombre: data.nombre || '',
         telefono: data.telefono || '',
         direccion: data.direccion || '',
+        ciudad: data.ciudad || '',
       });
+    } else {
+      Alert.alert('Error', hookError || 'No se pudo cargar el cliente');
+      router.back();
     }
     // Si hay error, se mostrará via hookError
     setIsFetchingData(false); // Termina carga local
-  }, [id, getCliente, setFormData]);
+  }, [id, getCliente, setFormData, hookError, router]);
 
   // Cargar datos al montar
   useEffect(() => {
@@ -49,6 +54,7 @@ export default function EditClienteScreen() {
     nombre: (value: string) => !value.trim() ? 'El nombre es requerido' : null,
     telefono: (value: string) => !value.trim() ? 'El teléfono es requerido' : null,
     direccion: (value: string) => !value.trim() ? 'La dirección es requerida' : null,
+    ciudad: (value: string) => !value.trim() ? 'La ciudad es requerida' : null,
   };
 
   // Handle form submission
@@ -116,6 +122,15 @@ export default function EditClienteScreen() {
           error={errors.direccion}
           multiline
           required
+        />
+
+        <FormField
+          disabled={isProcessing}
+          label="Ciudad"
+          value={formData.ciudad}
+          onChangeText={(value) => handleChange('ciudad', value)}
+          placeholder="Ingresa la ciudad (opcional)"
+          error={errors.ciudad}
         />
 
         <ActionButtons

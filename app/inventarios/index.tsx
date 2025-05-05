@@ -152,7 +152,7 @@ export default function InventarioIndexScreen() {
                     // Sorting no aplica con filtrado local simple
                     actions={{
                         // Acción 'View' redirige a 'ajustar'
-                        onView: true,
+                        onView: false, // No hay pantalla de detalle para inventario
                         onEdit: false, // No hay pantalla de edición para inventario
                         onDelete: isAdmin, // Permitir borrar si es admin
                     }}

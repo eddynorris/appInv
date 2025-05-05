@@ -119,7 +119,7 @@ const DepositoForm = ({
           />
 
           <ImageUploader
-            label="Comprobante (Opcional)"
+            label="Comprobante de Depósito"
             value={comprobante}
             onChange={setComprobante}
             existingFile={existingComprobanteUrl}

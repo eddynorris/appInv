@@ -25,13 +25,12 @@ export function useClienteItem() {
     }
   }, []);
 
-  // Crear un nuevo cliente
+  // Crear un nuevo cliente (incluir ciudad)
   const createCliente = useCallback(async (data: Partial<Cliente>): Promise<Cliente | null> => {
     setIsLoading(true);
     setError(null);
     try {
-      // Llama directamente a la función de la API
-      // Asume que la API retorna el objeto creado con su ID
+      // Asegurarse de que ciudad se envía si está presente en data
       return await clienteApi.createCliente(data);
     } catch (err) {
       console.error('Error creating cliente item:', err);
@@ -43,12 +42,12 @@ export function useClienteItem() {
     }
   }, []);
 
-  // Actualizar un cliente específico
+  // Actualizar un cliente específico (incluir ciudad)
   const updateCliente = useCallback(async (id: number, data: Partial<Cliente>): Promise<Cliente | null> => {
     setIsLoading(true);
     setError(null);
     try {
-      // Llama directamente a la función de la API
+      // Asegurarse de que ciudad se envía si está presente en data
       return await clienteApi.updateCliente(id, data);
     } catch (err) {
       console.error('Error updating cliente item:', err);
@@ -69,11 +68,14 @@ export function useClienteItem() {
       await clienteApi.deleteCliente(id);
       return true;
     } catch (err: any) { // Capturar como 'any' para inspeccionar propiedades de forma segura
-        Alert.alert("Error", error || "No se pudo eliminar el cliente");
-        return false; // Fallo
-      } finally {
-        setIsLoading(false);
-      }
+      console.error('Error deleting cliente item:', err);
+      const message = err instanceof Error ? err.message : 'Error al eliminar el cliente';
+      setError(message);
+      Alert.alert("Error", message);
+      return false; // Fallo
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   return {

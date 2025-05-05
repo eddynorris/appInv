@@ -1,6 +1,6 @@
 // app/clientes/index.tsx
 import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, TextInput } from 'react-native';
 import { router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
@@ -12,28 +12,24 @@ import { useClientesList } from '@/hooks/crud/useClientesList';
 import { Cliente } from '@/models';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { ActionButtons } from '@/components/buttons/ActionButtons';
 
 export default function ClientesScreen() {
-  // Usar el hook refactorizado para la LISTA
+  const colorScheme = useColorScheme() ?? 'light';
   const {
     clientes,
     isLoading,
     error,
-    columns, // <-- Columnas vienen del hook
     pagination,
-    refresh, // <-- Para refrescar
-    deleteCliente // <-- Para borrar desde la tabla
+    refresh,
+    deleteCliente,
+    filters,
+    handleFilterChange,
+    applyFilters,
+    clearFilters,
   } = useClientesList();
  
-  // Calcular estadísticas de clientes
-  const saldoTotal = useMemo(() => {
-    // Asegúrate que 'clientes' sea un array antes de reducir
-    if (!Array.isArray(clientes)) return 0;
-    return clientes.reduce((total, cliente) =>
-      total + parseFloat(cliente.saldo_pendiente || '0'), 0);
-  }, [clientes]); // Depende de los datos de la lista}
-  
   const handleAddCliente = () => {
     router.push('/clientes/create');
   };
@@ -44,40 +40,30 @@ export default function ClientesScreen() {
       scrollable={false}
     >
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.summary}>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total Clientes:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
-              {isLoading ? 'Cargando...' : pagination.totalItems}
-            </ThemedText>
-          </ThemedView>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Saldo Total:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
-              S./{(isLoading || !Array.isArray(clientes)) ? '$0.00' : `$${saldoTotal.toFixed(2)}`}
-            </ThemedText>
-          </ThemedView>
+        <ThemedView style={styles.filterContainer}>
+            <ThemedText style={styles.filterLabel}>Filtrar por Ciudad:</ThemedText>
+            <TextInput
+                style={[styles.filterInput, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].border }]}
+                placeholder="Escriba una ciudad..."
+                placeholderTextColor={Colors[colorScheme].textSecondary}
+                value={filters.ciudad}
+                onChangeText={(value) => handleFilterChange('ciudad', value)}
+            />
+            <ActionButtons
+                onSave={applyFilters}
+                onCancel={clearFilters}
+                saveText="Filtrar"
+                cancelText="Limpiar"
+                isSubmitting={isLoading}
+            />
         </ThemedView>
         
-        {/* Renderizar clientes como tarjetas */}
         <EnhancedCardList
           data={clientes}
           isLoading={isLoading}
           error={error}
           baseRoute="/clientes"
-          pagination={{
-            currentPage: pagination.currentPage,
-            totalPages: pagination.totalPages,
-            itemsPerPage: pagination.itemsPerPage,
-            totalItems: pagination.totalItems,
-            onPageChange: pagination.onPageChange,
-            onItemsPerPageChange: pagination.onItemsPerPageChange
-          }}
-          sorting={{
-            sortColumn: 'id',
-            sortOrder: 'asc',
-            onSort: () => {} // Implementar cuando se necesite ordenación en el servidor
-          }}
+          pagination={pagination}
           actions={{
             onView: true,
             onEdit: true,
@@ -90,7 +76,7 @@ export default function ClientesScreen() {
             cancelText: 'Cancelar',
             onDelete: async (id) => await deleteCliente(Number(id))
           }}
-          emptyMessage="No hay clientes disponibles"
+          emptyMessage="No hay clientes disponibles o que coincidan con el filtro"
           onRefresh={refresh}
           renderCard={(cliente) => (
             <View style={styles.cardContent}>
@@ -117,8 +103,13 @@ export default function ClientesScreen() {
                 </View>
                 
                 <View style={styles.detailRow}>
+                  <IconSymbol name="map.fill" size={16} color={Colors.primary} />
+                  <ThemedText style={styles.detailText}>Ciudad: {cliente.ciudad || '-'}</ThemedText>
+                </View>
+                
+                <View style={styles.detailRow}>
                   <IconSymbol name="dollarsign.circle.fill" size={16} color={Colors.primary} />
-                  <ThemedText style={styles.detailText}>Saldo: S/.{parseFloat(cliente.saldo_pendiente || '0').toFixed(2)}</ThemedText>
+                  <ThemedText style={styles.detailText}>Saldo: ${parseFloat(cliente.saldo_pendiente || '0').toFixed(2)}</ThemedText>
                 </View>
               </View>
             </View>
@@ -139,28 +130,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  summary: {
-    padding: 16,
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 0,
-    gap: 8,
+  filterContainer: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+      gap: 8,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  filterLabel: {
+      fontSize: 16,
+      fontWeight: '500',
+      marginBottom: 4,
   },
-  summaryLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+  filterInput: {
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8, 
+      fontSize: 16,
+      marginBottom: 8,
   },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  // Estilos para las tarjetas
   cardContent: {
     padding: 16,
   },

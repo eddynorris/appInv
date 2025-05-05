@@ -91,6 +91,11 @@ export default function MoreScreen() {
                   icon="person.fill" 
                   route="/usuarios" 
                 />
+                <MenuItem 
+                  title="Proveedores" 
+                  icon="person.fill" 
+                  route="/proveedores" 
+                />
               </ThemedView>
               
               <ThemedView style={styles.section}>

@@ -1,85 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { proveedorApi } from '@/services/api';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useProveedorItem } from '@/hooks/crud/useProveedorItem';
+import { useForm } from '@/hooks/useForm';
 
 export default function CreateProveedorScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { createProveedor, isLoading: hookIsLoading, error: hookError } = useProveedorItem();
   
-  // Form state
-  const [formData, setFormData] = useState({
+  const { formData, errors, isSubmitting, handleChange, handleSubmit, setErrors } = useForm({
     nombre: '',
     telefono: '',
     direccion: '',
   });
 
-  // Error state
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear error when field is changed
-    if (errors[field]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[field];
-        return newErrors;
-      });
-    }
+  const validationRules = {
+    nombre: (value: string) => !value.trim() ? 'El nombre es requerido' : null,
   };
+  
+  const submitForm = useCallback(async (data: typeof formData): Promise<boolean> => {
+    const response = await createProveedor(data);
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.nombre.trim()) {
-      newErrors.nombre = 'El nombre es requerido';
+    if (response) {
+      Alert.alert(
+        'Proveedor Creado',
+        'El proveedor ha sido creado exitosamente',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => router.replace('/proveedores') 
+          }
+        ]
+      );
+      return true;
+    } else {
+      Alert.alert('Error', hookError || 'No se pudo crear el proveedor');
+      return false;
     }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) {
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      const response = await proveedorApi.createProveedor(formData);
-      
-      if (response) {
-        Alert.alert(
-          'Proveedor Creado',
-          'El proveedor ha sido creado exitosamente',
-          [
-            { 
-              text: 'OK', 
-              onPress: () => router.replace('/proveedores') 
-            }
-          ]
-        );
-      } else {
-        Alert.alert('Error', 'No se pudo crear el proveedor');
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Ocurrió un error al crear el proveedor';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  }, [createProveedor, hookError, router]);
+  
+  const isLoading = isSubmitting || hookIsLoading;
 
   return (
     <>
@@ -96,6 +61,7 @@ export default function CreateProveedorScreen() {
             <ThemedView style={styles.formGroup}>
               <ThemedText style={styles.label}>Nombre *</ThemedText>
               <TextInput
+                editable={!isLoading}
                 style={[
                   styles.input,
                   { color: Colors[colorScheme].text },
@@ -114,6 +80,7 @@ export default function CreateProveedorScreen() {
             <ThemedView style={styles.formGroup}>
               <ThemedText style={styles.label}>Teléfono</ThemedText>
               <TextInput
+                editable={!isLoading}
                 style={[
                   styles.input,
                   { color: Colors[colorScheme].text }
@@ -129,6 +96,7 @@ export default function CreateProveedorScreen() {
             <ThemedView style={styles.formGroup}>
               <ThemedText style={styles.label}>Dirección</ThemedText>
               <TextInput
+                editable={!isLoading}
                 style={[
                   styles.input,
                   styles.textArea,
@@ -147,17 +115,24 @@ export default function CreateProveedorScreen() {
             <TouchableOpacity 
               style={[
                 styles.submitButton,
-                isSubmitting && styles.submitButtonDisabled
+                isLoading && styles.submitButtonDisabled
               ]}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
+              onPress={() => handleSubmit(submitForm, validationRules)}
+              disabled={isLoading}
             >
-              {isSubmitting ? (
+              {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <ThemedText style={styles.submitButtonText}>Crear Proveedor</ThemedText>
               )}
             </TouchableOpacity>
+            
+            {hookError && !errors.api && (
+                <ThemedText style={styles.errorText}>{hookError}</ThemedText>
+            )}
+            {errors.api && (
+                <ThemedText style={styles.errorText}>{errors.api}</ThemedText>
+            )}
           </ThemedView>
         </ThemedView>
       </ScrollView>
@@ -199,6 +174,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#E53935',
     fontSize: 14,
+    marginTop: 4,
   },
   submitButton: {
     backgroundColor: '#0a7ea4',

@@ -1,58 +1,71 @@
 // hooks/crud/useClientesList.ts
-import { useMemo, useEffect, useCallback } from 'react';
-import { useApiResource } from '../useApiResource'; // Usamos el mismo genérico
+import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useApiResource } from '../useApiResource';
 import { clienteApi } from '@/services/api';
 import { Cliente } from '@/models';
-import { ThemedText } from '@/components/ThemedText'; // Necesario para render en columnas
+import { ThemedText } from '@/components/ThemedText';
 
-// Parámetros iniciales por defecto para la paginación de la lista
+// Parámetros iniciales y filtros
 const DEFAULT_INITIAL_PARAMS = { page: 1, perPage: 10 };
+const DEFAULT_FILTERS = { ciudad: '' }; // Añadir filtro inicial para ciudad
 
 export function useClientesList() {
+  // Estado para filtros locales
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+
+  // Función de fetch adaptada para incluir filtros
+  const fetchClientesWithFilters = useCallback(async (page = DEFAULT_INITIAL_PARAMS.page, perPage = DEFAULT_INITIAL_PARAMS.perPage) => {
+    const queryFilters: Record<string, any> = {};
+    if (filters.ciudad) queryFilters.ciudad = filters.ciudad;
+    // Aquí podrías añadir más filtros si fueran necesarios (ej: nombre, etc.)
+    
+    console.log(`Consultando clientes (p${page}, pp${perPage}) con filtros:`, queryFilters);
+    return await clienteApi.getClientes(page, perPage, queryFilters);
+  }, [filters]); // Depende de los filtros locales
+
   const {
-    data: clientes, // Renombrar data a clientes para claridad
+    data: clientes,
     isLoading,
     error,
     pagination,
-    fetchData, // Función base para buscar la lista
+    fetchData: originalFetchData,
     handlePageChange,
     handleItemsPerPageChange,
-    // Mantenemos deleteItem por compatibilidad con EnhancedDataTable
     deleteItem: deleteClienteDirectly,
   } = useApiResource<Cliente>({
     initialParams: DEFAULT_INITIAL_PARAMS,
-    // SOLO pasamos las funciones necesarias para la lista
-    fetchFn: clienteApi.getClientes,
-    deleteFn: clienteApi.deleteCliente, // Mantenido para EnhancedDataTable
+    fetchFn: fetchClientesWithFilters, // Usar la función con filtros
+    deleteFn: clienteApi.deleteCliente,
   });
 
-  // Cargar datos iniciales explícitamente al montar
+  // Cargar datos iniciales
   useEffect(() => {
-    // Evita recargar si ya hay datos (útil para HMR o caché futuro)
     if (clientes.length === 0) {
       console.log("useClientesList: Fetching initial list data...");
-      fetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
+      // Usar originalFetchData para evitar bucle con fetchClientesWithFilters
+      originalFetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchData, clientes.length]);
+  }, [originalFetchData, clientes.length]);
 
-  // Definir columnas para la tabla (igual que antes)
+  // Definir columnas, añadiendo ciudad
   const columns = useMemo(() => [
     { id: 'id', label: 'ID', width: 0.5, sortable: true },
     { id: 'nombre', label: 'Nombre', width: 2, sortable: true },
     { id: 'telefono', label: 'Teléfono', width: 1, sortable: true },
-    { id: 'direccion', label: 'Dirección', width: 1.5, render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText>, }, // Añadida de index.tsx
+    { id: 'ciudad', label: 'Ciudad', width: 1, sortable: true, render: (item: Cliente) => <ThemedText>{item.ciudad || '-'}</ThemedText> }, // Nueva columna
+    { id: 'direccion', label: 'Dirección', width: 1.5, render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText> },
     { id: 'saldo_pendiente', label: 'Saldo', width: 1, render: (item: Cliente) => <ThemedText>${parseFloat(item.saldo_pendiente || '0').toFixed(2)}</ThemedText> },
   ], []);
 
   // Función explícita para refrescar la lista
   const refresh = useCallback(() => {
     console.log("useClientesList: Refreshing list data...");
-    fetchData(pagination.currentPage, pagination.itemsPerPage);
-  }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);
+    // Usar originalFetchData para refrescar con los filtros actuales
+    originalFetchData(pagination.currentPage, pagination.itemsPerPage);
+  }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 
-  
-  // Wrapper para la función de borrado que viene de useApiResource
+  // Wrapper para la función de borrado
   const deleteClienteAndRefresh = useCallback(async (id: number): Promise<boolean> => {
     try {
       await deleteClienteDirectly(id);
@@ -63,14 +76,27 @@ export function useClientesList() {
     }
   }, [deleteClienteDirectly]);
 
-  // Retornar solo lo necesario para la LISTA
+  // Handlers para filtros locales
+  const handleFilterChange = useCallback((filterKey: keyof typeof DEFAULT_FILTERS, value: string) => {
+      setFilters(prev => ({ ...prev, [filterKey]: value }));
+  }, []);
+
+  const applyFilters = useCallback(() => {
+    // Refrescar desde la página 1 con los filtros aplicados
+    originalFetchData(1, pagination.itemsPerPage ?? DEFAULT_INITIAL_PARAMS.perPage);
+  }, [originalFetchData, pagination.itemsPerPage]);
+
+  const clearFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS); // Resetear estado local
+    // Refrescar desde la página 1 sin filtros locales
+    originalFetchData(1, pagination.itemsPerPage ?? DEFAULT_INITIAL_PARAMS.perPage);
+  }, [originalFetchData, pagination.itemsPerPage]);
+
   return {
-    // Datos y estado de la lista
     clientes,
     isLoading,
     error,
-    columns, // Columnas para la tabla
-    // Paginación
+    columns,
     pagination: {
       currentPage: pagination.currentPage,
       totalPages: pagination.totalPages,
@@ -79,8 +105,12 @@ export function useClientesList() {
       onPageChange: handlePageChange,
       onItemsPerPageChange: handleItemsPerPageChange,
     },
-    // Acciones de lista
-    refresh, // Para recargar
-    deleteCliente: deleteClienteAndRefresh, // Para borrar desde la tabla
+    // Exponer filtros y sus handlers
+    filters,
+    handleFilterChange,
+    applyFilters,
+    clearFilters,
+    refresh,
+    deleteCliente: deleteClienteAndRefresh,
   };
 }

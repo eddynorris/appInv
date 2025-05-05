@@ -71,6 +71,7 @@ export default function ClienteDetailScreen() {
           <DetailSection title="Información de Contacto">
             <DetailRow label="Teléfono" value={cliente.telefono || 'No especificado'} />
             <DetailRow label="Dirección" value={cliente.direccion || 'No especificada'} />
+            <DetailRow label="Ciudad" value={cliente.ciudad || 'No especificada'} />
           </DetailSection>
 
           <DetailSection title="Datos Adicionales">

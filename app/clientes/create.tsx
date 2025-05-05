@@ -19,6 +19,7 @@ export default function CreateClienteScreen() {
     nombre: '',
     telefono: '',
     direccion: '',
+    ciudad: '',
   });
 
   // Validation rules for form fields
@@ -53,7 +54,7 @@ export default function CreateClienteScreen() {
       <ThemedText type="title" style={{ marginBottom: 20 }}>Crear Cliente</ThemedText>
 
       <FormField  
-        disabled={isSubmitting}
+        disabled={isLoading}
         label="Nombre"
         value={formData.nombre}
         onChangeText={(value) => handleChange('nombre', value)}
@@ -63,7 +64,7 @@ export default function CreateClienteScreen() {
       />
 
       <FormField
-        disabled={isSubmitting}
+        disabled={isLoading}
         label="Teléfono"
         value={formData.telefono}
         onChangeText={(value) => handleChange('telefono', value)}
@@ -74,7 +75,7 @@ export default function CreateClienteScreen() {
       />
 
       <FormField
-        disabled={isSubmitting}
+        disabled={isLoading}
         label="Dirección"
         value={formData.direccion}
         onChangeText={(value) => handleChange('direccion', value)}
@@ -84,10 +85,19 @@ export default function CreateClienteScreen() {
         required
       />
 
+      <FormField
+        disabled={isLoading}
+        label="Ciudad"
+        value={formData.ciudad}
+        onChangeText={(value) => handleChange('ciudad', value)}
+        placeholder="Ingresa la ciudad (opcional)"
+        error={errors.ciudad}
+      />
+
       <ActionButtons
         onSave={() => handleSubmit(submitForm, validationRules)}
         onCancel={() => router.back()}
-        isSubmitting={isSubmitting}
+        isSubmitting={isLoading}
         saveText="Crear Cliente"
       />
     </ScreenContainer>
