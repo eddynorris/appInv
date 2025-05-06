@@ -37,43 +37,43 @@ export default function MoreScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ 
+      <Stack.Screen options={{
         title: 'Más opciones',
-        headerShown: true 
+        headerShown: true
       }} />
-      
+
       <ScrollView style={{ flex: 1 }}>
         <ThemedView style={styles.container}>
           {/* Show only sales section for non-admin users */}
           <ThemedView style={styles.section}>
             <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Pedidos</ThemedText>
-            <MenuItem 
-              title="Ventas" 
-              icon="cart.fill" 
-              route="/ventas" 
+            <MenuItem
+              title="Ventas"
+              icon="cart.fill" // Mantenido
+              route="/ventas"
             />
-            <MenuItem 
-              title="Proyecciones" 
-              icon="bag.fill" 
-              route="/pedidos" 
+            <MenuItem
+              title="Proyecciones"
+              icon="chart.line.uptrend.xyaxis" // Cambiado de bag.fill
+              route="/pedidos"
             />
           </ThemedView>
           <ThemedView style={styles.section}>
                 <ThemedText type="subtitle" style={styles.sectionTitle}>Finanzas</ThemedText>
-                <MenuItem 
-                  title="Gastos" 
-                  icon="arrow.down.fill" 
-                  route="/gastos" 
+                <MenuItem
+                  title="Gastos"
+                  icon="banknote.fill" // Cambiado de arrow.down.fill
+                  route="/gastos"
                 />
-                <MenuItem 
-                  title="Pagos" 
-                  icon="creditcard.fill" 
-                  route="/pagos" 
+                <MenuItem
+                  title="Pagos"
+                  icon="creditcard.fill" // Mantenido
+                  route="/pagos"
                 />
-                <MenuItem 
-                  title="Depósitos" 
-                  icon="arrow.up.fill" 
-                  route="/depositos" 
+                <MenuItem
+                  title="Depósitos"
+                  icon="arrow.up.to.line" // Cambiado de arrow.up.fill
+                  route="/depositos"
                 />
               </ThemedView>
           {/* Show all sections for admin users */}
@@ -81,54 +81,54 @@ export default function MoreScreen() {
             <>
               <ThemedView style={styles.section}>
                 <ThemedText type="subtitle" style={styles.sectionTitle}>Gestión de Usuarios</ThemedText>
-                <MenuItem 
-                  title="Clientes" 
-                  icon="person.fill" 
-                  route="/clientes" 
+                <MenuItem
+                  title="Clientes"
+                  icon="person.fill" // Mantenido (o 'map.fill'/'dollarsign.circle.fill' si prefieres)
+                  route="/clientes"
                 />
-                <MenuItem 
-                  title="Usuarios" 
-                  icon="person.fill" 
-                  route="/usuarios" 
+                <MenuItem
+                  title="Usuarios"
+                  icon="person.2.fill" // Cambiado de person.fill
+                  route="/usuarios"
                 />
-                <MenuItem 
-                  title="Proveedores" 
-                  icon="person.fill" 
-                  route="/proveedores" 
+                <MenuItem
+                  title="Proveedores"
+                  icon= "person.3.fill" // Cambiado de person.fill
+                  route="/proveedores"
                 />
               </ThemedView>
-              
+
               <ThemedView style={styles.section}>
                 <ThemedText type="subtitle" style={styles.sectionTitle}>Inventario</ThemedText>
-                <MenuItem 
-                  title="Almacenes" 
-                  icon="house.fill" 
-                  route="/almacenes" 
+                <MenuItem
+                  title="Almacenes"
+                  icon="house.fill" // Mantenido
+                  route="/almacenes"
                 />
-                <MenuItem 
-                  title="Movimientos" 
-                  icon="doc.fill" 
-                  route="/movimientos" 
+                <MenuItem
+                  title="Movimientos"
+                  icon="arrow.left.arrow.right.circle.fill" // Cambiado de doc.fill
+                  route="/movimientos"
                 />
-                <MenuItem 
-                  title="Presentaciones" 
-                  icon="tag.fill" 
-                  route="/presentaciones" 
+                <MenuItem
+                  title="Presentaciones"
+                  icon="tag.fill" // Mantenido
+                  route="/presentaciones"
                 />
-                <MenuItem 
-                  title="Lotes" 
-                  icon="folder.fill" 
-                  route="/lotes" 
+                <MenuItem
+                  title="Lotes"
+                  icon="archivebox.fill" // Cambiado de folder.fill
+                  route="/lotes"
                 />
-                <MenuItem 
-                  title="Productos" 
-                  icon="doc.fill" 
-                  route="/productos" 
+                <MenuItem
+                  title="Productos"
+                  icon="cube.box.fill" // Cambiado de doc.fill
+                  route="/productos"
                 />
-                <MenuItem 
-                  title="Inventarios" 
-                  icon="chart.bar.fill" 
-                  route="/inventarios" 
+                <MenuItem
+                  title="Inventarios"
+                  icon="chart.bar.fill" // Mantenido
+                  route="/inventarios"
                 />
               </ThemedView>
             </>
@@ -138,6 +138,7 @@ export default function MoreScreen() {
           <ThemedView style={styles.section}>
             <ThemedText type="subtitle" style={styles.sectionTitle}>Cuenta</ThemedText>
             <TouchableOpacity style={styles.menuItem}>
+              {/* El icono de logout ahora debería funcionar con el mapeo añadido */}
               <IconSymbol name="rectangle.portrait.and.arrow.right" size={24} color="#E53935" />
               <LogoutButton variant="text" />
             </TouchableOpacity>

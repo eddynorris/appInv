@@ -46,6 +46,24 @@ const MAPPING = {
   'minus': 'remove',
   'checkmark': 'check',
   'xmark': 'close',
+  'scalemass.fill': 'balance', // Para lotes
+  'cube.box.fill': 'inventory',
+  'banknote.fill': 'payments', // Gastos (nuevo)
+  'arrow.up.to.line': 'upload', // Depósitos 
+  'person.2.fill': 'group', // Usuarios (nuevo)
+  'truck.box.badge.clock.fill' : 'schedule', // Horarios (nuevo)
+  'chart.line.uptrend.xyaxis': 'timeline', // Ventas (nuevo)
+  'arrow.left.arrow.right.circle.fill': 'refresh', // Actualizar
+  'archivebox.fill': 'archive',
+  'rectangle.portrait.and.arrow.right': 'forward',
+  'map.fill': 'map',
+  'dollarsign.circle.fill': 'attach-money',
+  'photo.on.rectangle': 'photo',
+  'camera.fill': 'camera',
+  'cube.box': 'inventory-2',
+  'exclamationmark.triangle': 'error',
+  'arrow.right.circle': 'refresh',
+  "person.3.fill": 'person-3',
 } as Partial<
   Record<
     import('expo-symbols').SymbolViewProps['name'],

@@ -22,7 +22,7 @@ import {
   Inventario,
   DepositoBancario,
   DepositoPayload,
-  UsuarioPayload
+  UsuarioPayload,
 } from '@/models';
 import { authService } from './auth';
 
@@ -38,7 +38,11 @@ export interface ApiResponse<T> {
   data: T[];
   pagination: Pagination;
 }
-
+export interface DashboardDataResponse {
+  alertas_stock_bajo: Inventario[]; // Asumiendo que la estructura coincide con Inventario
+  alertas_lotes_bajos: Lote[]; // Asumiendo que la estructura coincide con Lote
+  clientes_con_saldo_pendiente: ClienteSimple[]; // Asumiendo que la estructura coincide con ClienteSimple
+}
 // Base URL configuration
 const getBaseUrl = () => {
   // Usar la variable de entorno si está definida
@@ -1056,6 +1060,13 @@ interface PedidoFormDataUserResponse extends PedidoFormDataBaseResponse {
 // Tipo unión para la respuesta
 export type PedidoFormDataResponse = PedidoFormDataAdminResponse | PedidoFormDataUserResponse;
 // --- FIN: Añadir/Asegurar Tipos ---
+
+// Nueva función para obtener datos del dashboard
+export const dashboardApi = {
+  getDashboardData: async (): Promise<DashboardDataResponse> => {
+    return fetchApi<DashboardDataResponse>('/dashboard'); // Llama al nuevo endpoint
+  },
+};
 
 // --- API methods for DepositoBancario ---
 export const depositoApi = {
