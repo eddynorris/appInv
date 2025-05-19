@@ -37,7 +37,6 @@ export default function PedidoDetailScreen() {
   // Cargar datos del pedido
   useEffect(() => {
     if (idNumerico) {
-      console.log(`Cargando pedido ID ${idNumerico}...`);
       getPedido(idNumerico);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

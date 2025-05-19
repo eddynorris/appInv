@@ -18,7 +18,6 @@ export function useDashboardData() {
         try {
             // Llamar a la nueva función de la API
             const response = await dashboardApi.getDashboardData();
-            console.log("Dashboard data received:", response);
             // Actualizar los estados con los datos recibidos
             setAlertasStockBajo(response.alertas_stock_bajo || []);
             setAlertasLotesBajos(response.alertas_lotes_bajos || []);

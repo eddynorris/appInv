@@ -42,7 +42,6 @@ export default function ClienteDetailScreen() {
     if (success) {
       router.replace('/clientes'); // Volver a la lista
     } else {
-      console.log("handleDelete - Error detected. hookError:", hookError); // Log para depurar
       Alert.alert('Error al Eliminar', hookError || 'Ocurrió un error inesperado.');
     }
     // No es necesario setError aquí, hookError se actualizará si deleteCliente falla

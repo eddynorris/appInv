@@ -109,8 +109,6 @@ export default function ProductosScreen() {
     );
     setSortColumn(column);
     
-    // En un entorno real, aquí llamaríamos a la API con los parámetros de ordenación
-    console.log(`Ordenando por ${column} en orden ${sortOrder}`);
   }, [sortColumn, sortOrder]);
   
   const handleAddProduct = () => {

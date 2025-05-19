@@ -43,8 +43,6 @@ export function useDepositosList() {
     // if (!isAdmin && user?.id) {
     //   queryFilters.usuario_id = user.id.toString();
     // }
-
-    console.log(`Consultando depositos (p${page}, pp${perPage}) con filtros:`, queryFilters);
     return await depositoApi.getDepositos(page, perPage, queryFilters);
 
   }, [user, isAdmin, sortColumn, sortOrder, filters]);
@@ -67,7 +65,6 @@ export function useDepositosList() {
   // Carga inicial
   useEffect(() => {
     if (!isInitialLoadDone.current) {
-      console.log("useDepositosList: Carga inicial...");
       isInitialLoadDone.current = true;
       originalFetchData(DEFAULT_PARAMS.page, DEFAULT_PARAMS.perPage);
     }
@@ -159,7 +156,6 @@ export function useDepositosList() {
 
   // --- Otras Funciones ---
   const refresh = useCallback(() => {
-    console.log("useDepositosList: Refrescando datos...");
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 

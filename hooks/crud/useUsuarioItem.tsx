@@ -45,9 +45,8 @@ export function useUsuarioItem() {
   // Reglas de validación (ahora puede acceder a formData.id)
   const validationRules = {
     username: (value: string) => !value.trim() ? 'El nombre de usuario es requerido' : null,
-    password: (value?: string) => !formData.id && !value?.trim() ? 'La contraseña es requerida' : null, // Correcto
+    password: (value?: string) => !formData.id && !value?.trim() ? 'La contraseña es requerida' : null,
     rol: (value: string) => !value ? 'El rol es requerido' : null,
-    almacen_id: (value?: number | null) => formData.rol === 'usuario' && !value ? 'El almacén es requerido para rol usuario' : null,
   };
 
   // Cargar datos iniciales (almacenes para el selector)
@@ -100,9 +99,6 @@ export function useUsuarioItem() {
     try {
       // Excluir el 'id' temporal del payload final
       const { id, ...payload } = formData;
-      if (payload.rol !== 'usuario') {
-          payload.almacen_id = null;
-      }
       await usuarioApi.createUsuario(payload);
       resetForm();
       return true;
@@ -125,9 +121,6 @@ export function useUsuarioItem() {
     try {
       // Excluir la contraseña y el id temporal del payload final
       const { password: pwd, id: userId, ...payload } = formData;
-      if (payload.rol !== 'usuario') {
-          payload.almacen_id = null;
-      }
       await usuarioApi.updateUsuario(id, payload);
       return true;
     } catch (err) {

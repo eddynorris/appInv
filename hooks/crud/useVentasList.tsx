@@ -41,8 +41,6 @@ export function useVentasList() {
     if (!isAdmin && user?.id) {
       queryFilters.vendedor_id = user.id.toString();
     }
-
-    console.log(`Consultando ventas (p${page}, pp${perPage}) con filtros:`, queryFilters);
     
     // CORREGIDO: Pasar el objeto queryFilters como tercer argumento
     return await ventaApi.getVentas(page, perPage, queryFilters); 
@@ -67,7 +65,6 @@ export function useVentasList() {
   // Cargar datos iniciales REFACTORIZADO (sin cargar opciones)
   const loadInitialData = useCallback(async () => {
     if (!isInitialLoadDone.current) {
-      console.log("useVentasList: Carga inicial de datos...");
       isInitialLoadDone.current = true;
       try {
         // Solo cargar la primera página de ventas
@@ -195,7 +192,6 @@ export function useVentasList() {
 
   // --- Otras Funciones --- 
   const refresh = useCallback(() => {
-    console.log("useVentasList: Refrescando datos...");
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 

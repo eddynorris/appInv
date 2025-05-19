@@ -42,7 +42,6 @@ export function useAlmacenesList() {
 
   // Función explícita para refrescar la lista (vuelve a llamar a fetchData)
   const refresh = useCallback(() => {
-    console.log("useAlmacenes: Refreshing list data...");
     // Usar los parámetros actuales de paginación para refrescar la vista actual
     fetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);

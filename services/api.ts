@@ -49,7 +49,6 @@ const getBaseUrl = () => {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 
   if (apiUrl) {
-    console.log(`Usando API URL desde variable de entorno: ${apiUrl}`);
     // Asegurarse que no termine con /
     return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
   }
@@ -72,13 +71,11 @@ export const API_CONFIG = {
   getImageUrl: (path?: string | null): string => {
     // Si el path es nulo, indefinido, o una cadena vacía, devuelve vacío.
     if (!path) {
-      // console.log('No se proporcionó ruta de imagen o es inválida.');
       return ''; // O devuelve una URL a una imagen placeholder si prefieres
     }
 
     // Si la API devuelve una URL absoluta (como la pre-firmada de S3), úsala directamente.
     if (path.startsWith('http://') || path.startsWith('https://')) {
-      // console.log('Usando URL absoluta (pre-firmada o pública):', path);
       return path;
     }
     // Si llega aquí, el 'path' no es una URL válida que la app pueda usar.
@@ -105,7 +102,6 @@ interface HttpError extends Error {
 
 export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_CONFIG.baseUrl}${endpoint}`;
-  console.log(`API request: ${options.method || 'GET'} ${url}`);
   
   const authHeaders = await authService.getAuthHeader();
   
@@ -127,7 +123,6 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
     
     // Manejar respuestas sin contenido
     if (response.status === 204) {
-      console.log('API response: 204 No Content');
       return null as T;
     }
     
@@ -148,7 +143,6 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
         }
       } else {
         // Respuesta vacía
-        console.log('API response: Empty response');
         responseData = {};
       }
     } catch (readError : any) {
@@ -169,8 +163,7 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
       };
       throw error;
     }
-    
-    console.log('API response success:', typeof responseData === 'object' ? 'Object data' : responseData);
+
     return responseData as T;
   } catch (error: any) {
     console.error('API fetch error:', error);
@@ -198,8 +191,6 @@ export const clienteApi = {
     });
     
     const queryString = queryParams.toString();
-    console.log(`Consultando clientes con parámetros: ${queryString}`);
-    
     return fetchApi<ApiResponse<Cliente>>(`/clientes?${queryString}`);
   },
 
@@ -368,7 +359,6 @@ export const gastoApi = {
     });
     
     const queryString = queryParams.toString();
-    console.log(`Consultando gastos con parámetros: ${queryString}`);
     
     return fetchApi<ApiResponse<Gasto>>(`/gastos?${queryString}`);
   },
@@ -489,13 +479,11 @@ export const inventarioApi = {
     }
 
     const endpoint = `/inventarios?${params.toString()}`;
-    console.log('Fetching inventarios with endpoint:', endpoint);
     // Especificar el tipo de retorno como Inventario
     return fetchApi<ApiResponse<Inventario>>(endpoint);
   },
   
   getInventario: async (id: number): Promise<Inventario> => {
-    console.log(`Obteniendo inventario ID: ${id}`);
     return fetchApi<Inventario>(`/inventarios/${id}`);
   },
 
@@ -529,8 +517,6 @@ export const inventarioApi = {
       }
       return acc;
     }, {} as Record<string, any>);
-    
-    console.log('Updating inventory with data:', JSON.stringify(cleanedData, null, 2));
     
     return fetchApi<any>(`/inventarios/${id}`, {
       method: 'PUT',
@@ -671,7 +657,6 @@ export const pagoApi = {
     });
     
     const queryString = queryParams.toString();
-    console.log(`Consultando pagos con parámetros: ${queryString}`);
     
     return fetchApi<ApiResponse<Pago>>(`/pagos?${queryString}`);
   },
@@ -709,8 +694,6 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
       ...(pago.referencia && { referencia: pago.referencia })
     };
     
-    console.log('Enviando datos de pago:', JSON.stringify(formattedPago));
-    
     return fetchApi<Pago>('/pagos', {
       method: 'POST',
       body: JSON.stringify(formattedPago),
@@ -745,8 +728,6 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
         formData.append(key, String(value));
       }
     });
-    
-    console.log('Preparando pago con comprobante para venta_id:', pago.venta_id);
     
     const uriParts = comprobanteUri.split('.');
     const fileType = uriParts[uriParts.length - 1];
@@ -824,7 +805,6 @@ export const pedidoApi = {
     });
     
     const queryString = queryParams.toString();
-    console.log(`Consultando pedidos con parámetros: ${queryString}`);
     
     return fetchApi<ApiResponse<Pedido>>(`/pedidos?${queryString}`);
   },
@@ -861,7 +841,6 @@ export const pedidoApi = {
         }))
       };
       
-      console.log('Enviando datos formateados de pedido:', JSON.stringify(formattedPedido));
       
       // Enviar la solicitud
       return fetchApi<Pedido>('/pedidos', {
@@ -876,7 +855,6 @@ export const pedidoApi = {
 
   updatePedido: async (id: number, pedido: Partial<Pedido>): Promise<Pedido> => {
     try {
-      console.log('Actualizando pedido ID:', id, 'Datos:', JSON.stringify(pedido));
       
       // Filtrar solo los campos que pueden actualizarse
       const updatableFields = ['cliente_id', 'almacen_id', 'fecha_entrega', 'estado', 'notas'];
@@ -913,7 +891,6 @@ export const pedidoApi = {
   // Método para convertir un pedido en venta
   convertirAVenta: async (id: number): Promise<any> => {
     try {
-      console.log('Solicitando conversión del pedido ID:', id);
       
       return fetchApi<any>(`/pedidos/${id}/convertir`, {
         method: 'POST',
@@ -1083,7 +1060,6 @@ export const depositoApi = {
         });
     }
     const endpoint = `/depositos?${params.toString()}`;
-    console.log('Fetching depositos with endpoint:', endpoint);
     return fetchApi<ApiResponse<DepositoBancario>>(endpoint);
   },
 
@@ -1190,7 +1166,6 @@ export const usuarioApi = {
       });
     }
     const endpoint = `/usuarios?${params.toString()}`;
-    console.log('Fetching usuarios with endpoint:', endpoint);
     return fetchApi<ApiResponse<User>>(endpoint);
   },
 

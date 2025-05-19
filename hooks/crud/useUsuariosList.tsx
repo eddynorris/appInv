@@ -35,7 +35,6 @@ export function useUsuariosList() {
     if (filters.rol) queryFilters.rol = filters.rol;
     if (filters.almacen_id) queryFilters.almacen_id = filters.almacen_id;
 
-    console.log(`Consultando usuarios (p${page}, pp${perPage}) con filtros:`, queryFilters);
     return await usuarioApi.getUsuarios(page, perPage, queryFilters);
 
   }, [sortColumn, sortOrder, filters]);
@@ -58,7 +57,6 @@ export function useUsuariosList() {
   // Carga inicial
   useEffect(() => {
     if (!isInitialLoadDone.current && isAdmin) {
-      console.log("useUsuariosList: Carga inicial...");
       isInitialLoadDone.current = true;
       originalFetchData(DEFAULT_PARAMS.page, DEFAULT_PARAMS.perPage);
     }
@@ -116,7 +114,6 @@ export function useUsuariosList() {
 
   // --- Otras Funciones ---
   const refresh = useCallback(() => {
-    console.log("useUsuariosList: Refrescando datos...");
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 

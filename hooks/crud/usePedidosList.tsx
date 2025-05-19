@@ -43,7 +43,6 @@ export function usePedidosList() {
     if (dateFilters.fechaInicio) filters.fecha_inicio = dateFilters.fechaInicio;
     if (dateFilters.fechaFin) filters.fecha_fin = dateFilters.fechaFin;
 
-    console.log(`Consultando pedidos con filtros: ${JSON.stringify(filters)}, página: ${page}, por página: ${perPage}`);
     return await pedidoApi.getPedidos(page, perPage, filters);
   }, [user, isAdmin, sortColumn, sortOrder, searchTerm, dateFilters]);
 
@@ -70,7 +69,6 @@ export function usePedidosList() {
   // Cargar datos iniciales (sin cambios)
   useEffect(() => {
     if (!isInitialLoadDone.current) {
-      console.log("usePedidosList: Carga inicial de datos...");
       isInitialLoadDone.current = true;
       originalFetchData(DEFAULT_PARAMS.page, DEFAULT_PARAMS.perPage);
     }
@@ -169,7 +167,6 @@ export function usePedidosList() {
 
   // --- Otras Funciones (refresh, deletePedido, canEditOrDelete sin cambios) ---
   const refresh = useCallback(() => {
-    console.log("usePedidosList: Refrescando datos...");
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 

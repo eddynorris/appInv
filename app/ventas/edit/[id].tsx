@@ -33,7 +33,6 @@ export default function EditVentaScreen() {
 
   useEffect(() => {
     if (!hasLoadedRef.current && idNumerico) {
-      console.log(`⭐ Cargando datos para edición de venta ID: ${idNumerico}`);
       
       const fetchData = async () => {
         await loadVentaForEdit(idNumerico);
@@ -44,7 +43,6 @@ export default function EditVentaScreen() {
     }
     
     return () => {
-      console.log("Limpiando componente de edición");
       hasLoadedRef.current = false;
     };
   }, [idNumerico]);

@@ -49,7 +49,6 @@ export default function EditGastoScreen() {
     if (!id || isInitialFetchDone) return;
     
     try {
-      console.log('Cargando datos del gasto para edición...');
       setIsInitialFetchDone(true); // Marcar que ya se hizo la carga inicial
       
       // Primero verificamos si el usuario tiene permiso para editar este gasto

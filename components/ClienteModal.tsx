@@ -34,14 +34,16 @@ export function ClienteFormModal({ visible, onClose, onClienteCreated }: Cliente
     nombre: '',
     telefono: '',
     direccion: '',
+    ciudad: '', // Agregar ciudad al estado inicial del formulario
     // Otros campos si son necesarios
   });
 
   // Las mismas reglas de validación que en app/clientes/create.tsx
   const validationRules = {
     nombre: (value: string) => !value.trim() ? 'El nombre es obligatorio' : null,
-    telefono: (value: string) => !value.trim() ? 'El teléfono es obligatorio' : null,
+    telefono: (value: string) => !value.trim() ? 'El teléfono es obligatorio' : null, // Validación restaurada
     direccion: (value: string) => !value.trim() ? 'La dirección es obligatoria' : null,
+    // Ciudad es opcional, no necesita validación
   };
 
   // Modificar ligeramente la función para manejar el caso del modal
@@ -113,6 +115,14 @@ export function ClienteFormModal({ visible, onClose, onClienteCreated }: Cliente
               error={errors.direccion}
               multiline
               required
+            />
+
+            <FormField
+              label="Ciudad"
+              value={formData.ciudad}
+              onChangeText={(value) => handleChange('ciudad', value)}
+              placeholder="Ingresa la ciudad"
+              error={errors.ciudad}
             />
           </View>
           

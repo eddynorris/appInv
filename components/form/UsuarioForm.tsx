@@ -34,7 +34,6 @@ const UsuarioForm = ({
 }: UsuarioFormProps) => {
 
   const almacenOptions = almacenes.map(a => ({ label: a.nombre, value: a.id.toString() }));
-  const isUsuarioRole = formData.rol === 'usuario';
 
   return (
     <ThemedView style={styles.container}>
@@ -80,21 +79,14 @@ const UsuarioForm = ({
             required
           />
 
-          {/* Selector de almacén solo habilitado y requerido si el rol es 'usuario' */}
+          {/* Selector de almacén siempre disponible */}
           <FormSelect
             label="Almacén Asignado"
             value={formData.almacen_id?.toString() || ''}
-            options={[{ label: 'Ninguno', value: '' }, ...almacenOptions]} // Añadir opción "Ninguno"
+            options={[{ label: 'Ninguno', value: '' }, ...almacenOptions]}
             onChange={(value) => onChange('almacen_id', value ? parseInt(value) : null)}
-            error={isUsuarioRole ? errors.almacen_id : undefined} // Mostrar error solo si es rol usuario
-            required={isUsuarioRole} // Requerido solo si es rol usuario
-            disabled={!isUsuarioRole} // Deshabilitar si no es rol usuario
+            error={errors.almacen_id}
           />
-          {!isUsuarioRole && (
-            <ThemedText style={FormStyles.infoText}>
-              El almacén solo se asigna a usuarios con rol 'Usuario'.
-            </ThemedText>
-          )}
 
           <ActionButtons
             onSave={onSubmit}

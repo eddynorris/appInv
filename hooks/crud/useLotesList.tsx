@@ -78,7 +78,6 @@ export function useLotesList() {
 
   // Función para refrescar la lista
   const refresh = useCallback(() => {
-    console.log("useLotesList: Refrescando datos...");
     fetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);
 

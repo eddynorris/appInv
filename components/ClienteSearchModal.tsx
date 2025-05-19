@@ -70,7 +70,6 @@ export function ClienteSearchModal({
 
   // Función para manejar la selección de un cliente de la lista
   const handleSelect = (cliente: ClienteSimple) => {
-    console.log('Cliente seleccionado en Modal (Re-check):', cliente);
     // *** RE-ASEGURARSE DE PASAR EL OBJETO COMPLETO ***
     onSelectCliente(cliente); // <-- Pasar el objeto cliente
     onClose();

@@ -92,7 +92,6 @@ export function useVentaItem() {
   }, [allPresentaciones, isAdmin]);
 
   const loadInitialData = useCallback(async () => {
-    console.log("Cargando datos iniciales para formulario de venta...");
     setIsLoadingOptions(true);
     setError(null);
     try {
@@ -110,14 +109,12 @@ export function useVentaItem() {
       
       const presentacionesRecibidas = data.presentaciones_con_stock_local || data.presentaciones_con_stock_global || data.presentaciones || [];
       
-      console.log(`Presentaciones recibidas (${presentacionesRecibidas.length}):`, presentacionesRecibidas);
       setAllPresentaciones(presentacionesRecibidas); 
       
       const initialAlmacenId = defaultUserAlmacenId || (isAdmin ? (data.almacenes?.[0]?.id?.toString() || '') : '');
       if (!initialAlmacenId && !isAdmin) {
          throw new Error("Almacén inicial no definido para el usuario.");
       }
-      console.log("Almacén inicial para el formulario:", initialAlmacenId);
       
       resetForm({
         ...initialFormValues,
@@ -142,14 +139,11 @@ export function useVentaItem() {
     setError(null);
     setClientes([]);
     try {
-      console.log(`Cargando datos para edición de venta ID: ${id}`);
       
       const ventaData = await ventaApi.getVenta(id);
       if (!ventaData) throw new Error('Venta no encontrada');
       setVenta(ventaData);
-      console.log("Datos de la venta recibidos:", ventaData);
 
-      console.log("Cargando lista de clientes...");
       const clientesResponse = await clienteApi.getClientes(1, 1000);
       setClientes(clientesResponse.data || []);
 

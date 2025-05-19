@@ -57,7 +57,6 @@ export default function CreateVentaScreen() {
 
   // Cargar datos iniciales al montar la pantalla
   useEffect(() => {
-    console.log("CreateVentaScreen montada, llamando a loadInitialData...");
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

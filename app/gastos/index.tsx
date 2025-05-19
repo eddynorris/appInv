@@ -143,11 +143,12 @@ export default function GastosScreen() {
           }}
           numColumns={1}
         />
-        
+
         <FloatingActionButton 
           icon="plus.circle.fill" 
           onPress={handleAddGasto} 
         />
+
       </ThemedView>
     </ScreenContainer>
   );

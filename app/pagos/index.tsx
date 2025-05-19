@@ -133,11 +133,12 @@ export default function PagosScreen() {
           )}
           numColumns={1}
         />
-        
+        {/* 
         <FloatingActionButton 
           icon="plus.circle.fill" 
           onPress={handleAddPago} 
         />
+        */}
       </ThemedView>
     </ScreenContainer>
   );

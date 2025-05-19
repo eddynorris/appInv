@@ -19,7 +19,6 @@ export function useClientesList() {
     if (filters.ciudad) queryFilters.ciudad = filters.ciudad;
     // Aquí podrías añadir más filtros si fueran necesarios (ej: nombre, etc.)
     
-    console.log(`Consultando clientes (p${page}, pp${perPage}) con filtros:`, queryFilters);
     return await clienteApi.getClientes(page, perPage, queryFilters);
   }, [filters]); // Depende de los filtros locales
 
@@ -41,7 +40,6 @@ export function useClientesList() {
   // Cargar datos iniciales
   useEffect(() => {
     if (clientes.length === 0) {
-      console.log("useClientesList: Fetching initial list data...");
       // Usar originalFetchData para evitar bucle con fetchClientesWithFilters
       originalFetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
     }
@@ -60,7 +58,6 @@ export function useClientesList() {
 
   // Función explícita para refrescar la lista
   const refresh = useCallback(() => {
-    console.log("useClientesList: Refreshing list data...");
     // Usar originalFetchData para refrescar con los filtros actuales
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);

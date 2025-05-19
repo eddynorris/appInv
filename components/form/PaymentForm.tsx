@@ -156,7 +156,6 @@ const FileUploadSection = memo(({
     if (existingComprobante) {
       const comprobanteUrl = API_CONFIG.getImageUrl(existingComprobante);
       if (comprobanteUrl) {
-        console.log('Abriendo comprobante URL:', comprobanteUrl);
         alert(`URL del comprobante: ${comprobanteUrl}`);
       } else {
         console.warn('No se pudo obtener una URL válida para el comprobante existente:', existingComprobante);

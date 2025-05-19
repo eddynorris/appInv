@@ -25,7 +25,6 @@ export function usePresentacionesList() {
       sort_order: sortOrder,
       search: searchTerm,
     };
-    console.log(`Consultando presentaciones con filtros: ${JSON.stringify(filters)}, página: ${page}, por página: ${perPage}`);
     return await presentacionApi.getPresentaciones(page, perPage);
   }, [sortColumn, sortOrder, searchTerm]);
 
@@ -48,7 +47,6 @@ export function usePresentacionesList() {
   // Cargar datos iniciales explícitamente al montar
   useEffect(() => {
     if (!isInitialLoadDone.current) {
-      console.log("usePresentacionesList: Carga inicial de datos...");
       isInitialLoadDone.current = true;
       originalFetchData(DEFAULT_PARAMS.page, DEFAULT_PARAMS.perPage);
     }
@@ -140,7 +138,6 @@ export function usePresentacionesList() {
 
   // Función para refrescar la lista
   const refresh = useCallback(() => {
-    console.log("usePresentacionesList: Refrescando datos...");
     originalFetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
 

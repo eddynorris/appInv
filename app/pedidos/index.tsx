@@ -113,9 +113,6 @@ export default function PedidosScreen() {
       const day = selectedDate.getUTCDate().toString().padStart(2, '0'); 
       const formattedDate = `${year}-${month}-${day}`;
 
-      console.log(`Selected Date Object (${filterKey}):`, selectedDate);
-      console.log(`Formatted Date String (${filterKey}):`, formattedDate);
-
       handleDateFilterChange(filterKey, formattedDate);
     }
   };

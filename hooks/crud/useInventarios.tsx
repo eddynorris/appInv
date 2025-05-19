@@ -132,7 +132,6 @@ export function useInventarios(inventarioIdParaAjuste?: number | null) {
     useEffect(() => {
         // Cargar solo si no es para ajuste
         if (!inventarioIdParaAjuste) {
-            console.log("useInventarios: Cargando datos para VISTA DE LISTA (useEffect principal)");
             loadAllInventarios();
             loadAlmacenesParaPicker(); // Llamar aquí
         }
@@ -189,7 +188,6 @@ export function useInventarios(inventarioIdParaAjuste?: number | null) {
     // Efecto para cargar el item de ajuste si se proporciona ID
     useEffect(() => {
         if (inventarioIdParaAjuste) {
-            console.log(`useInventarios: Cargando datos para AJUSTE (ID: ${inventarioIdParaAjuste})`);
             loadInventarioParaAjuste(inventarioIdParaAjuste);
         }
     }, [inventarioIdParaAjuste, loadInventarioParaAjuste]);
@@ -260,9 +258,6 @@ export function useInventarios(inventarioIdParaAjuste?: number | null) {
                  // payload.lote_id = null; // OJO: Esto depende totalmente de tu lógica de negocio y backend
                  // También podríamos necesitar llamar a un endpoint de lote para incrementar su cantidad disponible si la salida fue por merma/descarte
              }
-
-
-            console.log(`Ajustando stock para inventario ${inventarioActual.id}. Payload:`, payload);
 
             // Llamar a la API para actualizar el inventario
             await inventarioApi.updateInventario(inventarioActual.id, payload);

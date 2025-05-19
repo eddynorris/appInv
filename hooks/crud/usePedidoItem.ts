@@ -81,7 +81,6 @@ export function usePedidoItem() {
     console.log(`🚀 Iniciando carga de datos para formulario Pedido`);
     try {
       const data = await pedidoApi.getFormData();
-      console.log("📦 Datos recibidos:", data);
 
       setClientes(data.clientes || []);
 
@@ -101,13 +100,8 @@ export function usePedidoItem() {
       }
       setAllPresentaciones(fetchedPresentaciones);
 
-      console.log(`   -> Clientes: ${data.clientes?.length ?? 0}`);
-      console.log(`   -> Almacenes: ${fetchedAlmacenes.length}`);
-      console.log(`   -> Presentaciones: ${fetchedPresentaciones.length}`);
-
       // CORRECCIÓN LINTER: Acceder a fetchedAlmacenes que ya está definida
       const initialAlmacenId = defaultUserAlmacenId || (isAdmin && fetchedAlmacenes.length > 0 ? fetchedAlmacenes[0].id.toString() : '');
-      console.log(`🏭 Almacén inicial ID para form: ${initialAlmacenId || 'Ninguno'}`);
 
       form.resetForm({
           ...initialFormValues,
@@ -424,7 +418,6 @@ export function usePedidoItem() {
       Alert.alert("Error", "No se pudo seleccionar el cliente.");
       return;
     }
-    console.log("Cliente seleccionado:", cliente);
     form.handleChange('cliente_id', cliente.id.toString());
     setShowClienteModal(false);
   }, [form]);

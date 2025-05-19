@@ -29,7 +29,6 @@ export function useProveedoresList() {
   useEffect(() => {
     // Evita recargar si ya hay datos (útil para HMR o caché futuro)
     if (proveedores.length === 0) {
-      console.log("useProveedoresList: Fetching initial list data...");
       fetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,7 +44,6 @@ export function useProveedoresList() {
 
   // Función explícita para refrescar la lista
   const refresh = useCallback(() => {
-    console.log("useProveedoresList: Refreshing list data...");
     fetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);
 

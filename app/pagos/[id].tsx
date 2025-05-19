@@ -51,7 +51,6 @@ export default function PagoDetailScreen() {
   const handleViewComprobante = useCallback(() => {
     if (pago?.url_comprobante) {
       const presignedUrl = pago.url_comprobante;
-      console.log("Abriendo URL pre-firmada:", presignedUrl);
       Linking.openURL(presignedUrl).catch(err => {
         console.error('Error al abrir el comprobante:', err);
         Alert.alert("Error", "No se pudo abrir el enlace del comprobante. Asegúrate de tener una aplicación compatible instalada.")
