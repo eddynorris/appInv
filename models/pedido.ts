@@ -5,11 +5,11 @@ import { UserSimple } from './user';
 import { PedidoDetalle } from './pedidoDetalle';
 
 // Tipos posibles para el estado del pedido (Movido aquí)
-export const ESTADOS_PEDIDO: Array<'programado' | 'confirmado' | 'entregado' | 'cancelado'> = [
+export const ESTADOS_PEDIDO: Array<'programado' | 'confirmado'> = [
   'programado',
-  'confirmado',
-  'entregado',
-  'cancelado'
+  'confirmado'
+  //'entregado',
+  //'cancelado'
 ];
 
 export interface Pedido {

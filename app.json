@@ -2,7 +2,7 @@
   "expo": {
     "name": "invApp",
     "slug": "invApp",
-    "version": "1.1.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/images/image.png",
     "scheme": "myapp",
@@ -19,10 +19,19 @@
       "package": "com.yordev.invApp"
 
     },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "url": "https://u.expo.dev/be67618e-9c1d-4fee-a0fa-c604b075eac6"
+    },
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     },
     "plugins": [
       "expo-router",
