@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/image.png",
     "scheme": "myapp",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yordev.invApp"
+      "package": "com.yordev.invApp",
+      "versionCode": 6
 
     },
     "updates": {
