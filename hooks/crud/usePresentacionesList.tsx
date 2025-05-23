@@ -118,7 +118,10 @@ export function usePresentacionesList() {
       label: 'Producto Base',
       width: 2,
       sortable: true,
-      render: (item: Presentacion) => <ThemedText>{item.producto?.nombre || 'N/A'}</ThemedText>,
+      render: (item: Presentacion) => {
+        const nombre = item.producto?.nombre || 'N/A';
+        return <ThemedText>{nombre}</ThemedText>;
+      },
     },
     {
       id: 'capacidad_kg',
@@ -132,7 +135,7 @@ export function usePresentacionesList() {
       label: 'Precio',
       width: 1.5,
       sortable: true,
-      render: (item: Presentacion) => <ThemedText>${parseFloat(item.precio_venta).toFixed(2)}</ThemedText>,
+      render: (item: Presentacion) => <ThemedText>${item.precio_venta ? parseFloat(item.precio_venta).toFixed(2) : '0.00'}</ThemedText>,
     },
   ], [getTipoColor]);
 

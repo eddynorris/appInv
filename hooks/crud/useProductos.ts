@@ -134,7 +134,7 @@ export function useProductos(options: UseProductosOptions = {}) {
       }
       
       // Si no tenemos caché o necesitamos actualizar, buscar en la API
-      const inventarioRes = await inventarioApi.getInventarios(1, 100, Number(almacenId));
+      const inventarioRes = await inventarioApi.getInventarios(1, 100, { almacen_id: Number(almacenId) });
       
       // Guardar resultado en caché
       if (inventarioRes?.data) {
