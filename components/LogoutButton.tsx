@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -38,14 +38,21 @@ export function LogoutButton({
   };
   
   const confirmLogout = () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Está seguro que desea cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar Sesión', onPress: handleLogout, style: 'destructive' }
-      ]
-    );
+    console.log('Logout button pressed, showing confirmation');
+    if (Platform.OS === 'web') {
+      if (window.confirm('¿Está seguro que desea cerrar sesión?')) {
+        handleLogout();
+      }
+    } else {
+      Alert.alert(
+        'Cerrar Sesión',
+        '¿Está seguro que desea cerrar sesión?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Cerrar Sesión', onPress: handleLogout, style: 'destructive' }
+        ]
+      );
+    }
   };
 
   // Icon-only variant

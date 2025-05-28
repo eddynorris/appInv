@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
   logoCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 5 },
   appName: { fontSize: 28, fontWeight: 'bold', letterSpacing: 1 },
   appTagline: { fontSize: 16, color: '#6B7280', marginTop: 8 },
-  cardContainer: { width: '100%', maxWidth: 400, padding: 24, borderRadius: 16, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2, marginBottom: 16 },
+  cardContainer: { width: '100%', maxWidth: 400, padding: 24, borderRadius: 16, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2, marginBottom: 16, marginHorizontal: 'auto' },
   cardDark: { backgroundColor: '#111827', shadowColor: '#000000' },
   cardLight: { backgroundColor: '#FFFFFF', shadowColor: '#718096' },
   errorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 12, borderRadius: 8, marginBottom: 16 },
