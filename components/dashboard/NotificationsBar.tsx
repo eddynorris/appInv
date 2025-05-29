@@ -1,155 +1,138 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-// Asegúrate de que los tipos Lote e Inventario estén correctamente importados o definidos
-import { Lote, Inventario } from '@/models'; 
-import { formatNumber } from '@/utils/formatters';
+import { CategorizedDeliveries } from '@/hooks/reportes/useUpcomingDeliveries'; 
 import { router } from 'expo-router';
 
-
 interface NotificationsBarProps {
-  // Aseguramos que siempre sean arrays, usando || [] si vienen undefined
-  lotesBajos?: Lote[]; 
-  inventarioBajo?: Inventario[];
+  categorizedDeliveries: CategorizedDeliveries;
+  hasUpcomingDeliveries: boolean;
 }
 
-export function NotificationsBar({ lotesBajos = [], inventarioBajo = [] }: NotificationsBarProps) {
-  const [showLotesDropdown, setShowLotesDropdown] = useState(false);
-  const [showInventarioDropdown, setShowInventarioDropdown] = useState(false);
-  
-  // Ahora es seguro acceder a .length porque garantizamos que son arrays
-  const hasLotesAlert = lotesBajos.length > 0;
-  const hasInventarioAlert = inventarioBajo.length > 0;
-  
-  // Limitar la cantidad de elementos mostrados
+export function NotificationsBar({ 
+  categorizedDeliveries,
+  hasUpcomingDeliveries
+}: NotificationsBarProps) {
+  const [showDeliveriesDropdown, setShowDeliveriesDropdown] = useState(false);
   const maxItemsToShow = 5;
-  // Usamos slice en arrays garantizados
-  const lotesToShow = lotesBajos.slice(0, maxItemsToShow);
-  const inventarioToShow = inventarioBajo.slice(0, maxItemsToShow);
+  
+  // Obtener el color y texto según la urgencia
+  const getDeliveryStatusInfo = (status: 'today' | 'next3days' | 'next7days') => {
+    switch (status) {
+      case 'today':
+        return { color: '#FF5252', text: 'Enviar pedido' }; // Rojo
+      case 'next3days':
+        return { color: '#FF9800', text: 'Preparar pedido' }; // Naranja
+      case 'next7days':
+        return { color: '#4CAF50', text: 'Asegurar stock' }; // Verde
+      default:
+        return { color: '#0a7ea4', text: 'Próximas entregas' };
+    }
+  };
+  
+  // Contar alertas por categoría
+  const deliveryAlerts = [
+    { status: 'today' as const, count: categorizedDeliveries.today.length },
+    { status: 'next3days' as const, count: categorizedDeliveries.next3days.length },
+    { status: 'next7days' as const, count: categorizedDeliveries.next7days.length }
+  ].filter(alert => alert.count > 0);
+  
+  // Formatear fecha para mostrar
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'Sin fecha';
+    const options: Intl.DateTimeFormatOptions = { 
+      day: '2-digit', 
+      month: 'short', 
+      year: 'numeric' 
+    };
+    return new Date(dateString).toLocaleDateString('es-ES', options);
+  };
   
   return (
     <View style={styles.container}>
-      {/* Icono de Lotes */}
+      {/* Icono de Próximas Entregas */}
       <View>
         <TouchableOpacity 
           style={styles.iconContainer}
-          onPress={() => {
-            setShowLotesDropdown(!showLotesDropdown);
-            setShowInventarioDropdown(false);
-          }}
+          onPress={() => setShowDeliveriesDropdown(!showDeliveriesDropdown)}
         >
-          <IconSymbol name="scalemass.fill" size={24} color="#0a7ea4" />
-          {hasLotesAlert && (
-            <View style={styles.badge}>
-              {/* Acceso seguro a .length */}
-              <ThemedText style={styles.badgeText}>{lotesBajos.length}</ThemedText>
+          <IconSymbol 
+            name="calendar" 
+            size={24} 
+            color={hasUpcomingDeliveries ? "#FF5252" : "#0a7ea4"} 
+          />
+          {hasUpcomingDeliveries && (
+            <View style={[styles.badge, { backgroundColor: '#FF5252' }]}>
+              <ThemedText style={styles.badgeText}>
+                {deliveryAlerts.reduce((sum, alert) => sum + alert.count, 0)}
+              </ThemedText>
             </View>
           )}
         </TouchableOpacity>
         
-        {/* Dropdown para Lotes */}
-        {showLotesDropdown && (
-          <ThemedView style={styles.dropdown}>
-            <ThemedText style={styles.dropdownTitle}>Lotes con bajo stock</ThemedText>
-            
-            {/* Acceso seguro a .length */}
-            {lotesBajos.length > 0 ? (
-              <ScrollView style={{ maxHeight: 200 }}>
-                {lotesToShow.map(item => (
-                  <TouchableOpacity 
-                    // Asegúrate que item.id existe y es único
-                    key={item.id?.toString() ?? Math.random().toString()} 
-                    style={styles.dropdownItem}
-                    onPress={() => item.id && router.push(`/lotes/${item.id}`)}
-                  >
-                    {/* Usar optional chaining por si producto no existe */}
-                    <ThemedText style={styles.itemName}>{item.descripcion ?? 'Lote sin nombre'}</ThemedText>
-                    <ThemedText style={styles.itemDetail}>
-                      Disponible: {formatNumber(item.cantidad_disponible_kg ?? '0')} kg
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-                {/* Acceso seguro a .length */}
-                {lotesBajos.length > maxItemsToShow && (
-                  <ThemedText style={styles.moreItems}>
-                    ... {lotesBajos.length - maxItemsToShow} más
-                  </ThemedText>
-                )}
-              </ScrollView>
-            ) : (
-              <ThemedText style={styles.emptyText}>No hay lotes con bajo stock</ThemedText>
-            )}
-            
-            <TouchableOpacity 
-              style={styles.viewAllButton}
-              onPress={() => router.push('/lotes')}
-            >
-              <ThemedText style={styles.viewAllText}>Ver todos los lotes</ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-        )}
-      </View>
-      
-      {/* Icono de Inventario */}
-      <View>
-        <TouchableOpacity 
-          style={styles.iconContainer}
-          onPress={() => {
-            setShowInventarioDropdown(!showInventarioDropdown);
-            setShowLotesDropdown(false);
-          }}
-        >
-          <IconSymbol name="cube.box.fill" size={24} color="#0a7ea4" />
-          {hasInventarioAlert && (
-            <View style={styles.badge}>
-              {/* Acceso seguro a .length */}
-              <ThemedText style={styles.badgeText}>{inventarioBajo.length}</ThemedText>
-            </View>
-          )}
-        </TouchableOpacity>
-        
-        {/* Dropdown para Inventario */}
-        {showInventarioDropdown && (
-          <ThemedView style={styles.dropdown}>
-            <ThemedText style={styles.dropdownTitle}>Inventario con bajo stock</ThemedText>
-            
-            {/* Acceso seguro a .length */}
-            {inventarioBajo.length > 0 ? (
-              <ScrollView style={{ maxHeight: 200 }}>
-                {inventarioToShow.map(item => (
-                  <TouchableOpacity 
-                    // Asegúrate que item.id existe y es único
-                    key={item.id?.toString() ?? Math.random().toString()}
-                    style={styles.dropdownItem}
-                    // Navegar a inventarios o a la presentación específica si es posible
-                    onPress={() => router.push(`/inventarios`)} 
-                  >
-                    {/* Usar optional chaining */}
-                    <ThemedText style={styles.itemName}>{item.nombre ?? 'Item sin nombre'} {item.almacen_nombre ?? 0}</ThemedText>
-                    <ThemedText style={styles.itemDetail}>
-                      Stock: {item.cantidad ?? 0} (Mín: {item.stock_minimo ?? 0}) 
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-                {inventarioBajo.length > maxItemsToShow && (
-                  <ThemedText style={styles.moreItems}>
-                    ... {inventarioBajo.length - maxItemsToShow} más
-                  </ThemedText>
-                )}
-              </ScrollView>
-            ) : (
-              <ThemedText style={styles.emptyText}>No hay productos con bajo stock</ThemedText>
-            )}
-            
-            <TouchableOpacity 
-              style={styles.viewAllButton}
-              onPress={() => router.push('/inventarios')}
-            >
-              <ThemedText style={styles.viewAllText}>Ver todo el inventario</ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
+        {/* Dropdown de Próximas Entregas */}
+        {showDeliveriesDropdown && (
+          <View style={styles.dropdown}>
+            <ScrollView style={styles.dropdownScroll}>
+              {hasUpcomingDeliveries ? (
+                <>
+                  {deliveryAlerts.map(({ status, count }) => {
+                    const { color, text } = getDeliveryStatusInfo(status);
+                    const deliveries = categorizedDeliveries[status];
+                    
+                    return (
+                      <View key={status}>
+                        <View style={[styles.statusHeader, { backgroundColor: `${color}20` }]}>
+                          <View style={[styles.statusDot, { backgroundColor: color }]} />
+                          <ThemedText style={[styles.statusText, { color }]}>
+                            {text} ({count})
+                          </ThemedText>
+                        </View>
+                        
+                        {deliveries.slice(0, maxItemsToShow).map((pedido) => (
+                          <TouchableOpacity 
+                            key={pedido.id} 
+                            style={styles.dropdownItem}
+                            onPress={() => router.push(`/pedidos/${pedido.id}`)}
+                          >
+                            <ThemedText style={styles.itemName}>
+                              #{pedido.id} - {pedido.cliente?.nombre || 'Cliente'}
+                            </ThemedText>
+                            <ThemedText style={styles.itemDetail}>
+                              Entrega: {formatDate(pedido.fecha_entrega || '')}
+                            </ThemedText>
+                            {pedido.total_estimado && (
+                              <ThemedText style={styles.itemDetail}>
+                                Total: ${parseFloat(pedido.total_estimado).toFixed(2)}
+                              </ThemedText>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                        
+                        {count > maxItemsToShow && (
+                          <ThemedText style={styles.moreItems}>
+                            ... {count - maxItemsToShow} más
+                          </ThemedText>
+                        )}
+                      </View>
+                    );
+                  })}
+                </>
+              ) : (
+                <View style={styles.dropdownItem}>
+                  <ThemedText>No hay entregas programadas</ThemedText>
+                </View>
+              )}
+              
+              <TouchableOpacity 
+                style={styles.viewAllButton}
+                onPress={() => router.push('/reportes/proyecciones')}
+              >
+                <ThemedText style={styles.viewAllText}>Ver todos los pedidos</ThemedText>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
         )}
       </View>
     </View>
@@ -157,6 +140,26 @@ export function NotificationsBar({ lotesBajos = [], inventarioBajo = [] }: Notif
 }
 
 const styles = StyleSheet.create({
+  dropdownScroll: {
+    maxHeight: 400,
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginTop: 8,
+    borderRadius: 4,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   container: {
     flexDirection: 'row',
     position: 'absolute',

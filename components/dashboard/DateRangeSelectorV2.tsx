@@ -130,8 +130,8 @@ export function DateRangeSelectorV2({ startDate, endDate, onDateChange }: DateRa
     <ThemedView style={styles.container}>
       <View style={styles.rangeButtonsContainer}>
         <RangeButton label="Hoy" value="hoy" icon="calendar" />
-        <RangeButton label="Esta semana" value="semana" icon="calendar.badge.clock" />
-        <RangeButton label="Este mes" value="mes" icon="calendar.circle" />
+        <RangeButton label="Esta semana" value="semana" icon="calendar" />
+        <RangeButton label="Este mes" value="mes" icon="calendar" />
       </View>
       
       <View style={[

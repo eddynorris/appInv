@@ -1,6 +1,6 @@
 // app/reportes/dashboard.tsx
 import React, { useState } from 'react';
-import { StyleSheet, View, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -8,6 +8,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useDashboardData } from '@/hooks/reportes/useDashboardData';
+import { useUpcomingDeliveries } from '@/hooks/reportes/useUpcomingDeliveries';
 import { NotificationsBar } from '@/components/dashboard/NotificationsBar';
 import { DateRangeSelector } from '@/components/dashboard/DateRangeSelector';
 import { SalesLineChart } from '@/components/dashboard/SalesLineChart';
@@ -31,6 +32,16 @@ export default function DashboardScreen() {
         clientesConSaldoPendiente,
         refresh: refreshDashboard
     } = useDashboardData();
+
+    // Hook para próximas entregas
+    const {
+        allDeliveries,
+        categorizedDeliveries,
+        hasUpcomingDeliveries,
+        isLoading: isLoadingDeliveries,
+        error: deliveriesError,
+        refresh: refreshDeliveries
+    } = useUpcomingDeliveries();
     // --- Estados y Lógica para Gráficos ---
     const [startDate, setStartDate] = useState(() => {
         const date = new Date();
@@ -73,24 +84,15 @@ export default function DashboardScreen() {
     const navigateToClientes = () => router.push('/clientes');
 
     // --- Estado Combinado de Carga y Error ---
-    const isLoading = isLoadingDashboard || isLoadingCharts;
-    const error = dashboardError || chartsError;
+    const isLoading = isLoadingDashboard || isLoadingDeliveries || isLoadingCharts;
+    const error = dashboardError || deliveriesError || chartsError;
 
-    // --- Función de Refresco Combinada ---
-    const handleRefresh = React.useCallback(async () => {
-        const promises = [];
-        if (typeof refreshDashboard === 'function') {
-            promises.push(refreshDashboard());
-        }
-        if (typeof refreshCharts === 'function') {
-            promises.push(refreshCharts({
-                 startDate: startDate.toISOString().split('T')[0],
-                 endDate: endDate.toISOString().split('T')[0],
-            }));
-        }
-        await Promise.all(promises);
-    }, [refreshDashboard, refreshCharts, startDate, endDate]);
-
+    // Función para refrescar todos los datos
+    const handleRefresh = React.useCallback(() => {
+        refreshDashboard();
+        refreshCharts();
+        refreshDeliveries();
+    }, [refreshDashboard, refreshCharts, refreshDeliveries]);
 
     // --- Renderizado Condicional ---
     // Simplificar la condición de carga inicial
@@ -138,26 +140,21 @@ export default function DashboardScreen() {
     return (
         <ScreenContainer
             title="Dashboard"
-            scrollable={true}
-            refreshControl={
-                <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
-            }
+            scrollable={false}
         >
+            <ScrollView 
+                style={{ flex: 1 }}
+                refreshControl={
+                    <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} />
+                }
+            >
             <Stack.Screen options={{ title: 'Dashboard' }} />
 
-            <NotificationsBar
-                // Pasar los arrays directamente. Si son undefined, pasar array vacío.
-                inventarioBajo={alertasStockBajo || []}
-                lotesBajos={alertasLotesBajos || []}
-                // Mantener los counts si NotificationsBar los usa para los badges
-                stockBajoCount={stockBajoCount}
-                lotesBajosCount={lotesBajosCount}
-                clientesPendientesCount={clientesPendientesCount}
-                // Mantener los onPress
-                onPressStockBajo={navigateToInventario}
-                onPressLotesBajos={navigateToLotes}
-                onPressClientesPendientes={navigateToClientes}
-            />
+         {/* Barra de notificaciones */}
+      <NotificationsBar 
+        categorizedDeliveries={categorizedDeliveries}
+        hasUpcomingDeliveries={hasUpcomingDeliveries}
+      />
              {/* Selector de rango de fechas */}
              <DateRangeSelector
                  startDate={startDate}
@@ -192,7 +189,7 @@ export default function DashboardScreen() {
                         style={[styles.reportButton, { backgroundColor: Colors[colorScheme].tint }]}
                         onPress={() => router.push('/reportes/ventas')}
                     >
-                        <IconSymbol name="dollarsign.square" size={24} color="white" />
+                        <IconSymbol name="cart.fill" size={24} color="white" />
                         <ThemedText style={styles.reportButtonText}>Ventas</ThemedText>
                     </TouchableOpacity>
                 </View>
@@ -209,20 +206,21 @@ export default function DashboardScreen() {
                 </View>
                 <Divider style={styles.divider} />
                 {/* Asegurarse que clientesConSaldoPendiente es un array antes de mapear */}
-                {Array.isArray(clientesConSaldoPendiente) && clientesPendientesCount > 0 ? (
-                    clientesConSaldoPendiente.map((cliente) => (
-                        // Añadir un chequeo por si cliente o cliente.cliente_id es null/undefined
-                        cliente?.cliente_id ? (
-                            <View key={cliente.cliente_id} style={styles.listItem}>
+                {Array.isArray(clientesConSaldoPendiente) && clientesConSaldoPendiente.length > 0 ? (
+                    clientesConSaldoPendiente.map((cliente, index) => {
+                        // Usar el índice como key ya que no hay un ID único confiable
+                        const clientId = cliente.id || `client-${index}`;
+                        return (
+                            <View key={clientId} style={styles.listItem}>
                                 <ThemedText style={styles.listItemText}>• {cliente.nombre || 'Nombre no disponible'}</ThemedText>
                             </View>
-                        ) : null // O renderizar algo indicando un dato inválido
-                    ))
+                        );
+                    })
                 ) : (
                     <ThemedText style={styles.reportEmpty}>No hay clientes con saldo pendiente.</ThemedText>
                 )}
             </ThemedView>
-
+            </ScrollView>
         </ScreenContainer>
     );
 }
