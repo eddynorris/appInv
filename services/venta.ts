@@ -52,6 +52,17 @@ export const ventaApi = {
     return await fetchApi<Venta>(`/ventas/${id}`);
   },
   
+  getAllVentas: async (queryParams = ''): Promise<Venta[]> => {
+    let url = `/ventas?all=true`;
+    
+    // Si hay queryParams, agregarlos a la URL
+    if (queryParams && queryParams.length > 0) {
+      url = `${url}&${queryParams}`;
+    }
+    
+    return fetchApi<Venta[]>(url);
+  },
+  
   // Obtener datos necesarios para el formulario de ventas
   async getFormData(almacenId?: number): Promise<VentaFormData> {
     // CORREGIDO: Construir solo el endpoint relativo

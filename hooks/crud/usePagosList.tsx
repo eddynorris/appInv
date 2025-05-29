@@ -156,7 +156,13 @@ export function usePagosList() {
     
     try {
       const success = await deletePagoDirectly(id);
-
+      
+      if (success) {
+        console.log("Pago eliminado exitosamente");
+      } else {
+        console.error("Error al eliminar pago");
+      }
+      
       return success;
     } catch (error: any) {
       console.error("Error al eliminar pago:", error.message);

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 // Importar Venta y getAllVentas desde api.ts
-import { ventaApi } from '../../services/api'; // Assuming ventaApi is exported from here
+import { ventaApi } from '../../services/venta'; // Assuming ventaApi is exported from here
 import { Venta } from '@/models';
 import dayjs from 'dayjs';
 

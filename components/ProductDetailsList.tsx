@@ -49,15 +49,6 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
   // Estado para controlar si una imagen falló al cargarse
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
-  // Efecto para hacer log de los detalles a mostrar (debugging)
-  useEffect(() => {
-    if (details && details.length > 0) {
-      // Log el primero para ver su estructura
-      const firstDetail = details[0];
-
-    }
-  }, [details]);
-  
   // Función para obtener el precio correcto según el tipo de detalle
   const getPrice = (detail: ProductDetail) => {
     if (isPedido) {

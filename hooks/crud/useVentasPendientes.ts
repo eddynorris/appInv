@@ -1,6 +1,6 @@
 // hooks/crud/useVentasPendientes.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ventaApi } from '@/services/api';
+import { ventaApi } from '@/services/venta';
 import { Venta } from '@/models';
 
 export function useVentasPendientes() {

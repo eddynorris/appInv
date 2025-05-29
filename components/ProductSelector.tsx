@@ -91,7 +91,7 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({
         const presentacionId = p.id.toString();
         return !detallesActuales.some(d => d.presentacion_id === presentacionId);
       });
-      
+
       setPresentacionesDisponibles(disponibles);
     }
   }, [presentaciones, detallesActuales, visible]);

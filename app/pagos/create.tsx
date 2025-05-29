@@ -10,7 +10,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { usePagoItem } from '@/hooks/crud/usePagoItem';
 import { useForm } from '@/hooks/useForm';
-import { ventaApi } from '@/services/api';
+import { ventaApi } from '@/services/venta';
 import { Venta } from '@/models';
 
 export default function CreatePagoScreen() {
@@ -77,7 +77,6 @@ export default function CreatePagoScreen() {
         setVentaError("ID de venta inválido.");
       }
     } else {
-      console.log("No se recibió ventaId, el usuario deberá seleccionar una (funcionalidad pendiente).");
     }
   }, [initialVentaId, setValues]);
 

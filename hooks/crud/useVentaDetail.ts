@@ -1,7 +1,7 @@
 // hooks/useVentaDetail.ts
 import { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { ventaApi } from '@/services/api';
+import { ventaApi } from '@/services/venta';
 import { Venta } from '@/models';
 import { router } from 'expo-router';
 

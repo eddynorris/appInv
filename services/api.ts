@@ -1,4 +1,6 @@
 // services/api.ts
+import { BASE_URL, DEFAULT_API_HEADERS, API_TIMEOUT } from './appBaseConfig';
+import { Platform } from 'react-native';
 import { 
   Cliente, 
   Producto,
@@ -6,8 +8,6 @@ import {
   Almacen,
   Gasto,
   Movimiento,
-  Venta,
-  VentaDetalle,
   Pedido,
   PedidoDetalle,
   Pago,
@@ -23,44 +23,7 @@ import {
   DepositoPayload,
   UsuarioPayload,
 } from '@/models';
-
-// Import fetchApi without name conflict
-import { fetchApi as fetchApiUtil } from './fetchApi';
-
-// Import authService using dynamic import to avoid circular dependency
-let _authService: any;
-
-// Lazy load authService to avoid circular dependencies
-const getAuthService = async () => {
-  if (!_authService) {
-    const { authService } = await import('./auth');
-    _authService = authService;
-  }
-  return _authService;
-};
-
-// Re-exportar tipos y utilidades
-export * from './config';
-export { HttpError } from './fetchApi';
-
-// Interfaces para la estructura de respuesta de la API
-export interface Pagination {
-  total: number;
-  page: number;
-  per_page: number;
-  pages: number;
-}
-
-export interface ApiResponse<T> {
-  data: T[];
-  pagination: Pagination;
-}
-
-export interface DashboardDataResponse {
-  alertas_stock_bajo: Inventario[];
-  alertas_lotes_bajos: Lote[];
-  clientes_con_saldo_pendiente: ClienteSimple[];
-}
+import { authService } from './auth';
 
 // Interfaces para la estructura de respuesta de la API
 export interface Pagination {
@@ -79,51 +42,25 @@ export interface DashboardDataResponse {
   alertas_lotes_bajos: Lote[]; // Asumiendo que la estructura coincide con Lote
   clientes_con_saldo_pendiente: ClienteSimple[]; // Asumiendo que la estructura coincide con ClienteSimple
 }
-// Base URL configuration
-const getBaseUrl = () => {
-  // Usar la variable de entorno si está definida
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
-
-  if (apiUrl) {
-    // Asegurarse que no termine con /
-    return apiUrl.endsWith('/') ? apiUrl.slice(0, -1) : apiUrl;
-  }
-
-  // Fallback si la variable de entorno no está definida (menos ideal)
-  const fallbackUrl = 'https://manngojk.lat'; // Incluye http:// y sin / al final
-  console.warn(`EXPO_PUBLIC_API_URL no está definida. Usando fallback: ${fallbackUrl}`);
-  return fallbackUrl;
-};
 
 export const API_CONFIG = {
-  baseUrl: getBaseUrl(), // Llama a la función corregida
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-  timeout: 15000, // 15 segundos timeout
+  baseUrl: BASE_URL, 
+  headers: DEFAULT_API_HEADERS,
+  timeout: API_TIMEOUT,
 
-  // --- FUNCIÓN getImageUrl SIMPLIFICADA ---
   getImageUrl: (path?: string | null): string => {
-    // Si el path es nulo, indefinido, o una cadena vacía, devuelve vacío.
     if (!path) {
-      return ''; // O devuelve una URL a una imagen placeholder si prefieres
+      return ''; 
     }
-
-    // Si la API devuelve una URL absoluta (como la pre-firmada de S3), úsala directamente.
     if (path.startsWith('http://') || path.startsWith('https://')) {
       return path;
     }
-    // Si llega aquí, el 'path' no es una URL válida que la app pueda usar.
-    // Esto no debería pasar si la API siempre devuelve None o una URL pre-firmada.
     console.warn('getImageUrl recibió una ruta inesperada (no es URL absoluta):', path);
-    return ''; // O devuelve una URL placeholder
+    return ''; 
   },
 
-  // --- FUNCIÓN isValidImageUrl SIMPLIFICADA ---
   isValidImageUrl: (url: string | undefined | null): boolean => {
     if (!url) return false;
-    // Una URL válida ahora es simplemente una que empieza con http o https
     return url.startsWith('http://') || url.startsWith('https://');
   }
 };
@@ -136,90 +73,71 @@ interface HttpError extends Error {
   };
 }
 
-export async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_CONFIG.baseUrl}${endpoint}`;
   
-  // Get auth headers if available
-  let authHeaders = {};
-  try {
-    const authService = await getAuthService();
-    authHeaders = (await authService.getAuthHeader()) || {};
-  } catch (error) {
-    console.warn('Error getting auth headers:', error);
-  }
+  const authHeaders = await authService.getAuthHeader();
   
-  // Check if sending FormData
+  // Verificar si se está enviando FormData
   const isFormData = options.body instanceof FormData;
   
-  // Configure default headers if not provided
-  const headers = new Headers({
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...options.headers,
-  });
-
-  // Add auth headers
-  if (authHeaders) {
-    Object.entries(authHeaders as Record<string, string>).forEach(([key, value]) => {
-      if (value) {
-        headers.set(key, value);
-      }
-    });
-  }
-
-  // If it's FormData, let the browser set the Content-Type with the correct boundary
-  if (isFormData) {
-    headers.delete('Content-Type');
-  }
-
-  // Create fetch options with updated headers
-  const fetchOptions: RequestInit = {
-    ...options,
-    headers,
-    credentials: 'include', // Important for handling auth cookies
+  // No incluir Content-Type para FormData, deja que el navegador lo establezca
+  const headers = {
+    ...(!isFormData ? API_CONFIG.headers : { 'Accept': 'application/json' }),
+    ...(authHeaders || {}),
+    ...(options.headers || {}),
   };
-
-  try {
-    const response = await fetch(url, fetchOptions);
     
-    // If response is not ok, throw an error
-    if (!response.ok) {
-      let errorData: { message?: string } = { message: 'Error en la solicitud' };
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
+    
+    // Manejar respuestas sin contenido
+    if (response.status === 204) {
+      return null as T;
+    }
+    
+    // Leer el cuerpo de la respuesta UNA SOLA VEZ
+    let responseData: any;
+    try {
+      // Obtener el texto de la respuesta primero
+      const responseText = await response.text();
       
-      // Try to get error message from response body
-      try {
-        const responseText = await response.text();
-        if (responseText) {
-          errorData = JSON.parse(responseText);
-        }
-      } catch (e) {
-        console.warn('Error parsing error response:', e);
-      }
-      
-      // If it's an authentication error, handle logout
-      if (response.status === 401) {
+      // Si hay contenido, intentar parsearlo como JSON
+      if (responseText.trim()) {
         try {
-          const authService = await getAuthService();
-          await authService.logout();
-        } catch (logoutError) {
-          console.error('Error during logout:', logoutError);
+          responseData = JSON.parse(responseText);
+        } catch (jsonError) {
+          // Si no es JSON válido, usar el texto en bruto
+          responseData = responseText;
+          console.warn("API response was not valid JSON:", responseText);
         }
+      } else {
+        // Respuesta vacía
+        responseData = {};
       }
-      
-      throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+    } catch (readError : any) {
+      responseData = `Error reading response: ${readError.message}`;
     }
 
-    // Handle successful response
-    try {
-      const responseText = await response.text();
-      if (!responseText) return {} as T; // Return empty object for no content
-      return JSON.parse(responseText) as T;
-    } catch (e) {
-      console.error('Error parsing response:', e);
-      throw new Error('Error parsing server response');
+    if (!response.ok) {
+      // La respuesta NO fue exitosa (>= 400)
+      console.error(`API error: ${response.status}`, responseData);
+
+      // Crear un error que incluya la respuesta
+      const error: HttpError = new Error(
+        responseData?.error || responseData?.message || `Error HTTP: ${response.status}`
+      );
+      error.response = {
+        status: response.status,
+        data: responseData,
+      };
+      throw error;
     }
+
+    return responseData as T;
   } catch (error: any) {
     console.error('API fetch error:', error);
     if (error.response) {
@@ -438,80 +356,6 @@ export const gastoApi = {
 
   deleteGasto: async (id: number): Promise<any> => {
     return fetchApi<any>(`/gastos/${id}`, {
-      method: 'DELETE',
-    });
-  },
-};
-
-// API methods for Venta
-export const ventaApi = {
-  getVentas: async (page = 1, perPage = 10, queryParams = ''): Promise<ApiResponse<Venta>> => {
-    let url = `/ventas?page=${page}&per_page=${perPage}`;
-    
-    // Si hay queryParams, agregarlos a la URL
-    if (queryParams && queryParams.length > 0) {
-      // Si queryParams ya incluye page y per_page, usamos la cadena directamente
-      if (queryParams.includes('page=') && queryParams.includes('per_page=')) {
-        url = `/ventas?${queryParams}`;
-      } else {
-        // Si no los incluye, los agregamos manteniendo los demás parámetros
-        url = `/ventas?${queryParams}&page=${page}&per_page=${perPage}`;
-      }
-    }
-    
-    return fetchApi<ApiResponse<Venta>>(url);
-  },
-
-  getVenta: async (id: number): Promise<Venta> => {
-    return fetchApi<Venta>(`/ventas/${id}`);
-  },
-  
-  // Método para obtener TODAS las ventas sin paginación
-  getAllVentas: async (queryParams = ''): Promise<Venta[]> => {
-    let url = `/ventas?all=true`;
-    
-    // Si hay queryParams, agregarlos a la URL
-    if (queryParams && queryParams.length > 0) {
-      url = `${url}&${queryParams}`;
-    }
-    
-    return fetchApi<Venta[]>(url);
-  },
-  
-
-  createVenta: async (venta: {
-    cliente_id: number;
-    almacen_id: number;
-    fecha?: string;
-    tipo_pago: string;
-    consumo_diario_kg?: string;
-    detalles: {
-      presentacion_id: number;
-      cantidad: number;
-      precio_unitario: string;  // Campo requerido
-    }[];
-  }): Promise<Venta> => {
-    
-    return fetchApi<Venta>('/ventas', {
-      method: 'POST',
-      body: JSON.stringify(venta),
-    }).then(response => {
-      return response;
-    }).catch(error => {
-      console.error('Error al crear venta en la API:', error);
-      throw error;
-    });
-  },
-
-  updateVenta: async (id: number, venta: Partial<Venta>): Promise<Venta> => {
-    return fetchApi<Venta>(`/ventas/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(venta),
-    });
-  },
-
-  deleteVenta: async (id: number): Promise<any> => {
-    return fetchApi<any>(`/ventas/${id}`, {
       method: 'DELETE',
     });
   },
