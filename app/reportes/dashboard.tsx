@@ -173,14 +173,30 @@ export default function DashboardScreen() {
                  />
              </ThemedView>
 
-             {/* Gráfico Circular de Presentaciones */}
-             {/* <ThemedView style={styles.chartContainer}>
-                 <PresentationsPieChart
-                     data={pieChartData}
-                     title="Ventas por Presentación"
-                 />
-             </ThemedView> */}
-
+             {/* Sección de Reportes Rápidos */}
+            <ThemedView style={[styles.card, styles.reportCard]}>
+                <View style={styles.reportHeader}>
+                    <IconSymbol name="chart.bar.doc.horizontal" size={22} color={Colors[colorScheme].text} />
+                    <ThemedText style={styles.reportTitle}>Reportes Rápidos</ThemedText>
+                </View>
+                <Divider style={styles.divider} />
+                <View style={styles.reportButtonsContainer}>
+                    <TouchableOpacity 
+                        style={[styles.reportButton, { backgroundColor: Colors[colorScheme].tint }]}
+                        onPress={() => router.push('/reportes/proyecciones')}
+                    >
+                        <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color="white" />
+                        <ThemedText style={styles.reportButtonText}>Proyecciones</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        style={[styles.reportButton, { backgroundColor: Colors[colorScheme].tint }]}
+                        onPress={() => router.push('/reportes/ventas')}
+                    >
+                        <IconSymbol name="dollarsign.square" size={24} color="white" />
+                        <ThemedText style={styles.reportButtonText}>Ventas</ThemedText>
+                    </TouchableOpacity>
+                </View>
+            </ThemedView>
 
             {/* Sección Clientes con Saldo Pendiente */}
             <ThemedView style={[styles.card, styles.reportCard]}>
@@ -236,8 +252,27 @@ const styles = StyleSheet.create({
     reportHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 10,
-        gap: 10,
+        padding: 12,
+        backgroundColor: 'transparent',
+    },
+    reportButtonsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        padding: 10,
+    },
+    reportButton: {
+        flex: 1,
+        margin: 5,
+        padding: 15,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+    },
+    reportButtonText: {
+        color: 'white',
+        marginLeft: 8,
+        fontWeight: '600',
     },
     reportTitle: {
         fontSize: 16,
