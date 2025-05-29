@@ -78,7 +78,6 @@ export function usePedidoItem() {
   const loadFormData = useCallback(async () => {
     setIsLoadingOptions(true);
     setError(null);
-    console.log(`🚀 Iniciando carga de datos para formulario Pedido`);
     try {
       const data = await pedidoApi.getFormData();
 

@@ -28,7 +28,6 @@ const ProductItem = memo(({ item, onSelect }: {
 }) => {
   // Optimizar el renderizado de cada item para mejorar rendimiento
   const handlePress = useCallback(() => {
-    console.log(`Seleccionando producto ID: ${item.id}`);
     onSelect(item.id.toString());
   }, [item.id, onSelect]);
 
@@ -93,7 +92,6 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({
         return !detallesActuales.some(d => d.presentacion_id === presentacionId);
       });
       
-      console.log(`ProductSelector: Filtrando ${disponibles.length} productos disponibles de ${presentaciones.length} total`);
       setPresentacionesDisponibles(disponibles);
     }
   }, [presentaciones, detallesActuales, visible]);

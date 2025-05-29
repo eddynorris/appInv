@@ -22,16 +22,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    console.log('AuthGuard useEffect:', { user: !!user, isLoading, segments }); // Added log
     if (isLoading) return;
     
     const inAuthGroup = segments[0] === '(auth)';
     
     if (!user) {
-      console.log('AuthGuard: User is null, redirecting to /login'); // Added log
       router.replace('/login');
     } else if (user && inAuthGroup) {
-      console.log('AuthGuard: User exists and in auth group, redirecting to /'); // Added log
       // Role-based redirection
       const targetRoute = user.rol === 'admin' ? '/' : '/';
       router.replace(targetRoute);

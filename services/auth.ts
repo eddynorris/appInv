@@ -1,9 +1,8 @@
 // services/auth.ts - Versión actualizada
-import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { jwtDecode } from 'jwt-decode';
-import { API_CONFIG } from './api';
+import { API_CONFIG } from './config';
+import { fetchApi } from './fetchApi';
+import { storage } from './authUtils';
 
 // Auth Interfaces - Actualizadas para incluir rol y almacen_id
 export interface User {
@@ -28,91 +27,14 @@ interface JwtPayload {
   exp: number;
 }
 
-// Storage keys
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
-
-// Helper functions for token storage
-const storage = {
-  async saveToken(token: string): Promise<void> {
-    try {
-      if (Platform.OS === 'web') {
-        await AsyncStorage.setItem(TOKEN_KEY, token);
-      } else {
-        await SecureStore.setItemAsync(TOKEN_KEY, token);
-      }
-    } catch (error) {
-      console.error('Error saving token:', error);
-    }
-  },
-
-  async getToken(): Promise<string | null> {
-    try {
-      if (Platform.OS === 'web') {
-        return await AsyncStorage.getItem(TOKEN_KEY);
-      } else {
-        return await SecureStore.getItemAsync(TOKEN_KEY);
-      }
-    } catch (error) {
-      console.error('Error retrieving token:', error);
-      return null;
-    }
-  },
-
-  async saveUser(user: User): Promise<void> {
-    try {
-      const userString = JSON.stringify(user);
-      if (Platform.OS === 'web') {
-        await AsyncStorage.setItem(USER_KEY, userString);
-      } else {
-        await SecureStore.setItemAsync(USER_KEY, userString);
-      }
-    } catch (error) {
-      console.error('Error saving user info:', error);
-    }
-  },
-
-  async getUser(): Promise<User | null> {
-    try {
-      let userString;
-      if (Platform.OS === 'web') {
-        userString = await AsyncStorage.getItem(USER_KEY);
-      } else {
-        userString = await SecureStore.getItemAsync(USER_KEY);
-      }
-      
-      if (userString) {
-        return JSON.parse(userString);
-      }
-      return null;
-    } catch (error) {
-      console.error('Error retrieving user info:', error);
-      return null;
-    }
-  },
-
-  async clearStorage(): Promise<void> {
-    try {
-      if (Platform.OS === 'web') {
-        await AsyncStorage.removeItem(TOKEN_KEY);
-        await AsyncStorage.removeItem(USER_KEY);
-      } else {
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
-        await SecureStore.deleteItemAsync(USER_KEY);
-      }
-    } catch (error) {
-      console.error('Error clearing storage:', error);
-    }
-  }
-};
-
 // Token utilities
-const token = {
+const tokenUtils = {
   isExpired(token: string): boolean {
     try {
       const decoded = jwtDecode<JwtPayload>(token);
-      return decoded.exp < Date.now() / 1000;
+      return decoded.exp * 1000 < Date.now();
     } catch (error) {
+      console.error('Error checking token expiration:', error);
       return true;
     }
   },
@@ -121,33 +43,28 @@ const token = {
     try {
       const decoded = jwtDecode<JwtPayload>(token);
       return {
-        id: typeof decoded.sub === 'string' ? parseInt(decoded.sub, 10) : decoded.sub,
+        id: Number(decoded.sub),
         username: decoded.username,
-        rol: decoded.rol,                    // Extraer el rol del token
-        almacen_id: decoded.almacen_id       // Extraer el almacen_id del token
+        rol: decoded.rol,
+        almacen_id: decoded.almacen_id,
       };
     } catch (error) {
-      console.error('Error decoding token:', error);
+      console.error('Error extracting user from token:', error);
       return null;
     }
-  }
+  },
 };
 
 // Auth API methods
 export const authService = {
   async login(username: string, password: string): Promise<User> {
     try {
-      const url = `${API_CONFIG.baseUrl}/auth`;
-      const body = { username, password };
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
-
-      const response = await fetch(url, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/auth/login`, {
         method: 'POST',
-        headers: headers,
-        body: JSON.stringify(body),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
       });
 
       if (!response.ok) {
@@ -156,46 +73,46 @@ export const authService = {
       }
 
       const data: AuthToken = await response.json();
+      
+      if (!data.access_token) {
+        throw new Error('No se recibió el token de acceso');
+      }
+
+      // Save the token
       await storage.saveToken(data.access_token);
       
-      // Preferir el objeto user si está presente en la respuesta
-      let user: User;
+      // Extract and save user information
+      let user: User | null = null;
+      
+      // First try to get user from response
       if (data.user) {
         user = data.user;
-      } else {
-        // Fallback al método anterior de extraer del token
-        const extractedUser = token.extractUser(data.access_token);
-        if (!extractedUser) {
-          throw new Error('Token inválido');
-        }
-        user = extractedUser;
+      } 
+      // If not in response, try to extract from token
+      else if (data.access_token) {
+        user = tokenUtils.extractUser(data.access_token);
       }
       
+      if (!user) {
+        throw new Error('No se pudo obtener la información del usuario');
+      }
+      
+      // Save user information
       await storage.saveUser(user);
+      
       return user;
     } catch (error) {
-
-      if (error instanceof Error) {
-        console.error('Error Message:', error.message);
-        const errorDetails: any = error;
-        if (errorDetails.response) {
-          console.error('Error Status:', errorDetails.response.status);
-          console.error('Error Data:', errorDetails.response.data);
-        }
-      }
-
-
-      throw error instanceof Error ? error : new Error('Error al iniciar sesión');
+      console.error('Error en login:', error);
+      throw error;
     }
   },
 
   async register(username: string, password: string): Promise<void> {
     try {
-      const response = await fetch(`${API_CONFIG.baseUrl}/registrar`, {
+      const response = await fetch(`${API_CONFIG.baseUrl}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
         body: JSON.stringify({ username, password }),
       });
@@ -204,29 +121,31 @@ export const authService = {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Error al registrarse');
       }
+      
+      // If registration is successful, automatically log in the user
+      await this.login(username, password);
     } catch (error) {
-      throw error instanceof Error ? error : new Error('Error al registrarse');
+      console.error('Error en registro:', error);
+      throw error;
     }
   },
 
   async logout(): Promise<void> {
-    await storage.clearStorage();
+    await storage.clearAll();
   },
 
   async checkAuth(): Promise<User | null> {
-    const tokenValue = await storage.getToken();
-    if (!tokenValue || token.isExpired(tokenValue)) {
+    const token = await storage.getToken();
+    if (!token || tokenUtils.isExpired(token)) {
       return null;
     }
-    return token.extractUser(tokenValue);
+    return storage.getUser();
   },
 
   async getAuthHeader(): Promise<Record<string, string> | null> {
-    const tokenValue = await storage.getToken();
-    if (!tokenValue || token.isExpired(tokenValue)) {
-      return null;
-    }
-    return { 'Authorization': `Bearer ${tokenValue}` };
+    const token = await storage.getToken();
+    if (!token) return null;
+    return { 'Authorization': `Bearer ${token}` };
   },
 
   getUser: storage.getUser,

@@ -38,7 +38,6 @@ export function LogoutButton({
   };
   
   const confirmLogout = () => {
-    console.log('Logout button pressed, showing confirmation');
     if (Platform.OS === 'web') {
       if (window.confirm('¿Está seguro que desea cerrar sesión?')) {
         handleLogout();

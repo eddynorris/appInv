@@ -28,7 +28,6 @@ export function useGastosList() {
   // Función personalizada para obtener gastos con filtros
   const fetchGastosWithFilters = useCallback(async (page = 1, perPage = 10) => {
     // Aquí podemos implementar la lógica para añadir filtros adicionales
-    console.log(`Consultando gastos con filtros: ${JSON.stringify(filters)}, página: ${page}, por página: ${perPage}`);
     return await gastoApi.getGastos(page, perPage, filters);
   }, [filters]);
 
@@ -50,7 +49,6 @@ export function useGastosList() {
   // Cargar datos iniciales explícitamente al montar, con control para evitar llamadas duplicadas
   useEffect(() => {
     if (!isInitialLoadDone.current) {
-      console.log("useGastosList: Carga inicial de datos...");
       // Marcar como ejecutado para evitar llamadas duplicadas
       isInitialLoadDone.current = true;
       fetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
@@ -59,7 +57,6 @@ export function useGastosList() {
 
   // Wrapper para handlePageChange que evita llamadas innecesarias
   const handlePageChange = useCallback((page: number) => {
-    console.log(`Cambiando a página: ${page}`);
     // Solo llamar si es una página diferente
     if (page !== pagination.currentPage) {
       originalHandlePageChange(page);
@@ -68,7 +65,6 @@ export function useGastosList() {
 
   // Wrapper para handleItemsPerPageChange que evita llamadas innecesarias
   const handleItemsPerPageChange = useCallback((perPage: number) => {
-    console.log(`Cambiando items por página a: ${perPage}`);
     // Solo llamar si es un valor diferente
     if (perPage !== pagination.itemsPerPage) {
       originalHandleItemsPerPageChange(perPage);
@@ -128,7 +124,6 @@ export function useGastosList() {
 
   // Función para refrescar la lista de manera controlada
   const refresh = useCallback(() => {
-    console.log("useGastosList: Refrescando datos...");
     fetchData(pagination.currentPage, pagination.itemsPerPage);
   }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);
   

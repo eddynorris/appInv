@@ -59,15 +59,12 @@ export const ventaApi = {
       ? `/ventas/form-data?almacen_id=${almacenId}`
       : `/ventas/form-data`;
 
-    console.log(`ventaApi: Fetching endpoint: ${endpoint}`);
-
     // Pasar solo el endpoint relativo a fetchApi
     return fetchApi<VentaFormData>(endpoint, { method: 'GET' });
   },
 
   // Crear una nueva venta
   async createVenta(ventaData: CreateVentaPayload): Promise<Venta> {
-    console.log("Enviando para crear venta:", JSON.stringify(ventaData, null, 2));
     // Pasar solo el endpoint relativo a fetchApi
     return await fetchApi<Venta>('/ventas', {
       method: 'POST',
@@ -77,7 +74,6 @@ export const ventaApi = {
 
   // Actualizar una venta existente
   async updateVenta(id: number, ventaData: Partial<Venta>): Promise<Venta> {
-    console.log(`Enviando para actualizar venta ${id}:`, JSON.stringify(ventaData, null, 2));
     // Pasar solo el endpoint relativo a fetchApi
     return await fetchApi<Venta>(`/ventas/${id}`, {
       method: 'PUT',

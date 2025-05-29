@@ -30,7 +30,6 @@ export function usePagosList() {
   // Función personalizada para obtener pagos con filtros
   const fetchPagosWithFilters = useCallback(async (page = 1, perPage = 10) => {
     // Aquí podemos implementar la lógica para añadir filtros adicionales
-    console.log(`Consultando gastos con filtros: ${JSON.stringify(filters)}, página: ${page}, por página: ${perPage}`);
     return await pagoApi.getPagos(page, perPage, filters);
   }, [filters]);
 
@@ -157,13 +156,7 @@ export function usePagosList() {
     
     try {
       const success = await deletePagoDirectly(id);
-      
-      if (success) {
-        console.log("Pago eliminado exitosamente");
-      } else {
-        console.error("Error al eliminar pago");
-      }
-      
+
       return success;
     } catch (error: any) {
       console.error("Error al eliminar pago:", error.message);

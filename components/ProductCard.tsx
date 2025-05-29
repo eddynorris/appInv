@@ -39,7 +39,6 @@ const ProductCard: React.FC<ProductCardProps> = ({
   // Usar useMemo para calcular la URL de la imagen solo si url_foto cambia
   const imageUrl = useMemo(() => {
     const url = API_CONFIG.getImageUrl(presentacion.url_foto);
-    console.log(`Calculando URL de imagen (memoizada si no cambia): ${url || 'N/A'}`);
     return url || undefined;
   }, [presentacion.url_foto]); // Dependencia: url_foto
   

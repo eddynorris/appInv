@@ -72,7 +72,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       await authService.logout();
       setUser(null);
-      console.log('Logout successful, user is null'); // Add this log
     } catch (err) {
       console.error('Logout error:', err);
     } finally {

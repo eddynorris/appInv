@@ -39,8 +39,6 @@ interface ProductDetailsListProps {
   isPedido?: boolean; // Para determinar si es un pedido (usa precio_estimado) o venta (usa precio_unitario)
 }
 
-// Hacemos un log de la URL base para verificar configuración
-console.log('API base URL:', API_CONFIG.baseUrl);
 
 const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
   details,
@@ -54,10 +52,9 @@ const ProductDetailsList: React.FC<ProductDetailsListProps> = ({
   // Efecto para hacer log de los detalles a mostrar (debugging)
   useEffect(() => {
     if (details && details.length > 0) {
-      console.log(`Mostrando ${details.length} productos en lista de detalles.`);
       // Log el primero para ver su estructura
       const firstDetail = details[0];
-      console.log('Primer producto completo:', JSON.stringify(firstDetail, null, 2));
+
     }
   }, [details]);
   

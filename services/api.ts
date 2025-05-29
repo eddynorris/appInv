@@ -1,5 +1,4 @@
 // services/api.ts
-import { Platform } from 'react-native';
 import { 
   Cliente, 
   Producto,
@@ -24,7 +23,44 @@ import {
   DepositoPayload,
   UsuarioPayload,
 } from '@/models';
-import { authService } from './auth';
+
+// Import fetchApi without name conflict
+import { fetchApi as fetchApiUtil } from './fetchApi';
+
+// Import authService using dynamic import to avoid circular dependency
+let _authService: any;
+
+// Lazy load authService to avoid circular dependencies
+const getAuthService = async () => {
+  if (!_authService) {
+    const { authService } = await import('./auth');
+    _authService = authService;
+  }
+  return _authService;
+};
+
+// Re-exportar tipos y utilidades
+export * from './config';
+export { HttpError } from './fetchApi';
+
+// Interfaces para la estructura de respuesta de la API
+export interface Pagination {
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface ApiResponse<T> {
+  data: T[];
+  pagination: Pagination;
+}
+
+export interface DashboardDataResponse {
+  alertas_stock_bajo: Inventario[];
+  alertas_lotes_bajos: Lote[];
+  clientes_con_saldo_pendiente: ClienteSimple[];
+}
 
 // Interfaces para la estructura de respuesta de la API
 export interface Pagination {
@@ -100,71 +136,90 @@ interface HttpError extends Error {
   };
 }
 
-export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function fetchApi<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
   const url = `${API_CONFIG.baseUrl}${endpoint}`;
   
-  const authHeaders = await authService.getAuthHeader();
+  // Get auth headers if available
+  let authHeaders = {};
+  try {
+    const authService = await getAuthService();
+    authHeaders = (await authService.getAuthHeader()) || {};
+  } catch (error) {
+    console.warn('Error getting auth headers:', error);
+  }
   
-  // Verificar si se está enviando FormData
+  // Check if sending FormData
   const isFormData = options.body instanceof FormData;
   
-  // No incluir Content-Type para FormData, deja que el navegador lo establezca
-  const headers = {
-    ...(!isFormData ? API_CONFIG.headers : { 'Accept': 'application/json' }),
-    ...(authHeaders || {}),
-    ...(options.headers || {}),
-  };
-    
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-    
-    // Manejar respuestas sin contenido
-    if (response.status === 204) {
-      return null as T;
-    }
-    
-    // Leer el cuerpo de la respuesta UNA SOLA VEZ
-    let responseData: any;
-    try {
-      // Obtener el texto de la respuesta primero
-      const responseText = await response.text();
-      
-      // Si hay contenido, intentar parsearlo como JSON
-      if (responseText.trim()) {
-        try {
-          responseData = JSON.parse(responseText);
-        } catch (jsonError) {
-          // Si no es JSON válido, usar el texto en bruto
-          responseData = responseText;
-          console.warn("API response was not valid JSON:", responseText);
-        }
-      } else {
-        // Respuesta vacía
-        responseData = {};
+  // Configure default headers if not provided
+  const headers = new Headers({
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...options.headers,
+  });
+
+  // Add auth headers
+  if (authHeaders) {
+    Object.entries(authHeaders as Record<string, string>).forEach(([key, value]) => {
+      if (value) {
+        headers.set(key, value);
       }
-    } catch (readError : any) {
-      responseData = `Error reading response: ${readError.message}`;
-    }
+    });
+  }
 
+  // If it's FormData, let the browser set the Content-Type with the correct boundary
+  if (isFormData) {
+    headers.delete('Content-Type');
+  }
+
+  // Create fetch options with updated headers
+  const fetchOptions: RequestInit = {
+    ...options,
+    headers,
+    credentials: 'include', // Important for handling auth cookies
+  };
+
+  try {
+    const response = await fetch(url, fetchOptions);
+    
+    // If response is not ok, throw an error
     if (!response.ok) {
-      // La respuesta NO fue exitosa (>= 400)
-      console.error(`API error: ${response.status}`, responseData);
-
-      // Crear un error que incluya la respuesta
-      const error: HttpError = new Error(
-        responseData?.error || responseData?.message || `Error HTTP: ${response.status}`
-      );
-      error.response = {
-        status: response.status,
-        data: responseData,
-      };
-      throw error;
+      let errorData: { message?: string } = { message: 'Error en la solicitud' };
+      
+      // Try to get error message from response body
+      try {
+        const responseText = await response.text();
+        if (responseText) {
+          errorData = JSON.parse(responseText);
+        }
+      } catch (e) {
+        console.warn('Error parsing error response:', e);
+      }
+      
+      // If it's an authentication error, handle logout
+      if (response.status === 401) {
+        try {
+          const authService = await getAuthService();
+          await authService.logout();
+        } catch (logoutError) {
+          console.error('Error during logout:', logoutError);
+        }
+      }
+      
+      throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
     }
 
-    return responseData as T;
+    // Handle successful response
+    try {
+      const responseText = await response.text();
+      if (!responseText) return {} as T; // Return empty object for no content
+      return JSON.parse(responseText) as T;
+    } catch (e) {
+      console.error('Error parsing response:', e);
+      throw new Error('Error parsing server response');
+    }
   } catch (error: any) {
     console.error('API fetch error:', error);
     if (error.response) {
