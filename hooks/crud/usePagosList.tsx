@@ -103,24 +103,20 @@ export function usePagosList() {
       width: 1,
       sortable: true,
       render: (item: Pago) => {
-        // Color según método de pago
-        let color = '#757575'; // Gris por defecto
-        let label = item.metodo_pago;
+        // Mapeo de método de pago a etiqueta y color
+        const metodoPagoMap: Record<Pago['metodo_pago'], { label: string; color: string }> = {
+          efectivo: { label: 'Efectivo', color: '#4CAF50' },
+          transferencia: { label: 'Transferencia', color: '#2196F3' },
+          deposito: { label: 'Depósito', color: '#00BCD4' },
+          tarjeta: { label: 'Tarjeta', color: '#9C27B0' },
+          yape_plin: { label: 'Yape/Plin', color: '#FF9800' },
+          otro: { label: 'Otros', color: '#757575' }
+        };
         
-        switch (item.metodo_pago) {
-          case 'efectivo':
-            color = '#4CAF50'; // Verde
-            label = 'Efectivo';
-            break;
-          case 'transferencia':
-            color = '#2196F3'; // Azul
-            label = 'Transferencia';
-            break;
-          case 'tarjeta':
-            color = '#9C27B0'; // Púrpura
-            label = 'Tarjeta';
-            break;
-        }
+        const { label, color } = metodoPagoMap[item.metodo_pago] || { 
+          label: item.metodo_pago, 
+          color: '#757575' 
+        };
         
         return (
           <ThemedText style={{ color, fontWeight: '500' }}>

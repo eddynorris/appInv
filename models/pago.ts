@@ -6,7 +6,7 @@ export interface Pago {
     venta_id: number;
     monto: string;
     fecha: string;
-    metodo_pago: 'efectivo' | 'transferencia' | 'tarjeta';
+    metodo_pago: 'efectivo' | 'transferencia' | 'deposito' | 'tarjeta'| 'yape_plin'| 'otro';
     referencia?: string;
     url_comprobante?: string;
     usuario_id?: number;

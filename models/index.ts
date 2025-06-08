@@ -15,5 +15,4 @@ export * from './proveedor';
 export * from './user'; // Contiene User, UserSimple, UsuarioPayload
 export * from './venta';
 export * from './ventadetalle';
-export * from './depositobancario'; // Contiene DepositoBancario, DepositoPayload
 export * from './apiResponses';

@@ -70,11 +70,6 @@ export default function MoreScreen() {
                   icon="creditcard.fill" // Mantenido
                   route="/pagos"
                 />
-                <MenuItem
-                  title="Depósitos"
-                  icon="arrow.up.to.line" // Cambiado de arrow.up.fill
-                  route="/depositos"
-                />
               </ThemedView>
           {/* Show all sections for admin users */}
           {user?.rol === 'admin' && (

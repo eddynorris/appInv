@@ -30,7 +30,7 @@ export default function PagosScreen() {
 
   // Función para navegar a la pantalla de creación
   const handleAddPago = () => {
-    router.push('/pagos/create');
+    router.push('/pagos/createBatch');
   };
 
   return (
@@ -133,12 +133,10 @@ export default function PagosScreen() {
           )}
           numColumns={1}
         />
-        {/* 
         <FloatingActionButton 
           icon="plus.circle.fill" 
           onPress={handleAddPago} 
         />
-        */}
       </ThemedView>
     </ScreenContainer>
   );

@@ -564,11 +564,19 @@ export const pagoApi = {
     return fetchApi<Pago>(`/pagos/${id}`);
   },
 
-// Método para obtener pagos por venta (Usando endpoint dedicado)
-getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
-  // Llamar al endpoint específico (Asegúrate que la ruta sea correcta)
-  return fetchApi<Pago[]>(`/pagos/venta/${ventaId}`);
-},
+  createPagosBatch: async (formData: FormData): Promise<any> => { //
+    return fetchApi<any>('/pagos/batch', { //
+      method: 'POST',
+      body: formData,
+      // Las cabeceras para FormData se manejan automáticamente por fetchApi
+      // No es necesario especificar 'Content-Type': 'multipart/form-data' aquí
+    });
+  },
+  // Método para obtener pagos por venta (Usando endpoint dedicado)
+  getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
+    // Llamar al endpoint específico (Asegúrate que la ruta sea correcta)
+    return fetchApi<Pago[]>(`/pagos/venta/${ventaId}`);
+  },
 
   createPago: async (pago: {
     venta_id: number;
@@ -602,13 +610,7 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
   updatePago: async (id: number, pago: Partial<Pago>): Promise<Pago> => {
     return fetchApi<Pago>(`/pagos/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(pago),
-    });
-  },
-
-  deletePago: async (id: number): Promise<any> => {
-    return fetchApi<any>(`/pagos/${id}`, {
-      method: 'DELETE',
+      body: JSON.stringify(pago)
     });
   },
 
@@ -620,18 +622,18 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
       pago = { ...pago, fecha: fechaFormateada };
     }
     
-    // Usar Object.entries para asegurar tipos
+    // Agregar campos del pago al FormData
     Object.entries(pago).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        // Asegurar que value es string antes de añadirlo
         formData.append(key, String(value));
       }
     });
     
+    // Agregar archivo de comprobante
     const uriParts = comprobanteUri.split('.');
     const fileType = uriParts[uriParts.length - 1];
     
-    // @ts-ignore
+    // @ts-ignore - Tipado especial para React Native
     formData.append('comprobante', {
       uri: comprobanteUri,
       name: `comprobante.${fileType}`,
@@ -654,18 +656,18 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
   
     const formData = new FormData();
     
-    // Usar Object.entries para asegurar tipos
+    // Agregar campos del pago al FormData
     Object.entries(pago).forEach(([key, value]) => {
-       if (value !== undefined && value !== null) {
-        // Asegurar que value es string antes de añadirlo
+      if (value !== undefined && value !== null) {
         formData.append(key, String(value));
       }
     });
     
+    // Agregar archivo de comprobante
     const uriParts = comprobanteUri.split('.');
     const fileType = uriParts[uriParts.length - 1];
     
-    // @ts-ignore
+    // @ts-ignore - Tipado especial para React Native
     formData.append('comprobante', {
       uri: comprobanteUri,
       name: `comprobante.${fileType}`,
@@ -675,10 +677,15 @@ getPagosByVenta: async (ventaId: number): Promise<Pago[]> => {
     return fetchApi<Pago>(`/pagos/${id}`, {
       method: 'PUT',
       headers: {
-        // Dejar que el navegador establezca Content-Type para multipart
         'Accept': 'application/json'
       },
       body: formData,
+    });
+  },
+  
+  deletePago: async (id: number): Promise<any> => {
+    return fetchApi<any>(`/pagos/${id}`, {
+      method: 'DELETE',
     });
   }
 };
