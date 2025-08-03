@@ -8,7 +8,7 @@ const getBaseUrl = (): string => {
     }
   
     // Fallback si la variable de entorno no está definida
-    const fallbackUrl = 'https://manngojk.lat'; // Incluye http:// y sin / al final
+    const fallbackUrl = 'https://api.manngojk.lat'; // Incluye http:// y sin / al final
     console.warn(`EXPO_PUBLIC_API_URL no está definida. Usando fallback: ${fallbackUrl}`);
     return fallbackUrl;
   };

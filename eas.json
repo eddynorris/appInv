@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.4.0",
-    "appVersionSource": "remote" // Esto significa que EAS tomará la versión de tu app.json
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -11,17 +11,16 @@
         "buildType": "apk"
       }
     },
-    "preview": { // Puedes usar este perfil para APKs de prueba/pre-producción
-      "distribution": "internal", // 'internal' es bueno para obtener un enlace de descarga
+    "preview": {
+      "distribution": "internal",
       "android": {
         "buildType": "apk"
-        // "buildProfile": "preview" <-- ELIMINA ESTA LÍNEA
       }
     },
-    "production": { // Si quieres un APK para "producción" (distribución manual)
-      "distribution": "internal", // Para obtener un enlace de descarga o el archivo
+    "production": {
+      "distribution": "internal", 
       "android": {
-        "buildType": "apk" // Cambiado de "app-bundle" a "apk"
+        "buildType": "apk"
       }
       // "autoIncrement": true, // autoIncrement es útil con 'eas submit',
                                // pero si solo haces 'eas build', tendrás que manejar
@@ -30,7 +29,5 @@
     }
   },
   "submit": {
-    // No necesitas esta sección si no vas a usar 'eas submit'
-    // "production": {}
   }
 }
