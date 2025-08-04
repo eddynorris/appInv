@@ -8,7 +8,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { usePresentacionItem, TIPOS_PRESENTACION } from '@/hooks/crud/usePresentacionItem'; // Importar hook de item
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { FormField } from '@/components/form/FormField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { IconSymbol } from '@/components/ui/IconSymbol';

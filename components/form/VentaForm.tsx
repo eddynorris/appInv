@@ -11,10 +11,25 @@ import { FormSelect } from '@/components/form/FormSelect';
 import DateField from '@/components/form/DateField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import ProductGrid from '@/components/ProductGrid';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Cliente, Almacen, Presentacion } from '@/models';
-import { DetalleVentaForm, VentaForm as VentaFormType } from '@/hooks/crud/useVentas';
+// Tipos movidos a hooks/ventas/useVentaForm.ts
+interface DetalleVentaForm {
+  id?: number;
+  presentacion_id: number;
+  cantidad: number;
+  precio_unitario: string;
+}
+
+interface VentaFormType {
+  cliente_id: string;
+  almacen_id: string;
+  fecha: string;
+  tipo_pago: 'contado' | 'credito';
+  consumo_diario_kg: string;
+  detalles: DetalleVentaForm[];
+}
 import { FormStyles } from '@/styles/Theme';
 
 interface VentaFormProps {

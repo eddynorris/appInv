@@ -15,7 +15,7 @@ import { SalesLineChart } from '@/components/dashboard/SalesLineChart';
 // import { PresentationsPieChart } from '@/components/dashboard/PresentationsPieChart'; // Comentado si no se usa
 import { useSalesChart } from '@/hooks/reportes/useSalesChart';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { Divider } from '@/components/layout/Divider';
 // import { formatCurrency } from '@/utils/formatters'; // Descomentar si se usa
 

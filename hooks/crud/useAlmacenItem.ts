@@ -1,6 +1,6 @@
 // hooks/crud/useAlmacenItem.ts
 import { useState, useCallback } from 'react';
-import { almacenApi } from '@/services/api';
+import { almacenApi } from '@/services';
 import { Almacen } from '@/models';
 
 export function useAlmacenItem() {

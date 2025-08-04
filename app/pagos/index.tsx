@@ -10,7 +10,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { usePagosList } from '@/hooks/crud/usePagosList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 export default function PagosScreen() {

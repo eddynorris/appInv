@@ -1,16 +1,12 @@
-import { API_CONFIG, fetchApi, ApiResponse } from './api';
+import { API_CONFIG, fetchApi } from '../core/apiClient';
+import { ApiResponse } from '../core/types';
 import { Venta, VentaDetalle, Pago, ClienteSimple, AlmacenSimple, Presentacion } from '@/models';
 
-// Interfaz para la respuesta de /ventas/form-data
-interface VentaFormData {
+// Interfaz para la respuesta de /ventas/form-data según la estructura real del API
+export interface VentaFormData {
   clientes: ClienteSimple[];
   almacenes: AlmacenSimple[];
-  // Presentaciones con stock específico para el almacén (si se proporcionó ID)
-  presentaciones?: Presentacion[]; 
-  // Presentaciones con detalle de stock global (si NO se proporcionó ID)
-  presentaciones_con_stock_global?: Presentacion[]; 
-  // Añadir la nueva propiedad opcional para stock local
-  presentaciones_con_stock_local?: Presentacion[]; 
+  presentaciones_disponibles: Presentacion[];
 }
 
 // --- NUEVA INTERFAZ para datos de creación ---

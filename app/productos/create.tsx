@@ -6,8 +6,8 @@ import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { productoApi } from '@/services/api';
-import { Colors } from '@/constants/Colors';
+import { productoApi } from '@/services';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function CreateProductoScreen() {

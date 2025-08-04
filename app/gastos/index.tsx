@@ -10,7 +10,7 @@ import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useGastosList } from '@/hooks/crud/useGastosList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function GastosScreen() {
   // Usar el hook refactorizado para la lista con control de permisos

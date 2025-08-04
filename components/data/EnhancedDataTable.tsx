@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { PaginationControls } from '@/components/PaginationControls';
 import { ConfirmationDialog } from '@/components/dialogs/ConfirmationDialog';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/context/AuthContext'; // Importar el contexto de autenticación
 

@@ -5,7 +5,7 @@ import { LineChart, BarChart } from 'react-native-chart-kit';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 interface SalesData {

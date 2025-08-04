@@ -5,7 +5,7 @@ import { Stack, router, Href } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { LogoutButton } from '@/components/LogoutButton';
 import { useAuth } from '@/context/AuthContext';

@@ -12,7 +12,7 @@ import { Venta } from '@/models/venta';
 import { usePagosBatchProcess, PagoJsonDataItem } from '@/hooks/crud/usePagosBatchProcess'; // Ajustar la ruta si es necesario
 import { Picker } from '@react-native-picker/picker';
 import { formatCurrency } from '@/utils/formatters';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 // Interfaz para el estado local de las ventas en la pantalla (para UI)
 interface PagoSeleccionadoParaUI extends Venta {

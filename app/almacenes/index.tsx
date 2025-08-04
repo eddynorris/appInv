@@ -10,7 +10,7 @@ import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useAlmacenesList } from '@/hooks/crud/useAlmacenesList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function AlmacenesScreen() {
   // Usar el hook refactorizado para la LISTA

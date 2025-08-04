@@ -1,27 +1,28 @@
-// hooks/crud/useVentasPendientes.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ventaApi } from '@/services/venta';
+import { ventaApi } from '@/services/entities/ventaService';
 import { Venta } from '@/models';
+import { useErrorHandler } from '@/hooks/core/useErrorHandler';
 
 export function useVentasPendientes() {
+  const { error, handleError, clearError } = useErrorHandler();
+  
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedVentaId, setSelectedVentaId] = useState<string>('');
 
   // Cargar las ventas con pagos pendientes
   const loadVentas = useCallback(async () => {
     try {
       setIsLoading(true);
-      setError(null);
+      clearError();
       
       // Obtener ventas con estado pendiente o parcial
-      const response = await ventaApi.getVentas(1, 100, 'estado_pago=pendiente,parcial');
+      const response = await ventaApi.getVentas(1, 100, {
+        estado_pago: 'pendiente,parcial'
+      });
       
       if (response && response.data) {
-        // Filtrar solo ventas con pagos pendientes
         const ventasConPendientes = response.data;
-        
         setVentas(ventasConPendientes);
         
         // Preseleccionar la primera venta si hay alguna disponible
@@ -31,12 +32,11 @@ export function useVentasPendientes() {
       }
       
     } catch (err) {
-      console.error('Error loading ventas pendientes:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar ventas pendientes');
+      handleError(err, 'Error al cargar ventas pendientes');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [handleError, clearError]);
 
   // Cargar datos al montar el componente
   useEffect(() => {

@@ -1,16 +1,16 @@
 // reportes/proyecciones.tsx
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Alert, ActivityIndicator, TouchableOpacity, View, Button } from 'react-native';
+import { StyleSheet, ActivityIndicator, TouchableOpacity, View, Button } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { DateRangeSelectorV2 } from '@/components/dashboard/DateRangeSelectorV2';
+import { DateRangeSelector } from '@/components/dashboard/DateRangeSelector';
 
 import { ThemedView } from '@/components/ThemedView';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable } from '@/components/data/DataTable';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
 import { usePedidosList } from '@/hooks/crud/usePedidosList'; // Ajusta la ruta si es necesario
 import { Pedido } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Función auxiliar para obtener YYYY-MM-DD local
@@ -50,13 +50,13 @@ export default function ProyeccionesScreen() {
 
   const colorScheme = useColorScheme() ?? 'light';
 
-  // Handle date range changes from the new DateRangeSelectorV2
+  // Handle date range changes from the DateRangeSelector
   const handleDateRangeChange = (start: Date, end: Date) => {
     handleDateFilterChange('fechaInicio', getLocalDateString(start));
     handleDateFilterChange('fechaFin', getLocalDateString(end));
   };
 
-  // Parse date strings to Date objects for the DateRangeSelectorV2
+  // Parse date strings to Date objects for the DateRangeSelector
   const startDate = dateFilters.fechaInicio ? new Date(dateFilters.fechaInicio) : new Date();
   const endDate = dateFilters.fechaFin ? new Date(dateFilters.fechaFin) : new Date();
 
@@ -78,38 +78,14 @@ export default function ProyeccionesScreen() {
     router.push('/pedidos/create');
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/pedidos/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    Alert.alert(
-      'Eliminar Pedido',
-      '¿Está seguro que desea eliminar este pedido?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await deletePedido(parseInt(id));
-            if (success) {
-              Alert.alert('Éxito', 'Pedido eliminado correctamente');
-            } else {
-              Alert.alert('Error', 'No se pudo eliminar el pedido');
-            }
-          },
-        },
-      ]
-    );
-  };
+  // handleEdit and handleDelete are now handled by EnhancedDataTable internally
 
   return (
     <>
       <Stack.Screen options={{ title: 'Proyecciones (Pedidos)', headerShown: true }} />
       <ThemedView style={styles.container}>
         {/* Date Range Selector */}
-        <DateRangeSelectorV2
+        <DateRangeSelector
           startDate={startDate}
           endDate={endDate}
           onDateChange={handleDateRangeChange}
@@ -127,32 +103,42 @@ export default function ProyeccionesScreen() {
         {/* Indicador de carga mientras se actualizan los filtros de UI antes de aplicar */}
         {isLoading && <ActivityIndicator style={{ marginVertical: 10 }}/>}
 
-        <DataTable<Pedido>
+        <EnhancedDataTable<Pedido>
           data={pedidos}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
           baseRoute="/pedidos"
           isLoading={isLoading}
           error={error}
           onRefresh={refresh}
-          currentPage={pagination.currentPage}
-          totalPages={pagination.totalPages}
-          onPageChange={pagination.onPageChange}
-          itemsPerPage={pagination.itemsPerPage}
-          onItemsPerPageChange={pagination.onItemsPerPageChange}
-          totalItems={pagination.totalItems}
-          sortColumn={pagination.sortColumn}
-          sortOrder={pagination.sortOrder}
-          onSort={pagination.onSort}
-          emptyMessage="No hay pedidos disponibles"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange,
+          }}
+          sorting={{
+            sortColumn: pagination.sortColumn,
+            sortOrder: pagination.sortOrder,
+            onSort: pagination.onSort,
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true,
+          }}
+          deleteOptions={{
             title: 'Eliminar Pedido',
             message: '¿Está seguro que desea eliminar este pedido?',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
+            onDelete: async (id: number | string) => {
+              const success = await deletePedido(parseInt(id.toString()));
+              return success;
+            },
           }}
+          emptyMessage="No hay pedidos disponibles"
         />
         <FloatingActionButton icon="plus.circle.fill" onPress={handleAddPedido} />
       </ThemedView>

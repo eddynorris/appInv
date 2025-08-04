@@ -1,8 +1,8 @@
 // hooks/crud/usePagoItem.ts
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { pagoApi } from '@/services/api';
-import { ventaApi } from '@/services/venta';
+import { pagoApi } from '@/services';
+import { ventaApi } from '@/services/entities/ventaService';
 import { Pago } from '@/models';
 import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';
 
@@ -77,7 +77,16 @@ export function usePagoItem() {
       
       // Si hay un comprobante, usar el método con comprobante
       if (comprobante) {
-        response = await pagoApi.createPagoWithComprobante(data, comprobante.uri);
+        const formData = new FormData();
+        Object.entries(data).forEach(([key, value]) => {
+          formData.append(key, value?.toString() || '');
+        });
+        formData.append('comprobante', {
+          uri: comprobante.uri,
+          type: comprobante.type,
+          name: comprobante.name,
+        } as any);
+        response = await pagoApi.createPagoWithComprobante(formData);
       } else {
         // Si no hay comprobante, usar el método JSON estándar
         response = await pagoApi.createPago(data);
@@ -106,7 +115,16 @@ export function usePagoItem() {
       
       // Si hay un nuevo comprobante, usar el método con comprobante
       if (comprobante) {
-        response = await pagoApi.updatePagoWithComprobante(id, data, comprobante.uri);
+        const formData = new FormData();
+        Object.entries(data).forEach(([key, value]) => {
+          formData.append(key, value?.toString() || '');
+        });
+        formData.append('comprobante', {
+          uri: comprobante.uri,
+          type: comprobante.type,
+          name: comprobante.name,
+        } as any);
+        response = await pagoApi.updatePagoWithComprobante(id, formData);
       } else {
         // Si no hay un nuevo comprobante, usar el método estándar
         response = await pagoApi.updatePago(id, data);

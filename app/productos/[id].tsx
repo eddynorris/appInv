@@ -5,9 +5,9 @@ import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { productoApi } from '@/services/api';
+import { productoApi } from '@/services';
 import { Producto } from '@/models';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 

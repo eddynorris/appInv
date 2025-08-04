@@ -7,10 +7,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
-import { useVentaItem } from '@/hooks/crud/useVentaItem'; // Hook refactorizado
+import { useVentaDetail } from '@/hooks/ventas'; // Hook refactorizado
 import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import ProductDetailsList from '@/components/ProductDetailsList';
 import PagosList from '@/components/data/PagosList'; // Componente para mostrar pagos
@@ -21,27 +21,23 @@ export default function VentaDetailScreen() {
   const idNumerico = id ? parseInt(id as string) : 0;
   const colorScheme = useColorScheme() ?? 'light';
 
-  // Usar el hook de item de venta
+  // Usar el hook de detalle de venta
   const {
     venta,
-    pagos,
     isLoading,
     error,
-    getVenta,
-    // Añadir deleteVenta si se quiere permitir borrar desde detalles
-  } = useVentaItem();
+    refresh,
+    handleEdit,
+    handleDelete,
+  } = useVentaDetail({ id: id || null });
 
   // Cargar datos de la venta
   useEffect(() => {
     if (idNumerico) {
-      getVenta(idNumerico);
+      refresh();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idNumerico]); // No incluir getVenta para evitar bucles infinitos
-
-  const handleEdit = () => {
-    router.push(`/ventas/edit/${idNumerico}`);
-  };
+  }, [idNumerico]); // No incluir refresh para evitar bucles infinitos
 
   const handleAddPago = () => {
     // Pasar el ID de la venta al crear pago
@@ -127,7 +123,7 @@ export default function VentaDetailScreen() {
             {/* Sección de Pagos */} 
             <DetailSection title="Pagos Recibidos">
               <PagosList 
-                pagos={pagos} 
+                pagos={venta?.pagos || []} 
                 isLoading={isLoading} // Podría tener su propio loading state si se carga separado
                 onAddPago={handleAddPago}
                 ventaTotal={parseFloat(venta.total || '0')}

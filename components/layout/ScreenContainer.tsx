@@ -4,7 +4,7 @@ import { ScrollView, ActivityIndicator, StyleSheet, ViewProps } from 'react-nati
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Stack } from 'expo-router';
 import { ScreenStyles } from '@/styles/Theme';

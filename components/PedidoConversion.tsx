@@ -5,8 +5,7 @@ import { router } from 'expo-router';
 import { ThemedView } from './ThemedView';
 import { ThemedText } from './ThemedText';
 import { IconSymbol } from './ui/IconSymbol';
-import { pedidoApi } from '@/services/api';
-import { Colors } from '@/constants/Colors';
+import { pedidoApi } from '@/services';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 interface PedidoConversionProps {

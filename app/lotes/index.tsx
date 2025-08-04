@@ -11,7 +11,7 @@ import { Divider } from '@/components/layout/Divider';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { useLotesList } from '@/hooks/crud/useLotesList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function LotesScreen() {
   // Usar el hook refactorizado para la lista

@@ -1,113 +1,102 @@
-// hooks/crud/useClientesList.ts
-import { useMemo, useEffect, useCallback, useState } from 'react';
-import { useApiResource } from '../useApiResource';
-import { clienteApi } from '@/services/api';
+// hooks/crud/useClientesList.tsx - Migrated to use useListWithFilters
+import { useMemo, useCallback } from 'react';
+import { clienteService } from '@/services';
 import { Cliente } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
+import { useListWithFilters } from '@/hooks/core/useListWithFilters';
 
-// Parámetros iniciales y filtros
-const DEFAULT_INITIAL_PARAMS = { page: 1, perPage: 10 };
-const DEFAULT_FILTERS = { ciudad: '' }; // Añadir filtro inicial para ciudad
+// Default filters
+const DEFAULT_FILTERS = { ciudad: '' };
+
+interface ClienteFilters {
+  ciudad: string;
+}
 
 export function useClientesList() {
-  // Estado para filtros locales
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-
-  // Función de fetch adaptada para incluir filtros
-  const fetchClientesWithFilters = useCallback(async (page = DEFAULT_INITIAL_PARAMS.page, perPage = DEFAULT_INITIAL_PARAMS.perPage) => {
+  // Memoized fetch function to prevent infinite loops
+  const fetchClientes = useCallback(async (page: number, perPage: number, filters: ClienteFilters) => {
     const queryFilters: Record<string, any> = {};
     if (filters.ciudad) queryFilters.ciudad = filters.ciudad;
-    // Aquí podrías añadir más filtros si fueran necesarios (ej: nombre, etc.)
     
-    return await clienteApi.getClientes(page, perPage, queryFilters);
-  }, [filters]); // Depende de los filtros locales
-
-  const {
-    data: clientes,
-    isLoading,
-    error,
-    pagination,
-    fetchData: originalFetchData,
-    handlePageChange,
-    handleItemsPerPageChange,
-    deleteItem: deleteClienteDirectly,
-  } = useApiResource<Cliente>({
-    initialParams: DEFAULT_INITIAL_PARAMS,
-    fetchFn: fetchClientesWithFilters, // Usar la función con filtros
-    deleteFn: clienteApi.deleteCliente,
-  });
-
-  // Cargar datos iniciales
-  useEffect(() => {
-    if (clientes.length === 0) {
-      // Usar originalFetchData para evitar bucle con fetchClientesWithFilters
-      originalFetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalFetchData, clientes.length]);
-
-  // Definir columnas, añadiendo ciudad
-  const columns = useMemo(() => [
-    { id: 'id', label: 'ID', width: 0.5, sortable: true },
-    { id: 'nombre', label: 'Nombre', width: 2, sortable: true },
-    { id: 'telefono', label: 'Teléfono', width: 1, sortable: true },
-    { id: 'ciudad', label: 'Ciudad', width: 1, sortable: true, render: (item: Cliente) => <ThemedText>{item.ciudad || '-'}</ThemedText> }, // Nueva columna
-    { id: 'direccion', label: 'Dirección', width: 1.5, render: (item: Cliente) => <ThemedText>{item.direccion || '-'}</ThemedText> },
-    { id: 'saldo_pendiente', label: 'Saldo', width: 1, render: (item: Cliente) => <ThemedText>${parseFloat(item.saldo_pendiente || '0').toFixed(2)}</ThemedText> },
-  ], []);
-
-  // Función explícita para refrescar la lista
-  const refresh = useCallback(() => {
-    // Usar originalFetchData para refrescar con los filtros actuales
-    originalFetchData(pagination.currentPage, pagination.itemsPerPage);
-  }, [originalFetchData, pagination.currentPage, pagination.itemsPerPage]);
-
-  // Wrapper para la función de borrado
-  const deleteClienteAndRefresh = useCallback(async (id: number): Promise<boolean> => {
-    try {
-      await deleteClienteDirectly(id);
-      return true;
-    } catch (error: any) {
-      console.error("Error al eliminar cliente:", error.message);
-      return false;
-    }
-  }, [deleteClienteDirectly]);
-
-  // Handlers para filtros locales
-  const handleFilterChange = useCallback((filterKey: keyof typeof DEFAULT_FILTERS, value: string) => {
-      setFilters(prev => ({ ...prev, [filterKey]: value }));
+    return await clienteService.getClientes(page, perPage, queryFilters);
   }, []);
 
-  const applyFilters = useCallback(() => {
-    // Refrescar desde la página 1 con los filtros aplicados
-    originalFetchData(1, pagination.itemsPerPage ?? DEFAULT_INITIAL_PARAMS.perPage);
-  }, [originalFetchData, pagination.itemsPerPage]);
+  // Use the generic list hook
+  const listHook = useListWithFilters<Cliente, ClienteFilters>({
+    fetchFn: fetchClientes,
+    defaultFilters: DEFAULT_FILTERS,
+    initialItemsPerPage: 10,
+  });
 
-  const clearFilters = useCallback(() => {
-    setFilters(DEFAULT_FILTERS); // Resetear estado local
-    // Refrescar desde la página 1 sin filtros locales
-    originalFetchData(1, pagination.itemsPerPage ?? DEFAULT_INITIAL_PARAMS.perPage);
-  }, [originalFetchData, pagination.itemsPerPage]);
+  // Define table columns
+  const columns = useMemo(() => [
+    {
+      id: 'id',
+      label: 'ID',
+      width: 0.5,
+      sortable: true,
+    },
+    {
+      id: 'nombre',
+      label: 'Nombre',
+      width: 2,
+      sortable: true,
+    },
+    {
+      id: 'telefono',
+      label: 'Teléfono',
+      width: 1.5,
+      render: (item: Cliente) => (
+        <ThemedText numberOfLines={1}>
+          {item.telefono || 'N/A'}
+        </ThemedText>
+      ),
+    },
+    {
+      id: 'ciudad',
+      label: 'Ciudad',
+      width: 1.5,
+      render: (item: Cliente) => (
+        <ThemedText numberOfLines={1}>
+          {item.ciudad || 'N/A'}
+        </ThemedText>
+      ),
+    },
+  ], []);
+
+  // Delete function
+  const deleteCliente = async (id: number): Promise<boolean> => {
+    try {
+      await clienteService.deleteCliente(id);
+      listHook.refresh(); // Refresh the list after deletion
+      return true;
+    } catch (error) {
+      console.error('Error deleting cliente:', error);
+      return false;
+    }
+  };
 
   return {
-    clientes,
-    isLoading,
-    error,
+    // Data from the generic hook
+    clientes: listHook.data,
+    isLoading: listHook.isLoading,
+    error: listHook.error,
+    
+    // Filters
+    filters: listHook.filters,
+    handleFilterChange: listHook.handleFilterChange,
+    applyFilters: listHook.applyFilters,
+    clearFilters: listHook.clearFilters,
+    
+    // Pagination and sorting
+    pagination: listHook.pagination,
+    sorting: listHook.sorting,
+    
+    // Actions
+    refresh: listHook.refresh,
+    deleteCliente,
+    
+    // Table configuration
     columns,
-    pagination: {
-      currentPage: pagination.currentPage,
-      totalPages: pagination.totalPages,
-      itemsPerPage: pagination.itemsPerPage,
-      totalItems: pagination.totalItems,
-      onPageChange: handlePageChange,
-      onItemsPerPageChange: handleItemsPerPageChange,
-    },
-    // Exponer filtros y sus handlers
-    filters,
-    handleFilterChange,
-    applyFilters,
-    clearFilters,
-    refresh,
-    deleteCliente: deleteClienteAndRefresh,
   };
 }

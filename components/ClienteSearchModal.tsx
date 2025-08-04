@@ -6,10 +6,10 @@ import debounce from 'lodash.debounce';
 import { ThemedView } from './ThemedView';
 import { ThemedText } from './ThemedText';
 import { IconSymbol } from './ui/IconSymbol';
-import { clienteApi } from '@/services/api';
+import { clienteApi } from '@/services';
 import { ClienteSimple, Cliente } from '@/models';
 import { ClienteFormModal } from './ClienteModal'; // Para crear nuevo cliente
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ActionButtons } from './buttons/ActionButtons';
 import { FormStyles, Spacing } from '@/styles/Theme';
@@ -262,4 +262,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-}); 
+});

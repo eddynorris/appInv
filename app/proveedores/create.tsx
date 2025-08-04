@@ -4,7 +4,7 @@ import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useProveedorItem } from '@/hooks/crud/useProveedorItem';
 import { useForm } from '@/hooks/useForm';

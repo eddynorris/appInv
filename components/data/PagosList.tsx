@@ -6,7 +6,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Divider } from '@/components/layout/Divider';
 import { Pago } from '@/models';
 import { formatCurrency, formatDate } from '@/utils/formatters';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { router } from 'expo-router';
 

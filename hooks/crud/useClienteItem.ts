@@ -1,93 +1,28 @@
-// hooks/crud/useClienteItem.ts
-import { useState, useCallback } from 'react';
-import { clienteApi } from '@/services/api'; // Asume que tienes este servicio API
-import { Cliente } from '@/models'; // Asume que tienes este modelo
-import { Alert } from 'react-native';
+// hooks/crud/useClienteItem.ts - Migrated to use useSimpleCRUD
+import { clienteService } from '@/services';
+import { Cliente } from '@/models';
+import { useSimpleCRUD } from '@/hooks/core/useSimpleCRUD';
 
 export function useClienteItem() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const simpleCrud = useSimpleCRUD<Cliente>({
+    apiService: {
+      get: (id: number) => clienteService.getCliente(id),
+      create: (data: Partial<Cliente>) => clienteService.createCliente(data),
+      update: (id: number, data: Partial<Cliente>) => clienteService.updateCliente(id, data),
+      delete: (id: number) => clienteService.deleteCliente(id),
+    },
+    entityName: 'Cliente',
+    routePrefix: '/clientes',
+  });
 
-  // Obtener un cliente específico
-  const getCliente = useCallback(async (id: number): Promise<Cliente | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Llama directamente a la función de la API
-      return await clienteApi.getCliente(id);
-    } catch (err) {
-      console.error('Error getting cliente item:', err);
-      const message = err instanceof Error ? err.message : 'Error al obtener el cliente';
-      setError(message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Crear un nuevo cliente (incluir ciudad)
-  const createCliente = useCallback(async (data: Partial<Cliente>): Promise<Cliente | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Asegurarse de que ciudad se envía si está presente en data
-      return await clienteApi.createCliente(data);
-    } catch (err) {
-      console.error('Error creating cliente item:', err);
-      const message = err instanceof Error ? err.message : 'Error al crear el cliente';
-      setError(message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Actualizar un cliente específico (incluir ciudad)
-  const updateCliente = useCallback(async (id: number, data: Partial<Cliente>): Promise<Cliente | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Asegurarse de que ciudad se envía si está presente en data
-      return await clienteApi.updateCliente(id, data);
-    } catch (err) {
-      console.error('Error updating cliente item:', err);
-      const message = err instanceof Error ? err.message : 'Error al actualizar el cliente';
-      setError(message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Eliminar un cliente específico
-  const deleteCliente = useCallback(async (id: number): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Llama directamente a la función de la API
-      await clienteApi.deleteCliente(id);
-      return true;
-    } catch (err: any) { // Capturar como 'any' para inspeccionar propiedades de forma segura
-      console.error('Error deleting cliente item:', err);
-      const message = err instanceof Error ? err.message : 'Error al eliminar el cliente';
-      setError(message);
-      Alert.alert("Error", message);
-      return false; // Fallo
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Return with legacy API compatibility
   return {
-    // Estado de la operación actual del ítem
-    isLoading,
-    error,
-    // Funciones para operar sobre un ítem
-    getCliente,
-    createCliente,
-    updateCliente,
-    deleteCliente,
-    // Utilidad para manejar errores externamente si es necesario
-    setError
+    ...simpleCrud,
+    // Legacy API methods
+    getCliente: simpleCrud.loadItem,
+    createCliente: simpleCrud.createItem,
+    updateCliente: simpleCrud.updateItem,
+    deleteCliente: simpleCrud.deleteItem,
+    cliente: simpleCrud.item,
   };
 }

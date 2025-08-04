@@ -12,7 +12,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { usuarioApi } from '@/services/api';
 import { User } from '@/models';
 import { useAuth } from '@/context/AuthContext';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function UsuarioDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

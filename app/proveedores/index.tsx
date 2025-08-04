@@ -9,7 +9,7 @@ import { FloatingActionButton } from '@/components/FloatingActionButton';
 import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { Proveedor } from '@/models';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useProveedoresList } from '@/hooks/crud/useProveedoresList';
 
 export default function ProveedoresScreen() {

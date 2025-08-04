@@ -12,7 +12,7 @@ import { usePedidosList } from '@/hooks/crud/usePedidosList';
 import { Collapsible } from '@/components/Collapsible';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useAuth } from '@/context/AuthContext';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 

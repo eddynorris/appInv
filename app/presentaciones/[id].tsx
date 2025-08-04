@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { usePresentacionItem } from '@/hooks/crud/usePresentacionItem'; // Importar hook de item
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { DetailCard, DetailSection, DetailRow } from '@/components/data/DetailCard';
 import { ActionButtons } from '@/components/buttons/ActionButtons';

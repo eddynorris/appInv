@@ -9,7 +9,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { useUsuariosList } from '@/hooks/crud/useUsuariosList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function UsuariosScreen() {
   const {

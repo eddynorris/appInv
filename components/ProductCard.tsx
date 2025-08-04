@@ -1,9 +1,9 @@
 import React, { memo, useMemo } from 'react';
-import { View, Image, TextInput, TouchableOpacity } from 'react-native';
+import { Image, TextInput, TouchableOpacity } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { API_CONFIG } from '@/services/api';
+import { API_CONFIG } from '@/services';
 import { Presentacion } from '@/models';
 import { ProductCardStyles as styles } from '@/styles/Theme';
 

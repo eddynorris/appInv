@@ -3,7 +3,7 @@ import { Modal, FlatList, TouchableOpacity, Image } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { API_CONFIG } from '@/services/api';
+import { API_CONFIG } from '@/services';
 import { Presentacion } from '@/models';
 import { ModalStyles as styles } from '@/styles/Theme';
 
@@ -53,10 +53,10 @@ const ProductItem = memo(({ item, onSelect }: {
       <ThemedView style={styles.productDetails}>
         <ThemedText style={styles.productName}>{item.nombre || `Producto ${item.id}`}</ThemedText>
         <ThemedText style={styles.productInfo}>
-          {item.producto?.nombre || 'Producto'} - {parseFloat(item.capacidad_kg || 0).toFixed(2)} KG
+          {item.producto?.nombre || 'Producto'} - {parseFloat(item.capacidad_kg || '0').toFixed(2)} KG
         </ThemedText>
         <ThemedText style={styles.productPrice}>
-          ${parseFloat(item.precio_venta || 0).toFixed(2)}
+          ${parseFloat(item.precio_venta || '0').toFixed(2)}
         </ThemedText>
       </ThemedView>
       <ThemedView style={styles.productAction}>

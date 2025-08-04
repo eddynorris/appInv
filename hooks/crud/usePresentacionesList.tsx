@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useCallback, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { useApiResource } from '../useApiResource';
-import { presentacionApi, API_CONFIG } from '@/services/api';
+import { presentacionApi, API_CONFIG } from '@/services';
 import { Presentacion } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';

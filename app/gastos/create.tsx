@@ -10,7 +10,7 @@ import { FormField } from '@/components/form/FormField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useGastoItem } from '@/hooks/crud/useGastoItem';

@@ -1,7 +1,7 @@
 // hooks/crud/usePagosList.ts
 import { useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApiResource } from '../useApiResource';
-import { pagoApi } from '@/services/api';
+import { pagoApi } from '@/services';
 import { Pago } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/context/AuthContext';

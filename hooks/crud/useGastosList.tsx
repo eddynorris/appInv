@@ -1,75 +1,83 @@
 // hooks/crud/useGastosList.tsx
-import { useMemo, useEffect, useCallback, useRef } from 'react';
-import { useApiResource } from '../useApiResource';
-import { gastoApi } from '@/services/api';
+import { useMemo, useCallback } from 'react';
+import { useListWithFilters } from '@/hooks/core/useListWithFilters';
+import { gastoService } from '@/services';
 import { Gasto } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/context/AuthContext';
 
-// Parámetros iniciales por defecto para la paginación de la lista
-const DEFAULT_INITIAL_PARAMS = { page: 1, perPage: 10 };
+// Filtros para gastos
+interface GastoFilters {
+  usuario_id: string;
+  categoria: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  almacen_id: string;
+  search: string;
+}
+
+const DEFAULT_FILTERS: GastoFilters = {
+  usuario_id: '',
+  categoria: '',
+  fecha_inicio: '',
+  fecha_fin: '',
+  almacen_id: '',
+  search: ''
+};
 
 export function useGastosList() {
-  // Usar una referencia para controlar la carga inicial y evitar múltiples llamadas
-  const isInitialLoadDone = useRef(false);
-
-  // Obtener información del usuario actual
   const { user } = useAuth();
-  
-  // Parámetros de filtro basados en el rol del usuario
-  const filters = useMemo(() => {
-    // Si el usuario no es admin, solo mostrar sus propios gastos
-    if (user && user.rol !== 'admin' && user.id) {
-      return { usuario_id: user.id };
+  const isAdmin = user?.rol === 'admin';
+
+  // Función de fetch adaptada para useListWithFilters
+  const fetchGastosWithFilters = useCallback(async (
+    page: number,
+    perPage: number,
+    filters: GastoFilters,
+    sort?: { column: string; order: 'asc' | 'desc' }
+  ) => {
+    const queryFilters: Record<string, any> = {};
+    
+    // Agregar filtros solo si tienen valor
+    if (filters.search) queryFilters.search = filters.search;
+    if (filters.categoria) queryFilters.categoria = filters.categoria;
+    if (filters.fecha_inicio) queryFilters.fecha_inicio = filters.fecha_inicio;
+    if (filters.fecha_fin) queryFilters.fecha_fin = filters.fecha_fin;
+    if (filters.almacen_id) queryFilters.almacen_id = filters.almacen_id;
+    
+    // Agregar ordenamiento
+    if (sort) {
+      queryFilters.sort_by = sort.column;
+      queryFilters.sort_order = sort.order;
     }
-    return {}; // Sin filtros para admin (ve todos los gastos)
-  }, [user]);
+    
+    // Filtro por usuario si no es admin
+    if (!isAdmin && user?.id) {
+      queryFilters.usuario_id = user.id.toString();
+    }
+    
+    return await gastoService.getGastos(page, perPage, queryFilters);
+  }, [isAdmin, user?.id]);
 
-  // Función personalizada para obtener gastos con filtros
-  const fetchGastosWithFilters = useCallback(async (page = 1, perPage = 10) => {
-    // Aquí podemos implementar la lógica para añadir filtros adicionales
-    return await gastoApi.getGastos(page, perPage, filters);
-  }, [filters]);
-
-  const {
-    data: gastos,
-    isLoading,
-    error,
-    pagination,
-    fetchData,
-    handlePageChange: originalHandlePageChange,
-    handleItemsPerPageChange: originalHandleItemsPerPageChange,
-    deleteItem: deleteGastoDirectly,
-  } = useApiResource<Gasto>({
-    initialParams: DEFAULT_INITIAL_PARAMS,
-    fetchFn: fetchGastosWithFilters, // Usar la función con filtros
-    deleteFn: gastoApi.deleteGasto,
+  // Usar el hook genérico
+  const listHook = useListWithFilters<Gasto, GastoFilters>({
+    fetchFn: fetchGastosWithFilters,
+    defaultFilters: DEFAULT_FILTERS,
+    defaultSort: { column: 'fecha', order: 'desc' },
+    initialItemsPerPage: 10
   });
 
-  // Cargar datos iniciales explícitamente al montar, con control para evitar llamadas duplicadas
-  useEffect(() => {
-    if (!isInitialLoadDone.current) {
-      // Marcar como ejecutado para evitar llamadas duplicadas
-      isInitialLoadDone.current = true;
-      fetchData(DEFAULT_INITIAL_PARAMS.page, DEFAULT_INITIAL_PARAMS.perPage);
+  // Función para eliminar gasto
+  const deleteGasto = useCallback(async (id: number): Promise<boolean> => {
+    try {
+      await gastoService.deleteGasto(id);
+      listHook.refresh();
+      return true;
+    } catch (error: any) {
+      console.error("Error al eliminar gasto:", error.message);
+      return false;
     }
-  }, [fetchData, filters]);
-
-  // Wrapper para handlePageChange que evita llamadas innecesarias
-  const handlePageChange = useCallback((page: number) => {
-    // Solo llamar si es una página diferente
-    if (page !== pagination.currentPage) {
-      originalHandlePageChange(page);
-    }
-  }, [originalHandlePageChange, pagination.currentPage]);
-
-  // Wrapper para handleItemsPerPageChange que evita llamadas innecesarias
-  const handleItemsPerPageChange = useCallback((perPage: number) => {
-    // Solo llamar si es un valor diferente
-    if (perPage !== pagination.itemsPerPage) {
-      originalHandleItemsPerPageChange(perPage);
-    }
-  }, [originalHandleItemsPerPageChange, pagination.itemsPerPage]);
+  }, [listHook]);
 
   // Obtener color para la categoría
   const getCategoryColor = useCallback((category: string) => {
@@ -122,49 +130,18 @@ export function useGastosList() {
     },
   ], [getCategoryColor]);
 
-  // Función para refrescar la lista de manera controlada
-  const refresh = useCallback(() => {
-    fetchData(pagination.currentPage, pagination.itemsPerPage);
-  }, [fetchData, pagination.currentPage, pagination.itemsPerPage]);
-  
-  // Función wrapper para eliminar un gasto
-  const deleteGasto = useCallback(async (id: number): Promise<boolean> => {
-    // Verificar permisos antes de eliminar
-    if (user && user.rol !== 'admin') {
-      // Si no es admin, obtener el gasto primero para verificar propiedad
-      try {
-        const gasto = await gastoApi.getGasto(id);
-        if (gasto.usuario_id !== user.id) {
-          console.error("Acceso denegado: No puedes eliminar gastos de otros usuarios");
-          return false;
-        }
-      } catch (error) {
-        console.error("Error verificando permisos:", error);
-        return false;
-      }
-    }
-    
-    try {
-      const success = await deleteGastoDirectly(id);
-      return success;
-    } catch (error: any) {
-      console.error("Error al eliminar gasto:", error.message);
-      return false;
-    }
-  }, [deleteGastoDirectly, user]);
-
   // Calcular estadísticas de gastos
   const getEstadisticas = useCallback(() => {
-    const totalMonto = gastos.reduce(
+    const totalMonto = listHook.data.reduce(
       (acc, gasto) => acc + parseFloat(gasto.monto || '0'), 
       0
     );
     
     return {
       totalMonto,
-      totalGastos: pagination.totalItems
+      totalGastos: listHook.pagination.totalItems
     };
-  }, [gastos, pagination.totalItems]);
+  }, [listHook.data, listHook.pagination.totalItems]);
 
   // Verificar si el usuario tiene permiso para editar/eliminar un gasto
   const canEditOrDelete = useCallback((gastoUsuarioId: number | undefined) => {
@@ -178,30 +155,37 @@ export function useGastosList() {
   }, [user]);
 
   return {
-    // Datos y estado de la lista
-    gastos,
-    isLoading,
-    error,
+    // Datos y estado principal
+    gastos: listHook.data,
+    isLoading: listHook.isLoading,
+    error: listHook.error,
     columns,
-    
-    // Información del usuario y permisos
-    isAdmin: user?.rol === 'admin',
-    canEditOrDelete,
-    
-    // Paginación
+
+    // Paginación y ordenamiento
     pagination: {
-      currentPage: pagination.currentPage,
-      totalPages: pagination.totalPages,
-      itemsPerPage: pagination.itemsPerPage,
-      totalItems: pagination.totalItems,
-      onPageChange: handlePageChange, // Usar nuestro wrapper
-      onItemsPerPageChange: handleItemsPerPageChange, // Usar nuestro wrapper
+      currentPage: listHook.pagination.currentPage,
+      totalPages: listHook.pagination.totalPages,
+      itemsPerPage: listHook.pagination.itemsPerPage,
+      totalItems: listHook.pagination.totalItems,
+      sortColumn: listHook.sorting.sortColumn,
+      sortOrder: listHook.sorting.sortOrder,
+      onPageChange: listHook.pagination.onPageChange,
+      onItemsPerPageChange: listHook.pagination.onItemsPerPageChange,
+      onSort: listHook.sorting.onSort,
     },
-    
-    // Funciones
-    refresh,
+
+    // Filtros
+    filters: listHook.filters,
+    handleFilterChange: listHook.handleFilterChange,
+    applyFilters: listHook.applyFilters,
+    clearFilters: listHook.clearFilters,
+
+    // Acciones y información del usuario
+    refresh: listHook.refresh,
     deleteGasto,
     getEstadisticas,
     getCategoryColor,
+    isAdmin,
+    canEditOrDelete,
   };
 }

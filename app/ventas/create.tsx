@@ -8,9 +8,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { useVentaItem } from '@/hooks/crud/useVentaItem'; // Importar hook refactorizado
+import { useVentaItem } from '@/hooks/ventas'; // Importar hook refactorizado
 import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { FormStyles, Spacing, Shadows } from '@/styles/Theme';
 import { ClienteSearchModal } from '@/components/ClienteSearchModal';
@@ -28,9 +28,11 @@ export default function CreateVentaScreen() {
   const {
     isLoading,
     isLoadingOptions,
+    isLoadingPresentaciones,
     error,
-    form,
-    validationRules,
+    formData,
+    errors,
+    isSubmitting,
     clientes,
     almacenes,
     presentaciones,
@@ -50,10 +52,9 @@ export default function CreateVentaScreen() {
     handleSelectCliente,
     handleClienteCreated,
     handleAlmacenChange,
+    handleChange,
     isAdmin
   } = useVentaItem();
-
-  const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
 
   // Cargar datos iniciales al montar la pantalla
   useEffect(() => {
@@ -70,9 +71,12 @@ export default function CreateVentaScreen() {
   // Calcular total (ya es un número)
   const totalVenta = useMemo(() => calcularTotal(), [calcularTotal]);
 
-  // Función de envío (ya no necesita lógica propia, usa handleSubmit)
+  // Función de envío
   const submitVenta = async () => {
-    await form.handleSubmit(createVenta, validationRules);
+    const success = await createVenta(formData);
+    if (success) {
+      router.back();
+    }
   };
 
   // --- Renderizado Condicional ---
@@ -147,7 +151,7 @@ export default function CreateVentaScreen() {
                 selectedValue={formData.almacen_id}
                 onValueChange={(value) => handleAlmacenChange(value)}
                 style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={isAdmin && !isSubmitting && !isLoadingOptions} // Solo admin puede cambiar si hay > 1
+                enabled={isAdmin && !isSubmitting && !isLoadingOptions} // Solo admin puede cambiar, pero no deshabilitar por loading de presentaciones
               >
                 <Picker.Item label={isLoadingOptions ? "Cargando..." : "Seleccione un almacén..."} value="" />
                 {almacenes.map(almacen => (
@@ -234,7 +238,7 @@ export default function CreateVentaScreen() {
             {errors.detalles && (
                 <ThemedText style={[FormStyles.errorText, {marginTop: 8, marginBottom: 8}]}>{errors.detalles}</ThemedText>
              )}
-             {(isLoadingOptions && !presentaciones.length && formData.almacen_id) ? (
+             {(isLoadingPresentaciones && formData.almacen_id) ? (
                 <ThemedText style={FormStyles.infoText}>Cargando productos para almacén...</ThemedText>
              ) : !formData.almacen_id ? (
                 <ThemedText style={FormStyles.infoText}>Seleccione un almacén para ver productos.</ThemedText>

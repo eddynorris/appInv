@@ -1,262 +1,251 @@
-// hooks/crud/useGastoItem.ts
+// hooks/crud/useGastoItem.ts - Specialized hook for gastos with form handling
 import { useState, useCallback, useEffect } from 'react';
-import { Alert } from 'react-native';
-import { gastoApi, almacenApi } from '@/services/api';
+import { gastoService, almacenService } from '@/services';
 import { Gasto, AlmacenSimple } from '@/models';
 import { useForm } from '@/hooks/useForm';
 import { useAuth } from '@/context/AuthContext';
+import { useErrorHandler } from '@/hooks/core/useErrorHandler';
+import { router } from 'expo-router';
 
-// Categorías de gastos predefinidas
+// Categorías de gastos predefinidas - exported for use in components
 export const CATEGORIAS_GASTO: Array<'logistica' | 'personal' | 'otros'> = [
   'logistica',
-  'personal',
+  'personal', 
   'otros'
 ];
 
-// Valores iniciales del formulario
-const initialFormValues = {
+interface GastoFormData {
+  descripcion: string;
+  monto: string;
+  categoria: 'logistica' | 'personal' | 'otros';
+  fecha: string;
+  almacen_id?: number;
+}
+
+const initialFormData: GastoFormData = {
   descripcion: '',
   monto: '',
-  categoria: 'logistica' as 'logistica' | 'personal' | 'otros',
-  fecha: new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
-  almacen_id: undefined as number | undefined,
+  categoria: 'otros',
+  fecha: new Date().toISOString().split('T')[0],
+  almacen_id: undefined
 };
 
-// Reglas de validación para el formulario
 const validationRules = {
-  descripcion: (value: string) => !value.trim() ? 'La descripción es requerida' : null,
-  monto: (value: string) => {
-    if (!value.trim()) return 'El monto es requerido';
-    if (isNaN(parseFloat(value)) || parseFloat(value) <= 0) return 'Ingrese un monto válido';
-    return null;
-  }
+  descripcion: { required: true, minLength: 3 },
+  monto: { required: true, pattern: /^\d+(\.\d{1,2})?$/ },
+  categoria: { required: true },
+  fecha: { required: true }
 };
 
 export function useGastoItem() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [almacenes, setAlmacenes] = useState<AlmacenSimple[]>([]);
   const { user } = useAuth();
-  
-  // Crear un formulario utilizando el hook useForm
-  const form = useForm<typeof initialFormValues>(initialFormValues);
+  const { error, handleError, clearError } = useErrorHandler();
+  const [isLoading, setIsLoading] = useState(false);
+  const [almacenes, setAlmacenes] = useState<AlmacenSimple[]>([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Obtener un gasto específico
-  const getGasto = useCallback(async (id: number): Promise<Gasto | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const data = await gastoApi.getGasto(id);
-      return data;
-    } catch (err) {
-      console.error('Error getting gasto item:', err);
-      const message = err instanceof Error ? err.message : 'Error al obtener el gasto';
-      setError(message);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const form = useForm<GastoFormData>({
+    initialData: initialFormData,
+    validationRules
+  });
 
-  // Función para cargar almacenes - No se ejecuta automáticamente sino solo cuando se llama
+  const isAdmin = user?.rol === 'admin';
+
+  // Load almacenes for admin users
   const loadAlmacenes = useCallback(async () => {
-    if (user?.rol === 'admin' && almacenes.length === 0) {
-      try {
-        setIsLoading(true);
-        const response = await almacenApi.getAlmacenes(1, 100);
-        setAlmacenes(response.data);
-      } catch (err) {
-        console.error('Error fetching almacenes:', err);
-        setError('No se pudieron cargar los almacenes');
-      } finally {
-        setIsLoading(false);
-      }
-    }
-  }, [user, almacenes.length]);
-
-  // Cargar un gasto para edición
-  const loadGastoForEdit = useCallback(async (id: number): Promise<Gasto | null> => {
-    setIsLoading(true);
-    setError(null);
+    if (!isAdmin) return;
+    
     try {
-      // Si es admin, cargar almacenes para el selector
-      if (user?.rol === 'admin') {
-        await loadAlmacenes();
-      }
-      const gasto = await getGasto(id);
-      
-      if (gasto) {
-        // Actualizar el formulario con los datos recibidos
-        form.setValues({
-          descripcion: gasto.descripcion || '',
-          monto: gasto.monto ? gasto.monto.toString() : '',
-          categoria: gasto.categoria || CATEGORIAS_GASTO[0],
-          fecha: gasto.fecha ? gasto.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
-          almacen_id: gasto.almacen_id,
-        });
-        return gasto;
-      } else {
-        setError('No se pudo cargar la información del gasto');
-        return null;
-      }
-    } catch (error) {
-      console.error('Error al cargar gasto para edición:', error);
-      const message = error instanceof Error ? error.message : 'Error al cargar el gasto';
-      setError(message);
-      return null;
+      setIsLoading(true);
+      const response = await almacenService.getAlmacenes(1, 100);
+      setAlmacenes(response.data);
+    } catch (err) {
+      handleError(err, 'Error al cargar almacenes');
     } finally {
       setIsLoading(false);
     }
-  }, [form, getGasto, loadAlmacenes]);
+  }, [isAdmin, handleError]);
 
-   // Preparar formulario para creación de gasto
-   const prepareForCreate = useCallback(async () => {
-    // Si es admin, cargar almacenes para el selector
-    if (user?.rol === 'admin') {
-      await loadAlmacenes();
+  // Prepare for creating a new gasto
+  const prepareForCreate = useCallback(async () => {
+    clearError();
+    form.resetForm();
+    
+    // Set user's warehouse if not admin
+    if (!isAdmin && user?.almacen_id) {
+      form.handleChange('almacen_id', user.almacen_id);
     }
     
-    // Resetear el formulario
-    form.resetForm();
-  }, [loadAlmacenes, form, user]);
+    await loadAlmacenes();
+  }, [clearError, form, isAdmin, user?.almacen_id, loadAlmacenes]);
 
-  // Crear un nuevo gasto
-  const createGasto = useCallback(async (data: typeof initialFormValues): Promise<Gasto | null> => {
-    setIsLoading(true);
-    setError(null);
+  // Load gasto for editing
+  const loadGastoForEdit = useCallback(async (id: number) => {
     try {
-      // Validar que tenemos usuario autenticado
-      if (!user?.id) {
-        setError('No se pudo identificar el usuario actual');
-        return null;
-      }
-
-      // Preparar datos del gasto
-      const gastoData: Partial<Gasto> = {
-        descripcion: data.descripcion,
-        monto: data.monto.replace(',', '.'), // Asegurar formato decimal correcto
-        categoria: data.categoria,
-        fecha: data.fecha,
-        usuario_id: user.id, // ID del usuario logueado
-      };
+      setIsLoading(true);
+      clearError();
       
-      // Si es admin y seleccionó un almacén, usar ese
-      if (user.rol === 'admin' && data.almacen_id) {
-        gastoData.almacen_id = data.almacen_id;
-      } 
-      // Si no es admin o no seleccionó almacén, usar el del usuario
-      else if (user.almacen_id) {
-        gastoData.almacen_id = user.almacen_id;
+      const gasto = await gastoService.getGasto(id);
+      
+      // Fill form with gasto data
+      form.handleChange('descripcion', gasto.descripcion || '');
+      form.handleChange('monto', gasto.monto?.toString() || '');
+      form.handleChange('categoria', gasto.categoria || 'otros');
+      form.handleChange('fecha', gasto.fecha?.split('T')[0] || new Date().toISOString().split('T')[0]);
+      
+      if (gasto.almacen_id) {
+        form.handleChange('almacen_id', gasto.almacen_id);
       }
       
-      return await gastoApi.createGasto(gastoData);
+      await loadAlmacenes();
+      
+      return gasto;
     } catch (err) {
-      console.error('Error creating gasto item:', err);
-      const message = err instanceof Error ? err.message : 'Error al crear el gasto';
-      setError(message);
+      handleError(err, 'Error al cargar gasto');
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [clearError, form, handleError, loadAlmacenes]);
 
-  // Actualizar un gasto específico
-  const updateGasto = useCallback(async (id: number, data: typeof initialFormValues): Promise<Gasto | null> => {
-    setIsLoading(true);
-    setError(null);
+  // Get single gasto (for permissions check)
+  const getGasto = useCallback(async (id: number) => {
     try {
-      // Preparar datos del gasto
-      const gastoData: Partial<Gasto> = {
-        descripcion: data.descripcion,
-        monto: data.monto.replace(',', '.'), // Asegurar formato decimal correcto
-        categoria: data.categoria,
-        fecha: data.fecha
+      return await gastoService.getGasto(id);
+    } catch (err) {
+      handleError(err, 'Error al obtener gasto');
+      return null;
+    }
+  }, [handleError]);
+
+  // Create gasto
+  const createGasto = useCallback(async (formData: GastoFormData) => {
+    try {
+      setIsLoading(true);
+      clearError();
+      
+      const gastoData = {
+        descripcion: formData.descripcion,
+        monto: parseFloat(formData.monto),
+        categoria: formData.categoria,
+        fecha: `${formData.fecha}T00:00:00Z`,
+        ...(formData.almacen_id && { almacen_id: formData.almacen_id })
       };
       
-      // Si es admin y se proporcionó un almacen_id, incluirlo en la actualización
-      if (user?.rol === 'admin' && data.almacen_id !== undefined) {
-        gastoData.almacen_id = data.almacen_id;
-      }
-      
-      return await gastoApi.updateGasto(id, gastoData);
+      const newGasto = await gastoService.createGasto(gastoData);
+      return newGasto;
     } catch (err) {
-      console.error('Error updating gasto item:', err);
-      const message = err instanceof Error ? err.message : 'Error al actualizar el gasto';
-      setError(message);
+      handleError(err, 'Error al crear gasto');
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [clearError, handleError]);
 
-  // Eliminar un gasto específico
-  const deleteGasto = useCallback(async (id: number): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
+  // Update gasto
+  const updateGasto = useCallback(async (id: number, formData: GastoFormData) => {
     try {
-      await gastoApi.deleteGasto(id);
+      setIsLoading(true);
+      clearError();
+      
+      const gastoData = {
+        descripcion: formData.descripcion,
+        monto: parseFloat(formData.monto),
+        categoria: formData.categoria,
+        fecha: `${formData.fecha}T00:00:00Z`,
+        ...(formData.almacen_id && { almacen_id: formData.almacen_id })
+      };
+      
+      const updatedGasto = await gastoService.updateGasto(id, gastoData);
+      return updatedGasto;
+    } catch (err) {
+      handleError(err, 'Error al actualizar gasto');
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clearError, handleError]);
+
+  // Delete gasto
+  const deleteGasto = useCallback(async (id: number) => {
+    try {
+      setIsLoading(true);
+      clearError();
+      
+      await gastoService.deleteGasto(id);
+      router.push('/gastos');
       return true;
     } catch (err) {
-      console.error('Error deleting gasto item:', err);
-      const message = err instanceof Error ? err.message : 'Error al eliminar el gasto';
-      setError(message);
+      handleError(err, 'Error al eliminar gasto');
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [clearError, handleError]);
 
-  // Manejar selección de fecha
-  const handleDateSelection = useCallback((selectedDate?: Date) => {
+  // Handle date selection
+  const handleDateSelection = useCallback((date: Date | undefined) => {
     setShowDatePicker(false);
-    if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0]; // Formato YYYY-MM-DD
-      form.handleChange('fecha', formattedDate);
+    if (date) {
+      const dateString = date.toISOString().split('T')[0];
+      form.handleChange('fecha', dateString);
     }
   }, [form]);
 
-  // Obtener color para la categoría
-  const getCategoryColor = useCallback((category: string) => {
-    switch (category.toLowerCase()) {
-      case 'servicios': return '#2196F3'; // Azul
-      case 'personal': return '#4CAF50'; // Verde
-      case 'alquiler': return '#FFC107'; // Amarillo
-      case 'marketing': return '#9C27B0'; // Púrpura
-      case 'logistica': return '#FF5722'; // Naranja
-      default: return '#757575'; // Gris
+  // State for detail screen compatibility
+  const [item, setItem] = useState<Gasto | null>(null);
+
+  // Load item (for detail screen compatibility)
+  const loadItem = useCallback(async (id: number) => {
+    const gasto = await getGasto(id);
+    setItem(gasto);
+    return gasto;
+  }, [getGasto]);
+
+  // Delete item (for detail screen compatibility)
+  const deleteItem = useCallback(async (id: number) => {
+    const success = await deleteGasto(id);
+    if (success) {
+      setItem(null);
     }
-  }, []);
+    return success;
+  }, [deleteGasto]);
 
   return {
-    // Estado de la operación
-    isLoading,
-    error,
-    setError,
-    
-    // Formulario y validación
+    // Form state
     form,
     validationRules,
     
-    // Estado del date picker
-    showDatePicker,
-    setShowDatePicker,
+    // Loading and error state
+    isLoading,
+    error,
     
-    // Datos para selects
+    // Options
     categorias: CATEGORIAS_GASTO,
     almacenes,
     
-    // Información de usuario
-    isAdmin: user?.rol === 'admin',
+    // Date picker
+    showDatePicker,
+    setShowDatePicker,
+    handleDateSelection,
     
-    // Funciones específicas
-    getGasto,
+    // User state
+    isAdmin,
+    
+    // Actions
+    prepareForCreate,
     loadGastoForEdit,
-    prepareForCreate, // Nueva función para preparar creación
+    getGasto,
     createGasto,
     updateGasto,
     deleteGasto,
-    handleDateSelection,
-    getCategoryColor
+    
+    // Detail screen compatibility
+    item,
+    loadItem,
+    deleteItem,
+    
+    // Utils
+    clearError
   };
 }

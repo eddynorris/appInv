@@ -1,16 +1,16 @@
 // reportes/ventas.tsx
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Alert, ActivityIndicator, TouchableOpacity, View, Button } from 'react-native'; // Agregado View y Button
+import { StyleSheet, ActivityIndicator, TouchableOpacity, View, Button } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { DateRangeSelectorV2 } from '@/components/dashboard/DateRangeSelectorV2';
+import { DateRangeSelector } from '@/components/dashboard/DateRangeSelector';
 
 import { ThemedView } from '@/components/ThemedView';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable } from '@/components/data/DataTable';
-import { useVentasList } from '@/hooks/crud/useVentasList';
+import { EnhancedDataTable } from '@/components/data/EnhancedDataTable';
+import { useVentasList } from '@/hooks/ventas';
 import { Venta } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors'; // Para colores de botones
+ import { Colors } from '@/styles/Theme'; // Para colores de botones
 import { useColorScheme } from '@/hooks/useColorScheme'; // Para colores de botones
 
 // Función auxiliar para obtener YYYY-MM-DD local
@@ -52,13 +52,13 @@ export default function VentasScreen() {
 
   const colorScheme = useColorScheme() ?? 'light';
 
-  // Handle date range changes from the new DateRangeSelectorV2
+  // Handle date range changes from the DateRangeSelector
   const handleDateRangeChange = (start: Date, end: Date) => {
     handleFilterChange('fecha_inicio', getLocalDateString(start));
     handleFilterChange('fecha_fin', getLocalDateString(end));
   };
 
-  // Parse date strings to Date objects for the DateRangeSelectorV2
+  // Parse date strings to Date objects for the DateRangeSelector
   const startDate = filters.fecha_inicio ? new Date(filters.fecha_inicio) : new Date();
   const endDate = filters.fecha_fin ? new Date(filters.fecha_fin) : new Date();
 
@@ -80,24 +80,14 @@ export default function VentasScreen() {
     router.push('/ventas/create');
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/ventas/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    Alert.alert(
-      'Eliminar Venta',
-      '¿Está seguro que desea eliminar esta venta?',
-      // ... (código de confirmación)
-    );
-  };
+  // handleEdit and handleDelete are now handled by EnhancedDataTable internally
 
   return (
     <>
       <Stack.Screen options={{ title: 'Ventas', headerShown: true }} />
       <ThemedView style={styles.container}>
         {/* Date Range Selector */}
-        <DateRangeSelectorV2
+        <DateRangeSelector
           startDate={startDate}
           endDate={endDate}
           onDateChange={handleDateRangeChange}
@@ -114,32 +104,42 @@ export default function VentasScreen() {
 
         {isLoading && <ActivityIndicator style={{ marginVertical: 10 }}/>}
 
-        <DataTable<Venta>
+        <EnhancedDataTable<Venta>
           data={ventas}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
           baseRoute="/ventas"
-          isLoading={isLoading} // isLoading general de la tabla
+          isLoading={isLoading}
           error={error}
           onRefresh={refresh}
-          currentPage={pagination.currentPage}
-          totalPages={pagination.totalPages}
-          onPageChange={pagination.onPageChange}
-          itemsPerPage={pagination.itemsPerPage}
-          onItemsPerPageChange={pagination.onItemsPerPageChange}
-          totalItems={pagination.totalItems}
-          sortColumn={pagination.sortColumn}
-          sortOrder={pagination.sortOrder}
-          onSort={pagination.onSort}
-          emptyMessage="No hay ventas disponibles"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          pagination={{
+            currentPage: pagination.currentPage,
+            totalPages: pagination.totalPages,
+            itemsPerPage: pagination.itemsPerPage,
+            totalItems: pagination.totalItems,
+            onPageChange: pagination.onPageChange,
+            onItemsPerPageChange: pagination.onItemsPerPageChange,
+          }}
+          sorting={{
+            sortColumn: pagination.sortColumn,
+            sortOrder: pagination.sortOrder,
+            onSort: pagination.onSort,
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true,
+          }}
+          deleteOptions={{
             title: 'Eliminar Venta',
             message: '¿Está seguro que desea eliminar esta venta?',
             confirmText: 'Eliminar',
             cancelText: 'Cancelar',
+            onDelete: async (id: number | string) => {
+              const success = await deleteVenta(parseInt(id.toString()));
+              return success;
+            },
           }}
+          emptyMessage="No hay ventas disponibles"
         />
         <FloatingActionButton icon="plus.circle.fill" onPress={handleAddVenta} />
       </ThemedView>

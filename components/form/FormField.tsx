@@ -2,7 +2,7 @@
 import React from 'react';
 import { TextInput, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { FormStyles } from '@/styles/Theme';
 

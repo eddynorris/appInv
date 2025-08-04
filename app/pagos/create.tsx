@@ -6,11 +6,11 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { PaymentForm } from '@/components/form/PaymentForm';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { usePagoItem } from '@/hooks/crud/usePagoItem';
 import { useForm } from '@/hooks/useForm';
-import { ventaApi } from '@/services/venta';
+import { ventaApi } from '@/services/entities/ventaService';
 import { Venta } from '@/models';
 
 export default function CreatePagoScreen() {

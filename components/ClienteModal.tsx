@@ -9,7 +9,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Importar el formulario existente o sus componentes clave
 import { useForm } from '@/hooks/useForm';
-import { clienteApi } from '@/services/api';
+import { clienteApi } from '@/services';
 import { FormField } from '@/components/form/FormField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 

@@ -1,6 +1,6 @@
 // app/pedidos/create.tsx - Refactorizado
-import React, { useEffect, useState, useMemo } from 'react';
-import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { StyleSheet, ScrollView, TouchableOpacity, View, TextInput, ActivityIndicator } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -8,15 +8,14 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { usePedidoItem } from '@/hooks/crud/usePedidoItem';
+import { usePedidoItem } from '@/hooks/pedidos';
 import { ESTADOS_PEDIDO } from '@/models';
 import { ClienteSearchModal } from '@/components/ClienteSearchModal';
 import { ProductPicker } from '@/components/ProductPicker';
 import ProductGrid from '@/components/ProductGrid';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { ClienteSimple } from '@/models'; // Asegurar que ClienteSimple esté importado
 import { FormStyles, Spacing, Shadows } from '@/styles/Theme'; // Importar todo desde Theme
 
 export default function CreatePedidoScreen() {
@@ -26,39 +25,38 @@ export default function CreatePedidoScreen() {
   const {
     isLoading,
     isLoadingOptions,
+    isLoadingPresentaciones,
     error,
-    form,
+    formData,
     detalles,
-    validationRules,
+    errors,
+    isSubmitting,
     clientes,
     almacenes,
-    presentaciones, // <= Ahora son las filtradas por almacén
+    presentaciones,
     showDatePicker,
     setShowDatePicker,
     showClienteModal,
     setShowClienteModal,
     showProductModal,
     setShowProductModal,
-    prepareForCreate,
     createPedido,
     agregarProducto,
     actualizarProducto,
     eliminarProducto,
-    calcularTotal,
     handleDateSelection,
     handleSelectCliente,
-    handleClienteCreated,
+    handleChange,
     handleAlmacenChange,
-    isAdmin
+    isAdmin,
+    loadInitialData,
+    validateForm
   } = usePedidoItem();
-
-  const { formData, errors, isSubmitting, handleChange, handleSubmit } = form;
 
   // Preparar el formulario al montar
   useEffect(() => {
-    prepareForCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadInitialData();
+  }, [loadInitialData]);
 
   // Encontrar el cliente seleccionado
   const selectedCliente = useMemo(() => {
@@ -67,7 +65,18 @@ export default function CreatePedidoScreen() {
   }, [formData.cliente_id, clientes]);
 
   // Calcular total estimado
-  const totalEstimado = useMemo(() => calcularTotal(), [calcularTotal]);
+  const totalEstimado = useMemo(() => {
+    return detalles.reduce((total, detalle) => {
+      const cantidad = typeof detalle.cantidad === 'string' ? parseFloat(detalle.cantidad) : detalle.cantidad;
+      const precio = typeof detalle.precio_estimado === 'string' ? parseFloat(detalle.precio_estimado) : detalle.precio_estimado;
+      return total + (cantidad * precio);
+    }, 0);
+  }, [detalles]);
+
+  // Función para manejar creación de cliente
+  const handleClienteCreated = () => {
+    loadInitialData();
+  };
 
   // Función de envío (usa form.handleSubmit)
   const submitPedido = async () => {
@@ -149,7 +158,7 @@ export default function CreatePedidoScreen() {
                 selectedValue={formData.almacen_id}
                 onValueChange={(value) => handleAlmacenChange(value)}
                 style={[FormStyles.picker, { color: isDark ? Colors.dark.text : Colors.light.text }]}
-                enabled={isAdmin && !isSubmitting && !isLoadingOptions}
+                enabled={isAdmin && !isSubmitting && !isLoadingOptions} // Solo admin puede cambiar, pero no deshabilitar por loading de presentaciones
               >
                 <Picker.Item label={isLoadingOptions ? "Cargando..." : "Seleccione..."} value="" />
                 {almacenes.map(almacen => (
@@ -238,15 +247,19 @@ export default function CreatePedidoScreen() {
             {errors.detalles && (
                 <ThemedText style={[FormStyles.errorText, {marginTop: 8, marginBottom: 8}]}>{errors.detalles}</ThemedText>
              )}
-             {isLoadingOptions && !presentaciones.length ? (
-                <ActivityIndicator />
+             {isLoadingPresentaciones ? (
+                <ThemedText style={FormStyles.infoText}>Cargando productos para almacén...</ThemedText>
              ) : !formData.almacen_id ? (
                  <ThemedText style={FormStyles.infoText}>Seleccione un almacén para ver/agregar productos.</ThemedText>
              ) : (
                 <ProductGrid
                     detalles={detalles}
                     presentaciones={presentaciones}
-                    onUpdate={actualizarProducto}
+                    onUpdate={(index, field, value) => {
+                      if (field === 'cantidad' || field === 'precio_estimado') {
+                        actualizarProducto(index, field, value);
+                      }
+                    }}
                     onRemove={eliminarProducto}
                     onAddProduct={() => setShowProductModal(true)}
                     isPedido={true}
@@ -263,7 +276,11 @@ export default function CreatePedidoScreen() {
 
         {/* Botones de Acción */}
         <ActionButtons
-          onSave={() => handleSubmit(submitPedido, validationRules)}
+          onSave={async () => {
+            if (validateForm()) {
+              await createPedido();
+            }
+          }}
           onCancel={() => router.back()}
           isSubmitting={isSubmitting || isLoading || isLoadingOptions}
           saveText="Registrar Proyección"

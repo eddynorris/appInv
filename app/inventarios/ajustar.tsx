@@ -9,7 +9,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import LotePickerDialog from '@/components/data/LotePickerDialog';
 import { useInventarios } from '@/hooks/crud/useInventarios';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { FormStyles, Shadows } from '@/styles/Theme';
 import { Lote } from '@/models';

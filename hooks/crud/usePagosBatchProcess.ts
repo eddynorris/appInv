@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Venta } from '@/models/venta';
-import { ventaApi } from '@/services/venta';
-import { pagoApi } from '@/services/api'; // Para la creación del pago
+import { ventaApi } from '@/services/entities/ventaService';
+import { pagoApi } from '@/services'; // Para la creación del pago
 import { useFocusEffect } from 'expo-router';
 
 // Interface para los datos que el componente necesita del hook
@@ -81,7 +81,7 @@ export const usePagosBatchProcess = (): UsePagosBatchProcessReturn => {
     setIsSubmitting(true);
     setSubmissionError(null);
     try {
-      await pagoApi.createPagosBatch(formData); 
+      await pagoApi.createPagosBatchWithFormData(formData); 
       return true; // Éxito
     } catch (err: any) {
       const errorMessage = err?.response?.data?.error || err.message || "No se pudieron registrar los pagos en lote.";

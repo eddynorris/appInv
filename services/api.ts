@@ -1,5 +1,6 @@
 // services/api.ts
 import { BASE_URL, DEFAULT_API_HEADERS, API_TIMEOUT } from './appBaseConfig';
+import { API_CONFIG } from './core/apiClient';
 import { Platform } from 'react-native';
 import { 
   Cliente, 
@@ -41,27 +42,9 @@ export interface DashboardDataResponse {
   clientes_con_saldo_pendiente: ClienteSimple[]; // Asumiendo que la estructura coincide con ClienteSimple
 }
 
-export const API_CONFIG = {
-  baseUrl: BASE_URL, 
-  headers: DEFAULT_API_HEADERS,
-  timeout: API_TIMEOUT,
-
-  getImageUrl: (path?: string | null): string => {
-    if (!path) {
-      return ''; 
-    }
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
-    }
-    console.warn('getImageUrl recibió una ruta inesperada (no es URL absoluta):', path);
-    return ''; 
-  },
-
-  isValidImageUrl: (url: string | undefined | null): boolean => {
-    if (!url) return false;
-    return url.startsWith('http://') || url.startsWith('https://');
-  }
-};
+// API_CONFIG moved to services/core/apiClient.ts
+// Import it from there when needed: import { API_CONFIG } from './core/apiClient';
+// Removed duplicate API_CONFIG definition - use the one from services/core/apiClient.ts
 
 // Define una interfaz para errores HTTP estructurados (buena práctica)
 interface HttpError extends Error {

@@ -1,6 +1,6 @@
 // app/pedidos/edit/[id].tsx - Refactorizado
-import React, { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, View, Alert } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { StyleSheet, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, View } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -8,13 +8,12 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { usePedidoItem } from '@/hooks/crud/usePedidoItem';
+import { usePedidoItem } from '@/hooks/pedidos';
 import { ESTADOS_PEDIDO } from '@/models';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { FormStyles, Spacing, Shadows } from '@/styles/Theme';
-import { ClienteSimple } from '@/models';
 
 export default function EditPedidoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,7 +24,9 @@ export default function EditPedidoScreen() {
   // Usar el hook de item de pedido
   const {
     pedido,       // Pedido actual cargado
-    form,
+    formData,
+    errors,
+    isSubmitting,
     clientes,     // Necesario para mostrar el nombre del cliente
     almacenes,    // Necesario para el selector de almacén (si es admin)
     isLoading,
@@ -36,10 +37,9 @@ export default function EditPedidoScreen() {
     isAdmin,      // Para control de edición de almacén
     showDatePicker,
     setShowDatePicker,
-    handleDateSelection
+    handleDateSelection,
+    handleChange
   } = usePedidoItem();
-
-  const { formData, errors, isSubmitting, handleChange } = form;
 
   // Cargar datos del pedido para edición al montar
   useEffect(() => {
@@ -52,7 +52,7 @@ export default function EditPedidoScreen() {
   // Encontrar el cliente seleccionado para mostrar su nombre
   const selectedCliente = useMemo(() => {
     if (!formData.cliente_id) return null;
-    return clientes.find((c: ClienteSimple) => c.id.toString() === formData.cliente_id);
+    return clientes.find((c: any) => c.id.toString() === formData.cliente_id);
   }, [formData.cliente_id, clientes]);
 
   // Manejar envío del formulario

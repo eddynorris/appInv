@@ -1,7 +1,7 @@
 // hooks/crud/useAlmacenes.ts
 import { useMemo, useEffect, useCallback } from 'react'; // <-- Añadido useEffect, useCallback
 import { useApiResource } from '../useApiResource'; // Sigue siendo necesario para la lista
-import { almacenApi } from '@/services/api';
+import { almacenApi } from '@/services';
 import { Almacen } from '@/models';
 import { ThemedText } from '@/components/ThemedText';
 

@@ -1,7 +1,10 @@
 // styles/Theme.ts
 import { StyleSheet } from 'react-native';
 
-// Paleta de colores centralizada
+// Paleta de colores centralizada - Consolidada desde constants/Colors.ts
+const tintColorLight = '#0a7ea4';
+const tintColorDark = '#fff';
+
 export const Colors = {
   // Colores primarios
   primary: '#0a7ea4',
@@ -52,6 +55,40 @@ export const Colors = {
   // Fondos
   background: '#FFFFFF',
   backgroundDark: '#2C2C2E',
+
+  // Theme-aware colors (migrados desde constants/Colors.ts)
+  light: {
+    text: '#11181C',
+    background: '#fff',
+    tint: tintColorLight,
+    icon: '#687076',
+    tabIconDefault: '#687076',
+    tabIconSelected: tintColorLight,
+    placeholder: '#9BA1A6',
+    card: '#FFFFFF',
+    border: '#E1E3E5',
+    inputBackground: '#F9F9F9',
+    backgroundSubtle: '#F0F8FF',
+    textSecondary: '#687076',
+    error: '#F44336',
+    successMuted: '#A5D6A7',
+  },
+  dark: {
+    text: '#ECEDEE',
+    background: '#151718',
+    tint: tintColorDark,
+    icon: '#9BA1A6',
+    tabIconDefault: '#9BA1A6',
+    tabIconSelected: tintColorDark,
+    placeholder: '#687076',
+    card: '#1C1C1E',
+    border: '#3A3A3C',
+    inputBackground: '#2C2C2E',
+    backgroundSubtle: '#2C2C2E',
+    textSecondary: '#9BA1A6',
+    error: '#FF6B6B',
+    successMuted: '#4E8E50',
+  },
 };
 
 // Espaciado consistente
@@ -621,6 +658,193 @@ export const ScreenStyles = StyleSheet.create({
   },
 });
 
+// Estilos de tarjetas centralizados - elimina redundancia en app/
+export const CardStyles = StyleSheet.create({
+  container: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.md,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.sm,
+    ...Shadows.small,
+  },
+  content: {
+    padding: Spacing.lg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  title: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  details: {
+    gap: Spacing.sm,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  detailText: {
+    fontSize: FontSizes.sm,
+    flex: 1,
+  },
+});
+
+// Sistema de badges unificado
+export const BadgeStyles = StyleSheet.create({
+  base: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.md,
+    marginLeft: Spacing.sm,
+  },
+  text: {
+    fontSize: FontSizes.xs,
+    fontWeight: '500',
+  },
+  success: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  successText: {
+    color: Colors.success,
+  },
+  warning: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  warningText: {
+    color: Colors.warning,
+  },
+  danger: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  dangerText: {
+    color: Colors.danger,
+  },
+  info: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  infoText: {
+    color: Colors.info,
+  },
+  // Estados de pedidos
+  programado: {
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+  },
+  programadoText: {
+    color: Colors.programado,
+  },
+  confirmado: {
+    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+  },
+  confirmadoText: {
+    color: Colors.confirmado,
+  },
+  entregado: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  entregadoText: {
+    color: Colors.entregado,
+  },
+  cancelado: {
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+  },
+  canceladoText: {
+    color: Colors.cancelado,
+  },
+  // Estados de pago
+  pagado: {
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+  },
+  pagadoText: {
+    color: Colors.pagado,
+  },
+  pendiente: {
+    backgroundColor: 'rgba(255, 193, 7, 0.2)',
+  },
+  pendienteText: {
+    color: Colors.pendiente,
+  },
+  parcial: {
+    backgroundColor: 'rgba(255, 152, 0, 0.2)',
+  },
+  parcialText: {
+    color: Colors.parcial,
+  },
+});
+
+// Estilos para contenedores de resumen/estadísticas
+export const SummaryStyles = StyleSheet.create({
+  container: {
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.sm,
+    margin: Spacing.lg,
+    marginBottom: 0,
+    gap: Spacing.sm,
+  },
+  primary: {
+    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+  },
+  secondary: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+  },
+  warning: {
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+  },
+  info: {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  label: {
+    fontSize: FontSizes.md,
+    fontWeight: '500',
+  },
+  value: {
+    fontSize: FontSizes.lg,
+    fontWeight: 'bold',
+  },
+});
+
+// Estilos para filtros estandarizados
+export const FilterStyles = StyleSheet.create({
+  container: {
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.lightGray2,
+    marginBottom: Spacing.sm,
+    backgroundColor: Colors.lightGray1,
+    gap: Spacing.md,
+  },
+  row: {
+    gap: Spacing.xs,
+  },
+  label: {
+    fontSize: FontSizes.sm,
+    fontWeight: '500',
+    marginBottom: Spacing.xs,
+    color: Colors.textMedium,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: Spacing.lg,
+  },
+});
+
 // Exportar todos los estilos
 export default {
   Colors,
@@ -633,5 +857,9 @@ export default {
   ModalStyles,
   ButtonStyles,
   SectionStyles,
-  ScreenStyles
+  ScreenStyles,
+  CardStyles,
+  BadgeStyles,
+  SummaryStyles,
+  FilterStyles,
 };

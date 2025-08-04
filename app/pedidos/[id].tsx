@@ -1,5 +1,5 @@
 // app/pedidos/[id].tsx - Actualizado para implementar restricciones basadas en rol
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, ActivityIndicator, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 
@@ -8,11 +8,9 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import PedidoConversion from '@/components/PedidoConversion';
 import ProductDetailsList from '@/components/ProductDetailsList';
-import { pedidoApi } from '@/services/api';
-import { Pedido } from '@/models';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { usePedidoItem } from '@/hooks/crud/usePedidoItem';
+import { usePedidoItem } from '@/hooks/pedidos';
 import { useAuth } from '@/context/AuthContext'; // Importar contexto de autenticación
 
 export default function PedidoDetailScreen() {
@@ -30,8 +28,7 @@ export default function PedidoDetailScreen() {
     isLoading,
     error,
     getPedido,
-    deletePedido,
-    canEditOrDelete
+    deletePedido
   } = usePedidoItem();
 
   // Cargar datos del pedido
@@ -43,8 +40,8 @@ export default function PedidoDetailScreen() {
   }, [idNumerico]);
 
   const handleEdit = () => {
-    // Verificar permisos usando la función del hook
-    if (!canEditOrDelete(pedido)) {
+    // Verificar permisos - solo admin puede editar
+    if (!isAdmin) {
       Alert.alert("Acceso restringido", "No tienes permisos para editar esta proyección.");
       return;
     }
@@ -96,7 +93,7 @@ export default function PedidoDetailScreen() {
   }
 
   const estadoInfo = getEstadoInfo(pedido?.estado);
-  const currentUserCanEditOrDelete = canEditOrDelete(pedido);
+  const currentUserCanEditOrDelete = isAdmin;
 
   return (
     <>
@@ -163,7 +160,13 @@ export default function PedidoDetailScreen() {
             <ThemedView style={styles.section}>
               {pedido?.detalles && pedido.detalles.length > 0 ? (
                 <ProductDetailsList
-                  details={pedido.detalles}
+                  details={pedido.detalles.map(detalle => ({
+                    ...detalle,
+                    presentacion: detalle.presentacion ? {
+                      ...detalle.presentacion,
+                      url_foto: detalle.presentacion.url_foto || undefined
+                    } : undefined
+                  }))}
                   title="Productos en la Proyección"
                   isPedido={true}
                 />

@@ -3,7 +3,7 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, ViewProps, ActivityIndicator } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 interface ActionButtonsProps extends ViewProps {
   onSave?: () => void;

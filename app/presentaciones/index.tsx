@@ -10,7 +10,7 @@ import { ScreenContainer } from '@/components/layout/ScreenContainer';
 import { EnhancedCardList } from '@/components/data/EnhancedCardList';
 import { usePresentacionesList } from '@/hooks/crud/usePresentacionesList';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 export default function PresentacionesScreen() {
   // Usar el nuevo hook para la lista

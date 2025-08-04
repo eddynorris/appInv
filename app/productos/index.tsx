@@ -1,14 +1,15 @@
 // app/productos/index.tsx
 import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Alert } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Stack, router } from 'expo-router';
 
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { FloatingActionButton } from '@/components/FloatingActionButton';
-import { DataTable, Column } from '@/components/data/DataTable';
-import { productoApi } from '@/services/api';
+import { EnhancedDataTable, Column } from '@/components/data/EnhancedDataTable';
+import { productoApi } from '@/services';
 import { Producto } from '@/models';
+import { SummaryStyles } from '@/styles/Theme';
 
 export default function ProductosScreen() {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -26,7 +27,7 @@ export default function ProductosScreen() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Definimos las columnas de la tabla
-  const columns: Column[] = [
+  const columns: Column<Producto>[] = [
     {
       id: 'id',
       label: 'ID',
@@ -115,29 +116,7 @@ export default function ProductosScreen() {
     router.push('/productos/create');
   };
 
-  const handleEdit = (id: string) => {
-    router.push(`/productos/edit/${id}`);
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      setIsLoading(true);
-      await productoApi.deleteProducto(parseInt(id));
-      
-      // Recargar los datos después de eliminar
-      loadProductos(
-        // Si es el último item de la página y hay más de una página, ir a la página anterior
-        productos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
-        itemsPerPage
-      );
-      
-      Alert.alert('Éxito', 'Producto eliminado correctamente');
-    } catch (error) {
-      console.error('Error al eliminar producto:', error);
-      Alert.alert('Error', 'No se pudo eliminar el producto');
-      setIsLoading(false);
-    }
-  };
+  // handleEdit and handleDelete are now handled by EnhancedDataTable internally
 
   return (
     <>
@@ -147,47 +126,68 @@ export default function ProductosScreen() {
       }} />
       
       <ThemedView style={styles.container}>
-        <ThemedView style={styles.summary}>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Total Productos:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
+        <ThemedView style={[SummaryStyles.container, SummaryStyles.secondary]}>
+          <ThemedView style={SummaryStyles.row}>
+            <ThemedText style={SummaryStyles.label}>Total Productos:</ThemedText>
+            <ThemedText style={SummaryStyles.value}>
               {isLoading ? 'Cargando...' : totalItems}
             </ThemedText>
           </ThemedView>
-          <ThemedView style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Productos Activos:</ThemedText>
-            <ThemedText style={styles.summaryValue}>
+          <ThemedView style={SummaryStyles.row}>
+            <ThemedText style={SummaryStyles.label}>Productos Activos:</ThemedText>
+            <ThemedText style={SummaryStyles.value}>
               {productos.filter(p => p.activo).length} de {productos.length}
             </ThemedText>
           </ThemedView>
         </ThemedView>
         
-        <DataTable<Producto>
+        <EnhancedDataTable<Producto>
           data={productos}
           columns={columns}
-          keyExtractor={(item) => item.id.toString()}
           baseRoute="/productos"
           isLoading={isLoading}
           error={error}
           onRefresh={handleRefresh}
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          itemsPerPage={itemsPerPage}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          totalItems={totalItems}
-          sortColumn={sortColumn}
-          sortOrder={sortOrder}
-          onSort={handleSort}
-          emptyMessage="No hay productos disponibles"
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          deletePrompt={{
+          pagination={{
+            currentPage: currentPage,
+            totalPages: totalPages,
+            itemsPerPage: itemsPerPage,
+            totalItems: totalItems,
+            onPageChange: handlePageChange,
+            onItemsPerPageChange: handleItemsPerPageChange,
+          }}
+          sorting={{
+            sortColumn: sortColumn,
+            sortOrder: sortOrder,
+            onSort: handleSort,
+          }}
+          actions={{
+            onView: true,
+            onEdit: true,
+            onDelete: true,
+          }}
+          deleteOptions={{
             title: 'Eliminar Producto',
             message: '¿Está seguro que desea eliminar este producto?',
             confirmText: 'Eliminar',
-            cancelText: 'Cancelar'
+            cancelText: 'Cancelar',
+            onDelete: async (id: number | string) => {
+              try {
+                await productoApi.deleteProducto(parseInt(id.toString()));
+                // Recargar los datos después de eliminar
+                loadProductos(
+                  // Si es el último item de la página y hay más de una página, ir a la página anterior
+                  productos.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage,
+                  itemsPerPage
+                );
+                return true;
+              } catch (error) {
+                console.error('Error al eliminar producto:', error);
+                return false;
+              }
+            },
           }}
+          emptyMessage="No hay productos disponibles"
         />
         
         <FloatingActionButton 
@@ -201,73 +201,6 @@ export default function ProductosScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  summary: {
-    padding: 16,
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    borderRadius: 8,
-    margin: 16,
-    marginBottom: 0,
-    gap: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  // Estilos para las tarjetas
-  cardContent: {
-    padding: 16,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    flex: 1,
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  activeBadge: {
-    backgroundColor: 'rgba(76, 175, 80, 0.2)',
-  },
-  inactiveBadge: {
-    backgroundColor: 'rgba(244, 67, 54, 0.2)',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  cardDetails: {
-    gap: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailText: {
-    fontSize: 14,
     flex: 1,
   },
 });

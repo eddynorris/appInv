@@ -9,7 +9,7 @@ import { FormSelect } from '@/components/form/FormSelect';
 import DateField from '@/components/form/DateField';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
 import { ImageUploader, FileInfo } from '@/components/form/ImageUploader';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { DepositoPayload, AlmacenSimple } from '@/models';
 import { FormStyles } from '@/styles/Theme';

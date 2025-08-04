@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Alert } from 'react-native';
-import { presentacionApi, productoApi, API_CONFIG } from '@/services/api';
+import { presentacionApi, productoApi, API_CONFIG } from '@/services';
 import { Presentacion, ProductoSimple } from '@/models';
 import { useForm } from '@/hooks/useForm';
 import { useImageUploader, FileInfo } from '@/hooks/useImageUploader';

@@ -27,4 +27,5 @@ export interface Venta {
 export interface VentaSimple {
   id: number;
   total: string;
+  cliente?: ClienteSimple;
 }

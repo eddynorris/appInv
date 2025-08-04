@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { FormField } from '@/components/form/FormField';
 import { FormSelect } from '@/components/form/FormSelect';
 import { ActionButtons } from '@/components/buttons/ActionButtons';
-import { useVentaItem } from '@/hooks/crud/useVentaItem';
+import { useVentaItem } from '@/hooks/ventas';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductDetailsList from '@/components/ProductDetailsList';
 import DateField from '@/components/form/DateField';
@@ -21,7 +21,8 @@ export default function EditVentaScreen() {
   const hasLoadedRef = useRef(false);
   
   const {
-    form,
+    formData,
+    errors,
     isLoading,
     error,
     clientes,
@@ -29,6 +30,7 @@ export default function EditVentaScreen() {
     venta,
     loadVentaForEdit,
     updateVenta,
+    handleChange,
   } = useVentaItem();
 
   useEffect(() => {
@@ -106,10 +108,10 @@ export default function EditVentaScreen() {
         
         <FormSelect
           label="Cliente"
-          value={form.formData.cliente_id}
+          value={formData.cliente_id}
           options={clienteOptions}
-          onChange={(value: string) => form.handleChange('cliente_id', value)}
-          error={form.errors.cliente_id}
+          onChange={(value: string) => handleChange('cliente_id', value)}
+          error={errors?.cliente_id}
           required
         />
         
@@ -120,18 +122,18 @@ export default function EditVentaScreen() {
         
         <DateField
           label="Fecha"
-          value={form.formData.fecha}
-          onChange={(value) => form.handleChange('fecha', value)}
-          error={form.errors.fecha}
+          value={formData.fecha}
+          onChange={(value) => handleChange('fecha', value)}
+          error={errors?.fecha}
           required
         />
         
         <FormSelect
           label="Tipo de Pago"
-          value={form.formData.tipo_pago}
+          value={formData.tipo_pago}
           options={tipoPagoOptions}
-          onChange={(value: string) => form.handleChange('tipo_pago', value)}
-          error={form.errors.tipo_pago}
+          onChange={(value: string) => handleChange('tipo_pago', value)}
+          error={errors?.tipo_pago}
           required
         />
         
@@ -142,10 +144,10 @@ export default function EditVentaScreen() {
         
         <FormField
           label="Consumo Diario (kg)"
-          value={form.formData.consumo_diario_kg}
-          onChangeText={(value) => form.handleChange('consumo_diario_kg', value)}
+          value={formData.consumo_diario_kg}
+          onChangeText={(value) => handleChange('consumo_diario_kg', value)}
           keyboardType="numeric"
-          error={form.errors.consumo_diario_kg}
+          error={errors?.consumo_diario_kg}
         />
         
         {detallesParaLista.length > 0 && (

@@ -16,31 +16,35 @@ import { Gasto } from '@/models';
 export default function GastoDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [gasto, setGasto] = useState<Gasto | null>(null);
   const { user } = useAuth(); // Obtener información del usuario
   
   const { 
-    getGasto, 
-    deleteGasto, 
+    item: gasto,
+    loadItem, 
+    deleteItem, 
     isLoading, 
-    error, 
-    getCategoryColor 
+    error
   } = useGastoItem();
   
   // Cargar datos del gasto
   useEffect(() => {
-    const fetchData = async () => {
-      if (!id) return;
-      
-      const data = await getGasto(parseInt(id));
-      if (data) {
-        setGasto(data);
-      }
-    };
-    
-    fetchData();
-  }, [id, getGasto]);
+    if (id) {
+      loadItem(parseInt(id));
+    }
+  }, [id, loadItem]);
   
+  // Función para obtener color de categoría
+  const getCategoryColor = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'servicios': return '#2196F3'; // Azul
+      case 'personal': return '#4CAF50'; // Verde
+      case 'alquiler': return '#FFC107'; // Amarillo
+      case 'marketing': return '#9C27B0'; // Púrpura
+      case 'logistica': return '#FF5722'; // Naranja
+      default: return '#757575'; // Gris
+    }
+  };
+
   // Determinar si el usuario tiene permisos para editar/eliminar este gasto
   const canEditOrDelete = () => {
     if (!user || !gasto) return false;
@@ -70,7 +74,7 @@ export default function GastoDetailScreen() {
     }
     
     try {
-      const success = await deleteGasto(parseInt(id));
+      const success = await deleteItem(parseInt(id));
       if (success) {
         // Mostrar mensaje de éxito y redirigir
         Alert.alert(

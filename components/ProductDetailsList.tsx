@@ -10,7 +10,7 @@ import {
 import { ThemedView } from './ThemedView';
 import { ThemedText } from './ThemedText';
 import { IconSymbol } from './ui/IconSymbol';
-import { API_CONFIG } from '@/services/api';
+import { API_CONFIG } from '@/services';
 
 const DEFAULT_IMAGE = require('@/assets/images/default/product-placeholder.png');
 

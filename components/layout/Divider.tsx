@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 
 interface DividerProps {
   style?: ViewStyle;

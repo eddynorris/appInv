@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 // Importar Venta y getAllVentas desde api.ts
-import { ventaApi } from '../../services/venta'; // Assuming ventaApi is exported from here
+import { ventaApi } from '../../services/entities/ventaService'; // Assuming ventaApi is exported from here
 import { Venta } from '@/models';
 import dayjs from 'dayjs';
 
@@ -53,18 +53,19 @@ export function useSalesChart() {
         queryParams.append('almacen_id', options.almacenId.toString());
       }
 
-      // Llamar a getAllVentas y esperar un objeto { data: Venta[] }
-      // The actual type might be { data: Venta[] } or similar based on API response structure
-      const response = await ventaApi.getAllVentas(queryParams.toString());
+      // Llamar a getAllVentas usando getVentas con parámetros adecuados
+      const response = await ventaApi.getVentas(1, 1000, {
+        fecha_inicio: startDate,
+        fecha_fin: endDate,
+        ...(options.almacenId && { almacen_id: options.almacenId.toString() })
+      });
 
-      // --- MODIFICATION START ---
-      // Check if response exists and has a 'data' property which is an array
-      if (!response || !Array.isArray(response.data)) {
-        console.warn('La respuesta de getAllVentas no fue un objeto con un array en la propiedad "data":', response);
-        throw new Error('Formato de respuesta inválido desde getAllVentas');
+      // Verificar que la respuesta tiene la estructura de ApiResponse
+      if (!response || !response.data || !Array.isArray(response.data)) {
+        console.warn('La respuesta de getVentas no tiene el formato esperado:', response);
+        throw new Error('Formato de respuesta inválido desde getVentas');
       }
-      const ventas: Venta[] = response.data; // Extract the array from the 'data' property
-      // --- MODIFICATION END ---
+      const ventas: Venta[] = response.data;
 
 
       // --- Procesar datos para el gráfico ---

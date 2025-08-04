@@ -14,9 +14,9 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Presentacion } from '@/models';
-import { Colors } from '@/constants/Colors';
+ import { Colors } from '@/styles/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { API_CONFIG } from '@/services/api';  // Importar configuración de API para URLs de imágenes
+import { API_CONFIG } from '@/services';  // Importar configuración de API para URLs de imágenes
 
 const { width, height } = Dimensions.get('window');
 
@@ -418,4 +418,4 @@ const styles = StyleSheet.create({
     color: '#757575',
     textAlign: 'center',
   },
-}); 
+});
